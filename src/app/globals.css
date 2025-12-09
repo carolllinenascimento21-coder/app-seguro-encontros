@@ -1,0 +1,242 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  
+  /* Paleta Confia+ - Preto e Dourado */
+  --black: #000000;
+  --black-soft: #1A1A1A;
+  --gold: #D4AF37;
+  --gold-champagne: #EFD9A7;
+  --white: #FFFFFF;
+  --red-elegant: #B31A1A;
+  
+  --background: oklch(1 0 0); /* Branco puro #FFFFFF */
+  --foreground: oklch(0 0 0); /* Preto absoluto #000000 */
+  
+  /* Additional font families for AI usage */
+  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-roboto: "Roboto", ui-sans-serif, system-ui, sans-serif;
+  --font-open-sans: "Open Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-source-code: "Source Code Pro", ui-monospace, SFMono-Regular, monospace;
+  --font-fira-code: "Fira Code", ui-monospace, SFMono-Regular, monospace;
+  --font-jetbrains: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  /* Cards e Popovers */
+  --card: oklch(1 0 0); /* Branco puro */
+  --card-foreground: oklch(0 0 0); /* Preto absoluto */
+  --popover: oklch(1 0 0); /* Branco puro */
+  --popover-foreground: oklch(0 0 0); /* Preto absoluto */
+  
+  /* Primary - Dourado Metálico #D4AF37 */
+  --primary: oklch(0.75 0.12 85); /* Dourado metálico */
+  --primary-foreground: oklch(0 0 0); /* Preto absoluto */
+  
+  /* Secondary - Preto Grafite #1A1A1A */
+  --secondary: oklch(0.15 0 0); /* Preto grafite */
+  --secondary-foreground: oklch(1 0 0); /* Branco puro */
+  
+  /* Muted - Dourado Champagne #EFD9A7 */
+  --muted: oklch(0.90 0.08 85); /* Dourado champagne */
+  --muted-foreground: oklch(0.15 0 0); /* Preto grafite */
+  
+  /* Accent - Dourado Metálico */
+  --accent: oklch(0.75 0.12 85); /* Dourado metálico */
+  --accent-foreground: oklch(0 0 0); /* Preto absoluto */
+  
+  /* Destructive - Vermelho Elegante #B31A1A */
+  --destructive: oklch(0.45 0.20 25); /* Vermelho elegante */
+  --destructive-foreground: oklch(1 0 0); /* Branco puro */
+  
+  /* Borders e Inputs */
+  --border: oklch(0.85 0 0); /* Cinza claro */
+  --input: oklch(0.85 0 0); /* Cinza claro */
+  --ring: oklch(0.75 0.12 85); /* Dourado metálico */
+  
+  /* Charts - Tons de Dourado e Preto */
+  --chart-1: oklch(0.75 0.12 85); /* Dourado metálico */
+  --chart-2: oklch(0.90 0.08 85); /* Dourado champagne */
+  --chart-3: oklch(0.15 0 0); /* Preto grafite */
+  --chart-4: oklch(0.60 0.10 85); /* Dourado escuro */
+  --chart-5: oklch(0.45 0.20 25); /* Vermelho elegante */
+  
+  /* Sidebar */
+  --sidebar: oklch(1 0 0); /* Branco puro */
+  --sidebar-foreground: oklch(0 0 0); /* Preto absoluto */
+  --sidebar-primary: oklch(0.75 0.12 85); /* Dourado metálico */
+  --sidebar-primary-foreground: oklch(0 0 0); /* Preto absoluto */
+  --sidebar-accent: oklch(0.90 0.08 85); /* Dourado champagne */
+  --sidebar-accent-foreground: oklch(0 0 0); /* Preto absoluto */
+  --sidebar-border: oklch(0.85 0 0); /* Cinza claro */
+  --sidebar-ring: oklch(0.75 0.12 85); /* Dourado metálico */
+}
+
+.dark {
+  /* Modo Escuro - Preto e Dourado */
+  --background: oklch(0 0 0); /* Preto absoluto #000000 */
+  --foreground: oklch(1 0 0); /* Branco puro #FFFFFF */
+  
+  /* Cards e Popovers */
+  --card: oklch(0.15 0 0); /* Preto grafite #1A1A1A */
+  --card-foreground: oklch(1 0 0); /* Branco puro */
+  --popover: oklch(0.15 0 0); /* Preto grafite */
+  --popover-foreground: oklch(1 0 0); /* Branco puro */
+  
+  /* Primary - Dourado Metálico */
+  --primary: oklch(0.75 0.12 85); /* Dourado metálico #D4AF37 */
+  --primary-foreground: oklch(0 0 0); /* Preto absoluto */
+  
+  /* Secondary - Preto Grafite mais claro */
+  --secondary: oklch(0.25 0 0); /* Cinza escuro */
+  --secondary-foreground: oklch(1 0 0); /* Branco puro */
+  
+  /* Muted */
+  --muted: oklch(0.25 0 0); /* Cinza escuro */
+  --muted-foreground: oklch(0.70 0 0); /* Cinza claro */
+  
+  /* Accent - Dourado Metálico */
+  --accent: oklch(0.75 0.12 85); /* Dourado metálico */
+  --accent-foreground: oklch(0 0 0); /* Preto absoluto */
+  
+  /* Destructive - Vermelho Elegante */
+  --destructive: oklch(0.55 0.22 25); /* Vermelho elegante mais claro */
+  --destructive-foreground: oklch(1 0 0); /* Branco puro */
+  
+  /* Borders e Inputs */
+  --border: oklch(0.25 0 0); /* Cinza escuro */
+  --input: oklch(0.30 0 0); /* Cinza escuro */
+  --ring: oklch(0.75 0.12 85); /* Dourado metálico */
+  
+  /* Charts - Tons de Dourado e Preto */
+  --chart-1: oklch(0.75 0.12 85); /* Dourado metálico */
+  --chart-2: oklch(0.90 0.08 85); /* Dourado champagne */
+  --chart-3: oklch(0.40 0 0); /* Cinza médio */
+  --chart-4: oklch(0.60 0.10 85); /* Dourado escuro */
+  --chart-5: oklch(0.55 0.22 25); /* Vermelho elegante */
+  
+  /* Sidebar */
+  --sidebar: oklch(0.15 0 0); /* Preto grafite */
+  --sidebar-foreground: oklch(1 0 0); /* Branco puro */
+  --sidebar-primary: oklch(0.75 0.12 85); /* Dourado metálico */
+  --sidebar-primary-foreground: oklch(0 0 0); /* Preto absoluto */
+  --sidebar-accent: oklch(0.25 0 0); /* Cinza escuro */
+  --sidebar-accent-foreground: oklch(1 0 0); /* Branco puro */
+  --sidebar-border: oklch(0.25 0 0); /* Cinza escuro */
+  --sidebar-ring: oklch(0.75 0.12 85); /* Dourado metálico */
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Animações customizadas para Confia+ */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease-out;
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
+  background-size: 1000px 100%;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
