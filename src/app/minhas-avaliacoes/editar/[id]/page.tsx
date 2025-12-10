@@ -1,287 +1,357 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Star, Save, X, AlertCircle } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
-
-interface Avaliacao {
-  id: string;
-  nomeHomem: string;
-  nota: number;
-  comentario: string;
-  palavrasChave: string[];
-  data: string;
-  autorId: string;
-  editadoEm?: string;
-}
-
-const palavrasChaveDisponiveis = [
-  'respeitoso',
-  'educado',
-  'atencioso',
-  'confiável',
-  'gentil',
-  'pontual',
-  'desrespeitoso',
-  'agressivo',
-  'manipulador',
-  'insistente',
-  'violento',
-  'abusivo'
-];
+import { ArrowLeft, Star, AlertTriangle, Save, Loader2 } from 'lucide-react';
+import Navbar from '@/components/custom/navbar';
+import { supabase } from '@/lib/supabase';
 
 export default function EditarAvaliacao() {
   const router = useRouter();
   const params = useParams();
-  const avaliacaoId = params?.id as string;
+  const avaliacaoId = params.id as string;
 
-  const [avaliacao, setAvaliacao] = useState<Avaliacao | null>(null);
-  const [nota, setNota] = useState(0);
-  const [comentario, setComentario] = useState('');
-  const [palavrasChave, setPalavrasChave] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    nome_homem: '',
+    telefone: '',
+    cidade: '',
+    nota_comportamento: 0,
+    nota_seguranca_emocional: 0,
+    nota_respeito: 0,
+    nota_carater: 0,
+    nota_confianca: 0,
+    comentario: '',
+    red_flags: [] as string[],
+  });
+
+  const categorias = [
+    { key: 'nota_comportamento', label: 'Comportamento' },
+    { key: 'nota_seguranca_emocional', label: 'Segurança Emocional' },
+    { key: 'nota_respeito', label: 'Respeito' },
+    { key: 'nota_carater', label: 'Caráter' },
+    { key: 'nota_confianca', label: 'Confiança' },
+  ];
+
+  const redFlagsOptions = [
+    'Mentiras constantes',
+    'Manipulação emocional',
+    'Desrespeito',
+    'Agressividade',
+    'Falta de respeito',
+    'Imaturidade emocional',
+    'Traição',
+    'Golpe amoroso',
+    'Stalking',
+    'Comportamento abusivo',
+  ];
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId') || 'user-1';
-    setCurrentUserId(userId);
+    loadAvaliacao();
+  }, [avaliacaoId]);
 
-    // Carregar avaliação
-    const storedAvaliacoes = localStorage.getItem('minhasAvaliacoes');
-    if (storedAvaliacoes) {
-      const avaliacoes: Avaliacao[] = JSON.parse(storedAvaliacoes);
-      const found = avaliacoes.find(av => av.id === avaliacaoId && av.autorId === userId);
-      
-      if (found) {
-        setAvaliacao(found);
-        setNota(found.nota);
-        setComentario(found.comentario);
-        setPalavrasChave(found.palavrasChave);
-      } else {
+  const loadAvaliacao = async () => {
+    try {
+      setLoading(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('avaliacoes')
+        .select('*')
+        .eq('id', avaliacaoId)
+        .eq('autor_id', user.id) // Garantir que só edita próprias avaliações
+        .single();
+
+      if (error) throw error;
+
+      if (!data) {
         alert('Avaliação não encontrada ou você não tem permissão para editá-la.');
         router.push('/minhas-avaliacoes');
+        return;
       }
-    }
-    setLoading(false);
-  }, [avaliacaoId, router]);
 
-  const handleSave = () => {
-    if (nota === 0) {
-      alert('Por favor, selecione uma nota.');
-      return;
+      setFormData({
+        nome_homem: data.nome_homem,
+        telefone: data.telefone || '',
+        cidade: data.cidade || '',
+        nota_comportamento: data.nota_comportamento,
+        nota_seguranca_emocional: data.nota_seguranca_emocional,
+        nota_respeito: data.nota_respeito,
+        nota_carater: data.nota_carater,
+        nota_confianca: data.nota_confianca,
+        comentario: data.comentario || '',
+        red_flags: data.red_flags || [],
+      });
+    } catch (error) {
+      console.error('Erro ao carregar avaliação:', error);
+      alert('Erro ao carregar avaliação.');
+      router.push('/minhas-avaliacoes');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    if (comentario.trim().length < 10) {
-      alert('O comentário deve ter pelo menos 10 caracteres.');
-      return;
-    }
+  const handleRating = (categoria: string, valor: number) => {
+    setFormData((prev) => ({ ...prev, [categoria]: valor }));
+  };
 
-    if (palavrasChave.length === 0) {
-      alert('Selecione pelo menos uma palavra-chave.');
-      return;
-    }
+  const toggleRedFlag = (flag: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      red_flags: prev.red_flags.includes(flag)
+        ? prev.red_flags.filter((f) => f !== flag)
+        : [...prev.red_flags, flag],
+    }));
+  };
 
-    // Atualizar avaliação
-    const storedAvaliacoes = localStorage.getItem('minhasAvaliacoes');
-    if (storedAvaliacoes) {
-      const avaliacoes: Avaliacao[] = JSON.parse(storedAvaliacoes);
-      const index = avaliacoes.findIndex(av => av.id === avaliacaoId);
-      
-      if (index !== -1) {
-        avaliacoes[index] = {
-          ...avaliacoes[index],
-          nota,
-          comentario,
-          palavrasChave,
-          editadoEm: new Date().toISOString().split('T')[0]
-        };
-        
-        localStorage.setItem('minhasAvaliacoes', JSON.stringify(avaliacoes));
-        
-        // Recalcular reputação
-        recalcularReputacao(avaliacoes[index]);
-        
-        alert('Avaliação atualizada com sucesso!');
-        router.push('/minhas-avaliacoes');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      setSaving(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
       }
-    }
-  };
 
-  const recalcularReputacao = (avaliacaoAtualizada: Avaliacao) => {
-    const todasAvaliacoes = JSON.parse(localStorage.getItem('todasAvaliacoes') || '[]');
-    const index = todasAvaliacoes.findIndex((av: Avaliacao) => av.id === avaliacaoId);
-    
-    if (index !== -1) {
-      todasAvaliacoes[index] = avaliacaoAtualizada;
-      localStorage.setItem('todasAvaliacoes', JSON.stringify(todasAvaliacoes));
-      
-      // Recalcular nota média
-      const avaliacoesDoHomem = todasAvaliacoes.filter(
-        (av: Avaliacao) => av.nomeHomem === avaliacaoAtualizada.nomeHomem
-      );
-      
-      const novaNotaMedia = avaliacoesDoHomem.reduce((sum: number, av: Avaliacao) => sum + av.nota, 0) / avaliacoesDoHomem.length;
-      
-      console.log(`Reputação recalculada para ${avaliacaoAtualizada.nomeHomem}: ${novaNotaMedia.toFixed(1)}`);
-    }
-  };
+      // Atualizar avaliação (o trigger do banco salva automaticamente no histórico)
+      const { error } = await supabase
+        .from('avaliacoes')
+        .update({
+          nome_homem: formData.nome_homem,
+          telefone: formData.telefone,
+          cidade: formData.cidade,
+          nota_comportamento: formData.nota_comportamento,
+          nota_seguranca_emocional: formData.nota_seguranca_emocional,
+          nota_respeito: formData.nota_respeito,
+          nota_carater: formData.nota_carater,
+          nota_confianca: formData.nota_confianca,
+          comentario: formData.comentario,
+          red_flags: formData.red_flags,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', avaliacaoId)
+        .eq('autor_id', user.id);
 
-  const togglePalavraChave = (palavra: string) => {
-    if (palavrasChave.includes(palavra)) {
-      setPalavrasChave(palavrasChave.filter(p => p !== palavra));
-    } else {
-      setPalavrasChave([...palavrasChave, palavra]);
-    }
-  };
+      if (error) throw error;
 
-  const getKeywordColor = (keyword: string) => {
-    const negative = ['agressivo', 'manipulador', 'desrespeitoso', 'violento', 'abusivo', 'insistente'];
-    const positive = ['respeitoso', 'confiável', 'gentil', 'educado', 'atencioso', 'pontual'];
-    
-    if (negative.includes(keyword.toLowerCase())) {
-      return 'border-red-500/50 text-red-300';
+      alert('Avaliação atualizada com sucesso!');
+      router.push('/minhas-avaliacoes');
+    } catch (error) {
+      console.error('Erro ao atualizar avaliação:', error);
+      alert('Erro ao atualizar avaliação. Tente novamente.');
+    } finally {
+      setSaving(false);
     }
-    if (positive.includes(keyword.toLowerCase())) {
-      return 'border-green-500/50 text-green-300';
-    }
-    return 'border-gray-500/50 text-gray-300';
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-gray-400">Carregando...</p>
+        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
       </div>
     );
   }
 
-  if (!avaliacao) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-black pb-20">
+    <div className="min-h-screen bg-black text-white pb-20">
       {/* Header */}
-      <div className="bg-gradient-to-b from-[#D4AF37]/20 to-transparent pt-8 pb-6 px-4">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <Star className="w-8 h-8 text-[#D4AF37] fill-current" />
-              <h1 className="text-2xl font-bold text-white">Editar Avaliação</h1>
-            </div>
-            <button
-              onClick={() => router.push('/minhas-avaliacoes')}
-              className="text-gray-400 hover:text-white transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
+      <header className="bg-gradient-to-b from-black to-black/95 border-b border-[#D4AF37]/20 sticky top-0 z-40">
+        <div className="max-w-md mx-auto px-4 py-4">
+          <button
+            onClick={() => router.push('/minhas-avaliacoes')}
+            className="flex items-center gap-2 text-[#D4AF37] hover:text-[#C0C0C0] transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Voltar</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="max-w-md mx-auto px-4 py-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-[#D4AF37] mb-2">
+            Editar Avaliação
+          </h1>
           <p className="text-gray-400 text-sm">
-            Editando avaliação de {avaliacao.nomeHomem}
+            Atualize as informações da sua avaliação.
           </p>
         </div>
-      </div>
 
-      {/* Form */}
-      <div className="px-4 max-w-md mx-auto mt-6">
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-[#D4AF37]/20">
-          {/* Nota */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-3">
-              Nota *
-            </label>
-            <div className="flex gap-2 justify-center">
-              {[1, 2, 3, 4, 5].map((value) => (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Informações Básicas */}
+          <div className="bg-white/5 border border-[#D4AF37]/20 rounded-2xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Informações Básicas
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.nome_homem}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, nome_homem: e.target.value }))
+                  }
+                  className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors"
+                  placeholder="Digite o nome completo"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">
+                  Telefone (opcional)
+                </label>
+                <input
+                  type="tel"
+                  value={formData.telefone}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, telefone: e.target.value }))
+                  }
+                  className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors"
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">
+                  Cidade (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.cidade}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, cidade: e.target.value }))
+                  }
+                  className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors"
+                  placeholder="Cidade, Estado"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Avaliações por Categoria */}
+          <div className="bg-white/5 border border-[#D4AF37]/20 rounded-2xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Avalie por Categoria
+            </h2>
+
+            <div className="space-y-6">
+              {categorias.map((categoria) => {
+                const categoriaKey = categoria.key as keyof typeof formData;
+                const rawValue = formData[categoriaKey];
+                const current = typeof rawValue === "number" ? rawValue : Number(rawValue || 0);
+
+                return (
+                  <div key={categoria.key}>
+                    <label className="block text-sm text-gray-300 mb-3">
+                      {categoria.label}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((valor) => {
+                        const isActive = current >= valor;
+
+                        return (
+                          <button
+                            key={valor}
+                            type="button"
+                            onClick={() => handleRating(categoria.key, valor)}
+                            className="transition-transform hover:scale-110"
+                          >
+                            <Star
+                              className={`w-8 h-8 ${
+                                isActive
+                                  ? 'text-[#D4AF37] fill-[#D4AF37]'
+                                  : 'text-gray-600'
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Red Flags */}
+          <div className="bg-white/5 border border-[#D4AF37]/20 rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              <h2 className="text-lg font-semibold text-white">
+                Sinais de Alerta (Red Flags)
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {redFlagsOptions.map((flag) => (
                 <button
-                  key={value}
-                  onClick={() => setNota(value)}
-                  className="transition-all"
+                  key={flag}
+                  type="button"
+                  onClick={() => toggleRedFlag(flag)}
+                  className={`px-3 py-2 rounded-full text-sm transition-colors ${
+                    formData.red_flags.includes(flag)
+                      ? 'bg-red-500 text-white'
+                      : 'bg-white/5 text-gray-400 border border-gray-600 hover:border-red-500'
+                  }`}
                 >
-                  <Star
-                    className={`w-10 h-10 ${
-                      value <= nota
-                        ? 'text-[#D4AF37] fill-current'
-                        : 'text-gray-600'
-                    } hover:scale-110 transition-transform`}
-                  />
+                  {flag}
                 </button>
               ))}
             </div>
-            <p className="text-center text-gray-400 text-sm mt-2">
-              {nota === 0 ? 'Selecione uma nota' : `Nota: ${nota}/5`}
-            </p>
           </div>
 
           {/* Comentário */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Comentário *
-            </label>
+          <div className="bg-white/5 border border-[#D4AF37]/20 rounded-2xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Relato Detalhado (opcional)
+            </h2>
             <textarea
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              placeholder="Descreva sua experiência de forma respeitosa e objetiva..."
-              rows={5}
-              className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors resize-none"
+              value={formData.comentario}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, comentario: e.target.value }))
+              }
+              rows={6}
+              className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors resize-none"
+              placeholder="Conte sua experiência de forma detalhada..."
             />
-            <p className="text-gray-500 text-xs mt-1">
-              {comentario.length} caracteres (mínimo 10)
-            </p>
           </div>
 
-          {/* Palavras-chave */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-3">
-              Palavras-chave * (selecione pelo menos uma)
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {palavrasChaveDisponiveis.map((palavra) => (
-                <button
-                  key={palavra}
-                  onClick={() => togglePalavraChave(palavra)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                    palavrasChave.includes(palavra)
-                      ? `${getKeywordColor(palavra)} bg-opacity-20`
-                      : 'border-gray-700 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  {palavra}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Aviso */}
-          <div className="mb-6 bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 flex gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-blue-300 text-sm font-medium mb-1">
-                Edição responsável
-              </p>
-              <p className="text-blue-200/70 text-xs">
-                Ao salvar, a reputação será recalculada automaticamente. Mantenha sua avaliação honesta e respeitosa.
-              </p>
-            </div>
-          </div>
-
-          {/* Botões */}
-          <div className="flex gap-3">
-            <button
-              onClick={() => router.push('/minhas-avaliacoes')}
-              className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 rounded-lg transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              className="flex-1 bg-gradient-to-r from-[#D4AF37] to-[#F4D03F] text-black font-bold py-3 rounded-lg hover:shadow-lg hover:shadow-[#D4AF37]/50 transition-all duration-300 flex items-center justify-center gap-2"
-            >
-              <Save className="w-5 h-5" />
-              Salvar
-            </button>
-          </div>
-        </div>
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] text-black font-semibold py-4 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5" />
+                Salvar Alterações
+              </>
+            )}
+          </button>
+        </form>
       </div>
+
+      <Navbar />
     </div>
   );
 }

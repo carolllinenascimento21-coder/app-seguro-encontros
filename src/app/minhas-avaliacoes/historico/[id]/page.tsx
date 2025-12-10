@@ -1,89 +1,89 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { History, X, Clock, Edit, Star } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
-
-interface Avaliacao {
-  id: string;
-  nomeHomem: string;
-  nota: number;
-  comentario: string;
-  palavrasChave: string[];
-  data: string;
-  autorId: string;
-  editadoEm?: string;
-}
+import { ArrowLeft, History, Star, Clock, Loader2 } from 'lucide-react';
+import Navbar from '@/components/custom/navbar';
+import { supabase } from '@/lib/supabase';
 
 interface HistoricoItem {
-  data: string;
-  tipo: 'criacao' | 'edicao';
-  nota: number;
+  id: string;
+  nota_comportamento: number;
+  nota_seguranca_emocional: number;
+  nota_respeito: number;
+  nota_carater: number;
+  nota_confianca: number;
+  nota_geral: number;
   comentario: string;
-  palavrasChave: string[];
+  red_flags: string[];
+  editado_em: string;
+}
+
+interface AvaliacaoAtual {
+  nome_homem: string;
+  nota_geral: number;
+  created_at: string;
 }
 
 export default function HistoricoAvaliacao() {
   const router = useRouter();
   const params = useParams();
-  const avaliacaoId = params?.id as string;
+  const avaliacaoId = params.id as string;
 
-  const [avaliacao, setAvaliacao] = useState<Avaliacao | null>(null);
-  const [historico, setHistorico] = useState<HistoricoItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [avaliacaoAtual, setAvaliacaoAtual] = useState<AvaliacaoAtual | null>(null);
+  const [historico, setHistorico] = useState<HistoricoItem[]>([]);
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId') || 'user-1';
+    loadHistorico();
+  }, [avaliacaoId]);
 
-    // Carregar avaliação
-    const storedAvaliacoes = localStorage.getItem('minhasAvaliacoes');
-    if (storedAvaliacoes) {
-      const avaliacoes: Avaliacao[] = JSON.parse(storedAvaliacoes);
-      const found = avaliacoes.find(av => av.id === avaliacaoId && av.autorId === userId);
-      
-      if (found) {
-        setAvaliacao(found);
-        
-        // Criar histórico (simulado - em produção viria do banco)
-        const hist: HistoricoItem[] = [
-          {
-            data: found.data,
-            tipo: 'criacao',
-            nota: found.nota,
-            comentario: found.comentario,
-            palavrasChave: found.palavrasChave
-          }
-        ];
+  const loadHistorico = async () => {
+    try {
+      setLoading(true);
 
-        // Se foi editada, adicionar registro de edição
-        if (found.editadoEm) {
-          hist.push({
-            data: found.editadoEm,
-            tipo: 'edicao',
-            nota: found.nota,
-            comentario: found.comentario,
-            palavrasChave: found.palavrasChave
-          });
-        }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
 
-        setHistorico(hist.reverse()); // Mais recente primeiro
-      } else {
+      // Buscar avaliação atual
+      const { data: avaliacaoData, error: avaliacaoError } = await supabase
+        .from('avaliacoes')
+        .select('nome_homem, nota_geral, created_at')
+        .eq('id', avaliacaoId)
+        .eq('autor_id', user.id)
+        .single();
+
+      if (avaliacaoError) throw avaliacaoError;
+
+      if (!avaliacaoData) {
         alert('Avaliação não encontrada.');
         router.push('/minhas-avaliacoes');
+        return;
       }
-    }
-    setLoading(false);
-  }, [avaliacaoId, router]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', { 
-      day: '2-digit', 
-      month: 'long', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+      setAvaliacaoAtual(avaliacaoData);
+
+      // Buscar histórico de edições
+      const { data: historicoData, error: historicoError } = await supabase
+        .from('historico_avaliacoes')
+        .select('*')
+        .eq('avaliacao_id', avaliacaoId)
+        .eq('autor_id', user.id)
+        .order('editado_em', { ascending: false });
+
+      if (historicoError) throw historicoError;
+
+      setHistorico(historicoData || []);
+    } catch (error) {
+      console.error('Erro ao carregar histórico:', error);
+      alert('Erro ao carregar histórico.');
+      router.push('/minhas-avaliacoes');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getRatingColor = (rating: number) => {
@@ -93,135 +93,174 @@ export default function HistoricoAvaliacao() {
   };
 
   const getKeywordColor = (keyword: string) => {
-    const negative = ['agressivo', 'manipulador', 'desrespeitoso', 'violento', 'abusivo', 'insistente'];
+    const negative = ['agressivo', 'manipulador', 'desrespeitoso', 'violento', 'abusivo', 'insistente', 'mentiras', 'traição', 'stalking'];
     const positive = ['respeitoso', 'confiável', 'gentil', 'educado', 'atencioso', 'pontual'];
     
-    if (negative.includes(keyword.toLowerCase())) {
+    const lowerKeyword = keyword.toLowerCase();
+    
+    if (negative.some(word => lowerKeyword.includes(word))) {
       return 'bg-red-500/20 text-red-300 border-red-500/30';
     }
-    if (positive.includes(keyword.toLowerCase())) {
+    if (positive.some(word => lowerKeyword.includes(word))) {
       return 'bg-green-500/20 text-green-300 border-green-500/30';
     }
     return 'bg-gray-500/20 text-gray-300 border-gray-500/30';
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-gray-400">Carregando...</p>
+        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
       </div>
     );
   }
 
-  if (!avaliacao) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-black pb-20">
+    <div className="min-h-screen bg-black text-white pb-20">
       {/* Header */}
-      <div className="bg-gradient-to-b from-[#D4AF37]/20 to-transparent pt-8 pb-6 px-4">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <History className="w-8 h-8 text-[#D4AF37]" />
-              <h1 className="text-2xl font-bold text-white">Histórico</h1>
-            </div>
-            <button
-              onClick={() => router.push('/minhas-avaliacoes')}
-              className="text-gray-400 hover:text-white transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-          <p className="text-gray-400 text-sm">
-            Histórico de alterações da avaliação de {avaliacao.nomeHomem}
-          </p>
+      <header className="bg-gradient-to-b from-black to-black/95 border-b border-[#D4AF37]/20 sticky top-0 z-40">
+        <div className="max-w-md mx-auto px-4 py-4">
+          <button
+            onClick={() => router.push('/minhas-avaliacoes')}
+            className="flex items-center gap-2 text-[#D4AF37] hover:text-[#C0C0C0] transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Voltar</span>
+          </button>
         </div>
-      </div>
+      </header>
 
-      {/* Timeline */}
-      <div className="px-4 max-w-md mx-auto mt-6">
-        <div className="relative">
-          {/* Linha vertical */}
-          <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-[#D4AF37]/30" />
-
-          {/* Items do histórico */}
-          <div className="space-y-6">
-            {historico.map((item, index) => (
-              <div key={index} className="relative pl-16">
-                {/* Ícone */}
-                <div className="absolute left-0 top-0 w-12 h-12 bg-[#1A1A1A] border-2 border-[#D4AF37] rounded-full flex items-center justify-center">
-                  {item.tipo === 'criacao' ? (
-                    <Star className="w-6 h-6 text-[#D4AF37]" />
-                  ) : (
-                    <Edit className="w-6 h-6 text-[#D4AF37]" />
-                  )}
+      <div className="max-w-md mx-auto px-4 py-6">
+        {/* Informações da Avaliação */}
+        {avaliacaoAtual && (
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <History className="w-8 h-8 text-[#D4AF37]" />
+              <h1 className="text-2xl font-bold text-white">Histórico de Edições</h1>
+            </div>
+            <div className="bg-[#1A1A1A] rounded-xl p-4 border border-gray-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-white font-bold text-lg">{avaliacaoAtual.nome_homem}</h2>
+                  <p className="text-gray-400 text-xs mt-1">
+                    Criado em {formatDate(avaliacaoAtual.created_at)}
+                  </p>
                 </div>
+                <div className="flex items-center gap-1 bg-black px-3 py-1.5 rounded-lg">
+                  <Star className={`w-5 h-5 ${getRatingColor(avaliacaoAtual.nota_geral)} fill-current`} />
+                  <span className={`font-bold ${getRatingColor(avaliacaoAtual.nota_geral)}`}>
+                    {avaliacaoAtual.nota_geral.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-                {/* Card */}
-                <div className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-white font-bold">
-                        {item.tipo === 'criacao' ? 'Avaliação criada' : 'Avaliação editada'}
-                      </h3>
-                      <div className="flex items-center gap-2 text-gray-400 text-xs mt-1">
-                        <Clock className="w-3 h-3" />
-                        <span>{formatDate(item.data)}</span>
-                      </div>
+        {/* Lista de Histórico */}
+        <div className="space-y-4">
+          {historico.length === 0 ? (
+            <div className="bg-[#1A1A1A] rounded-2xl p-8 border border-gray-800 text-center">
+              <Clock className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400 text-sm">
+                Nenhuma edição foi feita nesta avaliação ainda.
+              </p>
+            </div>
+          ) : (
+            historico.map((item, index) => (
+              <div
+                key={item.id}
+                className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-[#D4AF37]/20 p-2 rounded-lg">
+                      <Clock className="w-4 h-4 text-[#D4AF37]" />
                     </div>
-                    
-                    {/* Nota */}
-                    <div className="flex items-center gap-1 bg-black px-3 py-1.5 rounded-lg">
-                      <Star className={`w-4 h-4 ${getRatingColor(item.nota)} fill-current`} />
-                      <span className={`font-bold text-sm ${getRatingColor(item.nota)}`}>
-                        {item.nota.toFixed(1)}
-                      </span>
+                    <div>
+                      <p className="text-white font-medium text-sm">
+                        Edição #{historico.length - index}
+                      </p>
+                      <p className="text-gray-400 text-xs">
+                        {formatDate(item.editado_em)}
+                      </p>
                     </div>
                   </div>
+                  
+                  {/* Rating */}
+                  <div className="flex items-center gap-1 bg-black px-3 py-1.5 rounded-lg">
+                    <Star className={`w-4 h-4 ${getRatingColor(item.nota_geral)} fill-current`} />
+                    <span className={`font-bold text-sm ${getRatingColor(item.nota_geral)}`}>
+                      {item.nota_geral.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
 
-                  {/* Comentário */}
-                  <p className="text-gray-300 text-sm mb-3">
-                    {item.comentario}
-                  </p>
+                {/* Notas por Categoria */}
+                <div className="grid grid-cols-5 gap-2 mb-3">
+                  <div className="bg-black/50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs mb-1">Comp.</p>
+                    <p className="text-white font-bold text-sm">{item.nota_comportamento}</p>
+                  </div>
+                  <div className="bg-black/50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs mb-1">Seg.</p>
+                    <p className="text-white font-bold text-sm">{item.nota_seguranca_emocional}</p>
+                  </div>
+                  <div className="bg-black/50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs mb-1">Resp.</p>
+                    <p className="text-white font-bold text-sm">{item.nota_respeito}</p>
+                  </div>
+                  <div className="bg-black/50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs mb-1">Car.</p>
+                    <p className="text-white font-bold text-sm">{item.nota_carater}</p>
+                  </div>
+                  <div className="bg-black/50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs mb-1">Conf.</p>
+                    <p className="text-white font-bold text-sm">{item.nota_confianca}</p>
+                  </div>
+                </div>
 
-                  {/* Palavras-chave */}
+                {/* Comentário */}
+                {item.comentario && (
+                  <div className="mb-3">
+                    <p className="text-gray-300 text-sm line-clamp-3">
+                      {item.comentario}
+                    </p>
+                  </div>
+                )}
+
+                {/* Red Flags */}
+                {item.red_flags && item.red_flags.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {item.palavrasChave.map((keyword, idx) => (
+                    {item.red_flags.map((flag, idx) => (
                       <span
                         key={idx}
-                        className={`px-2 py-1 rounded-full text-xs font-medium border ${getKeywordColor(keyword)}`}
+                        className={`px-2 py-1 rounded-full text-xs font-medium border ${getKeywordColor(flag)}`}
                       >
-                        {keyword}
+                        {flag}
                       </span>
                     ))}
                   </div>
-                </div>
+                )}
               </div>
-            ))}
-          </div>
+            ))
+          )}
         </div>
-
-        {/* Info adicional */}
-        <div className="mt-8 bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-          <p className="text-blue-300 text-sm">
-            <strong>Total de alterações:</strong> {historico.length}
-          </p>
-          <p className="text-blue-200/70 text-xs mt-2">
-            Este histórico mostra todas as versões da sua avaliação. Em caso de edição, a reputação é recalculada automaticamente.
-          </p>
-        </div>
-
-        {/* Botão voltar */}
-        <button
-          onClick={() => router.push('/minhas-avaliacoes')}
-          className="w-full mt-6 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#D4AF37] font-medium py-3 rounded-lg transition-colors"
-        >
-          Voltar para Minhas Avaliações
-        </button>
       </div>
+
+      <Navbar />
     </div>
   );
 }

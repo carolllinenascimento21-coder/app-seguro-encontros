@@ -1,75 +1,69 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Star, Edit, Trash2, History, AlertCircle, ChevronRight } from 'lucide-react';
+import { Star, Edit, Trash2, History, AlertCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 interface Avaliacao {
   id: string;
-  nomeHomem: string;
-  nota: number;
+  nome_homem: string;
+  nota_geral: number;
+  nota_comportamento: number;
+  nota_seguranca_emocional: number;
+  nota_respeito: number;
+  nota_carater: number;
+  nota_confianca: number;
   comentario: string;
-  palavrasChave: string[];
-  data: string;
-  autorId: string;
-  editadoEm?: string;
+  red_flags: string[];
+  created_at: string;
+  updated_at: string;
+  autor_id: string;
 }
 
 export default function MinhasAvaliacoes() {
   const router = useRouter();
   const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
   useEffect(() => {
-    // Carregar ID do usuário atual
-    const userId = localStorage.getItem('userId') || 'user-1';
-    setCurrentUserId(userId);
-
-    // Carregar avaliações do localStorage
-    const storedAvaliacoes = localStorage.getItem('minhasAvaliacoes');
-    if (storedAvaliacoes) {
-      const parsed = JSON.parse(storedAvaliacoes);
-      // Filtrar apenas avaliações do usuário atual
-      const userAvaliacoes = parsed.filter((av: Avaliacao) => av.autorId === userId);
-      setAvaliacoes(userAvaliacoes);
-    } else {
-      // Dados de exemplo para demonstração
-      const mockAvaliacoes: Avaliacao[] = [
-        {
-          id: '1',
-          nomeHomem: 'João S.',
-          nota: 4,
-          comentario: 'Pessoa respeitosa e educada. Comportamento adequado durante todo o encontro.',
-          palavrasChave: ['respeitoso', 'educado', 'pontual'],
-          data: '2024-01-15',
-          autorId: userId
-        },
-        {
-          id: '2',
-          nomeHomem: 'Carlos M.',
-          nota: 2,
-          comentario: 'Comportamento inadequado. Não respeitou limites estabelecidos.',
-          palavrasChave: ['desrespeitoso', 'insistente'],
-          data: '2024-01-10',
-          autorId: userId
-        },
-        {
-          id: '3',
-          nomeHomem: 'Pedro L.',
-          nota: 5,
-          comentario: 'Excelente pessoa! Muito atencioso e respeitoso.',
-          palavrasChave: ['atencioso', 'respeitoso', 'confiável'],
-          data: '2024-01-05',
-          autorId: userId
-        }
-      ];
-      localStorage.setItem('minhasAvaliacoes', JSON.stringify(mockAvaliacoes));
-      setAvaliacoes(mockAvaliacoes);
-    }
+    loadAvaliacoes();
   }, []);
+
+  const loadAvaliacoes = async () => {
+    try {
+      setLoading(true);
+      
+      // Obter usuário atual
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      setCurrentUserId(user.id);
+
+      // Buscar avaliações do usuário
+      const { data, error } = await supabase
+        .from('avaliacoes')
+        .select('*')
+        .eq('autor_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setAvaliacoes(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar avaliações:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEdit = (id: string) => {
     router.push(`/minhas-avaliacoes/editar/${id}`);
@@ -80,47 +74,28 @@ export default function MinhasAvaliacoes() {
     setShowDeleteModal(true);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!avaliacaoToDelete) return;
 
-    // Remover avaliação
-    const updatedAvaliacoes = avaliacoes.filter(av => av.id !== avaliacaoToDelete);
-    setAvaliacoes(updatedAvaliacoes);
-    
-    // Atualizar localStorage
-    localStorage.setItem('minhasAvaliacoes', JSON.stringify(updatedAvaliacoes));
+    try {
+      // Deletar avaliação (o trigger do banco já salva no histórico)
+      const { error } = await supabase
+        .from('avaliacoes')
+        .delete()
+        .eq('id', avaliacaoToDelete)
+        .eq('autor_id', currentUserId); // Garantir que só deleta próprias avaliações
 
-    // Recalcular reputação (remover impacto)
-    recalcularReputacao(avaliacaoToDelete);
+      if (error) throw error;
 
-    setShowDeleteModal(false);
-    setAvaliacaoToDelete(null);
-  };
-
-  const recalcularReputacao = (avaliacaoId: string) => {
-    // Buscar avaliação removida
-    const avaliacaoRemovida = avaliacoes.find(av => av.id === avaliacaoId);
-    if (!avaliacaoRemovida) return;
-
-    // Buscar todas as avaliações do sistema
-    const todasAvaliacoes = JSON.parse(localStorage.getItem('todasAvaliacoes') || '[]');
-    
-    // Remover a avaliação específica
-    const avaliacoesAtualizadas = todasAvaliacoes.filter((av: Avaliacao) => av.id !== avaliacaoId);
-    
-    // Recalcular nota média para o homem avaliado
-    const avaliacoesDoHomem = avaliacoesAtualizadas.filter(
-      (av: Avaliacao) => av.nomeHomem === avaliacaoRemovida.nomeHomem
-    );
-    
-    const novaNotaMedia = avaliacoesDoHomem.length > 0
-      ? avaliacoesDoHomem.reduce((sum: number, av: Avaliacao) => sum + av.nota, 0) / avaliacoesDoHomem.length
-      : 0;
-
-    // Atualizar sistema de reputação
-    localStorage.setItem('todasAvaliacoes', JSON.stringify(avaliacoesAtualizadas));
-    
-    console.log(`Reputação recalculada para ${avaliacaoRemovida.nomeHomem}: ${novaNotaMedia.toFixed(1)}`);
+      // Atualizar lista local
+      setAvaliacoes(prev => prev.filter(av => av.id !== avaliacaoToDelete));
+      
+      setShowDeleteModal(false);
+      setAvaliacaoToDelete(null);
+    } catch (error) {
+      console.error('Erro ao excluir avaliação:', error);
+      alert('Erro ao excluir avaliação. Tente novamente.');
+    }
   };
 
   const handleViewHistory = (id: string) => {
@@ -134,13 +109,15 @@ export default function MinhasAvaliacoes() {
   };
 
   const getKeywordColor = (keyword: string) => {
-    const negative = ['agressivo', 'manipulador', 'desrespeitoso', 'violento', 'abusivo', 'insistente'];
+    const negative = ['agressivo', 'manipulador', 'desrespeitoso', 'violento', 'abusivo', 'insistente', 'mentiras', 'traição', 'stalking'];
     const positive = ['respeitoso', 'confiável', 'gentil', 'educado', 'atencioso', 'pontual'];
     
-    if (negative.includes(keyword.toLowerCase())) {
+    const lowerKeyword = keyword.toLowerCase();
+    
+    if (negative.some(word => lowerKeyword.includes(word))) {
       return 'bg-red-500/20 text-red-300 border-red-500/30';
     }
-    if (positive.includes(keyword.toLowerCase())) {
+    if (positive.some(word => lowerKeyword.includes(word))) {
       return 'bg-green-500/20 text-green-300 border-green-500/30';
     }
     return 'bg-gray-500/20 text-gray-300 border-gray-500/30';
@@ -150,6 +127,14 @@ export default function MinhasAvaliacoes() {
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black pb-20">
@@ -191,44 +176,48 @@ export default function MinhasAvaliacoes() {
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="text-white font-bold text-lg">{avaliacao.nomeHomem}</h3>
+                    <h3 className="text-white font-bold text-lg">{avaliacao.nome_homem}</h3>
                     <p className="text-gray-400 text-xs mt-1">
-                      Avaliado em {formatDate(avaliacao.data)}
+                      Avaliado em {formatDate(avaliacao.created_at)}
                     </p>
-                    {avaliacao.editadoEm && (
+                    {avaliacao.updated_at !== avaliacao.created_at && (
                       <p className="text-gray-500 text-xs mt-0.5">
-                        Editado em {formatDate(avaliacao.editadoEm)}
+                        Editado em {formatDate(avaliacao.updated_at)}
                       </p>
                     )}
                   </div>
                   
                   {/* Rating */}
                   <div className="flex items-center gap-1 bg-black px-3 py-1.5 rounded-lg">
-                    <Star className={`w-5 h-5 ${getRatingColor(avaliacao.nota)} fill-current`} />
-                    <span className={`font-bold ${getRatingColor(avaliacao.nota)}`}>
-                      {avaliacao.nota.toFixed(1)}
+                    <Star className={`w-5 h-5 ${getRatingColor(avaliacao.nota_geral)} fill-current`} />
+                    <span className={`font-bold ${getRatingColor(avaliacao.nota_geral)}`}>
+                      {avaliacao.nota_geral.toFixed(1)}
                     </span>
                   </div>
                 </div>
 
                 {/* Comentário */}
-                <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-                  {avaliacao.comentario}
-                </p>
+                {avaliacao.comentario && (
+                  <p className="text-gray-300 text-sm mb-3 line-clamp-2">
+                    {avaliacao.comentario}
+                  </p>
+                )}
 
-                {/* Palavras-chave */}
-                <div className="mb-4">
-                  <div className="flex flex-wrap gap-2">
-                    {avaliacao.palavrasChave.map((keyword, idx) => (
-                      <span
-                        key={idx}
-                        className={`px-2 py-1 rounded-full text-xs font-medium border ${getKeywordColor(keyword)}`}
-                      >
-                        {keyword}
-                      </span>
-                    ))}
+                {/* Red Flags */}
+                {avaliacao.red_flags && avaliacao.red_flags.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex flex-wrap gap-2">
+                      {avaliacao.red_flags.map((flag, idx) => (
+                        <span
+                          key={idx}
+                          className={`px-2 py-1 rounded-full text-xs font-medium border ${getKeywordColor(flag)}`}
+                        >
+                          {flag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Ações */}
                 <div className="flex gap-2">

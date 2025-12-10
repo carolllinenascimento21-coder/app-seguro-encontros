@@ -2,10 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Star, AlertTriangle, Send } from 'lucide-react';
+import { ArrowLeft, Star, AlertTriangle, Send, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function AvaliarPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     nome: '',
     telefone: '',
@@ -21,6 +24,7 @@ export default function AvaliarPage() {
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const categorias = [
     { key: 'comportamento', label: 'Comportamento' },
@@ -56,13 +60,63 @@ export default function AvaliarPage() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Aqui seria a integração com backend
-    setSubmitted(true);
-    setTimeout(() => {
-      window.location.href = '/home';
-    }, 2000);
+    
+    try {
+      setSubmitting(true);
+
+      // Verificar se usuário está autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        alert('Você precisa estar logado para fazer uma avaliação.');
+        router.push('/login');
+        return;
+      }
+
+      // Validar notas
+      if (
+        formData.comportamento === 0 ||
+        formData.segurancaEmocional === 0 ||
+        formData.respeito === 0 ||
+        formData.carater === 0 ||
+        formData.confianca === 0
+      ) {
+        alert('Por favor, avalie todas as categorias antes de enviar.');
+        return;
+      }
+
+      // Inserir avaliação no banco
+      const { error } = await supabase
+        .from('avaliacoes')
+        .insert({
+          autor_id: user.id,
+          nome_homem: formData.nome,
+          telefone: formData.telefone || null,
+          cidade: formData.cidade || null,
+          nota_comportamento: formData.comportamento,
+          nota_seguranca_emocional: formData.segurancaEmocional,
+          nota_respeito: formData.respeito,
+          nota_carater: formData.carater,
+          nota_confianca: formData.confianca,
+          comentario: formData.relato || null,
+          red_flags: formData.redFlags,
+          anonimo: formData.anonimo,
+        });
+
+      if (error) throw error;
+
+      setSubmitted(true);
+      setTimeout(() => {
+        router.push('/minhas-avaliacoes');
+      }, 2000);
+    } catch (error) {
+      console.error('Erro ao enviar avaliação:', error);
+      alert('Erro ao enviar avaliação. Tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -167,42 +221,45 @@ export default function AvaliarPage() {
           {/* Avaliações por Categoria */}
           <div className="bg-white/5 border border-[#D4AF37]/20 rounded-2xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">
-              Avalie por Categoria
+              Avalie por Categoria *
             </h2>
 
             <div className="space-y-6">
-              {categorias.map((categoria) => (
-                <div key={categoria.key}>
-                  <label className="block text-sm text-gray-300 mb-3">
-                    {categoria.label}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {[1, 2, 3, 4, 5].map((valor) => {
-                      const categoriaKey = categoria.key as keyof typeof formData;
-                      const rawValue = formData[categoriaKey];
-                      const current = typeof rawValue === "number" ? rawValue : Number(rawValue || 0);
-                      const isActive = current >= valor;
+              {categorias.map((categoria) => {
+                const categoriaKey = categoria.key as keyof typeof formData;
+                const rawValue = formData[categoriaKey];
+                const current = typeof rawValue === "number" ? rawValue : Number(rawValue || 0);
 
-                      return (
-                        <button
-                          key={valor}
-                          type="button"
-                          onClick={() => handleRating(categoria.key, valor)}
-                          className="transition-transform hover:scale-110"
-                        >
-                          <Star
-                            className={`w-8 h-8 ${
-                              isActive
-                                ? 'text-[#D4AF37] fill-[#D4AF37]'
-                                : 'text-gray-600'
-                            }`}
-                          />
-                        </button>
-                      );
-                    })}
+                return (
+                  <div key={categoria.key}>
+                    <label className="block text-sm text-gray-300 mb-3">
+                      {categoria.label}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((valor) => {
+                        const isActive = current >= valor;
+
+                        return (
+                          <button
+                            key={valor}
+                            type="button"
+                            onClick={() => handleRating(categoria.key, valor)}
+                            className="transition-transform hover:scale-110"
+                          >
+                            <Star
+                              className={`w-8 h-8 ${
+                                isActive
+                                  ? 'text-[#D4AF37] fill-[#D4AF37]'
+                                  : 'text-gray-600'
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -269,10 +326,20 @@ export default function AvaliarPage() {
           {/* Submit */}
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] text-black font-semibold py-4 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+            disabled={submitting}
+            className="w-full bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] text-black font-semibold py-4 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            <Send className="w-5 h-5" />
-            Enviar Avaliação
+            {submitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              <>
+                <Send className="w-5 h-5" />
+                Enviar Avaliação
+              </>
+            )}
           </button>
         </form>
       </div>
