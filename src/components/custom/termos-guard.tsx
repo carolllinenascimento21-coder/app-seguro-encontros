@@ -17,7 +17,10 @@ export default function TermosGuard({ children }: { children: React.ReactNode })
       '/onboarding',
       '/aceitar-termos',
       '/perfil/termos',
-      '/perfil/privacidade'
+      '/perfil/privacidade',
+      '/login',
+      '/signup',
+      '/cadastro'
     ];
 
     // Se está em página livre, não verifica
