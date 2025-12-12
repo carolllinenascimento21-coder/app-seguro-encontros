@@ -1,5 +1,7 @@
 'use client';
 
+import { createSupabaseBrowserClient } from "@/lib/supabase";
+const supabase = createSupabaseBrowserClient();
 import { useState, useEffect } from 'react';
 import { Star, Edit, Trash2, History, AlertCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
