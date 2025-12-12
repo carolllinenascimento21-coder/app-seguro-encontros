@@ -1,6 +1,6 @@
-import { criarCliente } de '@supabase/supabase-js'
+import { createClient } from "@supabase/supabase-js";
 
-const subaseUrl = processo.ambiente.NEXT_PUBLIC_SUPABASE_URL!
-const subaseAnonKey = processo.ambiente.PRÓXIMA_CHAVE_ANON_SUPABASE_PÚBLICA!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-exportar constante supabase = criarCliente(subaseUrl, subaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
