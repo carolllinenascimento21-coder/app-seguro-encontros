@@ -1,7 +1,8 @@
 'use client'
 
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-const supabase = createSupabaseBrowserClient();import { useState } from 'react'
+const supabase = createSupabaseBrowserClient();
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
