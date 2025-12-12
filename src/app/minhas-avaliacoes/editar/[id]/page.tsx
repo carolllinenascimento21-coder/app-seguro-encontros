@@ -1,7 +1,7 @@
 'use client';
 
-import { createSupabaseBrowserClient } from "@/lib/supabase";
-const supabase = createSupabaseBrowserClient();
+import { createClient } from "@/lib/supabase";
+const supabase = createClient();
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Star, AlertTriangle, Save, Loader2 } from 'lucide-react';
