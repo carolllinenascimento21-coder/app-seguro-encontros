@@ -1,7 +1,7 @@
 'use client';
 
-import { createClient } from "@/lib/supabase";
-const supabase = createClient();
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+const supabase = createClientComponentClient();
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Star, AlertTriangle, Save, Loader2 } from 'lucide-react';
