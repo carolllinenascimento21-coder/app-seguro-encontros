@@ -1,7 +1,7 @@
 'use client'
 
-import { createClient } from "@/lib/supabase";
-const supabase = createClient();
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+const supabase = createClientComponentClient();
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
