@@ -16,6 +16,7 @@ export default function CadastroPage() {
     email: '',
     senha: ''
   })
+  const supabase = createClient()
   const [errors, setErrors] = useState({
     nome: '',
     email: '',
