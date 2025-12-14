@@ -1,10 +1,12 @@
 'use client';
 
+import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Camera, Save } from 'lucide-react';
 
 export default function EditarPerfilPage() {
+  const supabase = createBrowserSupabaseClient();
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: 'Maria Silva',
@@ -17,13 +19,42 @@ export default function EditarPerfilPage() {
 
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    // Em produção: chamar API para salvar dados
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
+ const handleSave = async () => {
+  setIsSaving(true);
+
+  try {
+    // 1. Busca usuário autenticado
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      alert('Usuário não autenticado');
+      return;
+    }
+
+    // 2. Atualiza perfil no Supabase
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        nome: formData.name,
+        cidade: formData.city,
+        foto_url: formData.profilePhoto,
+      })
+      .eq('id', user.id);
+
+    if (error) {
+      console.error(error);
+      alert('Erro ao salvar perfil');
+      return;
+    }
+
     router.push('/perfil');
-  };
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const handlePhotoChange = () => {
     // Em produção: abrir câmera ou galeria
