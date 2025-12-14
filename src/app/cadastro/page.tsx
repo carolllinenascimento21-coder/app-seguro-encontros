@@ -57,22 +57,40 @@ export default function CadastroPage() {
     return !newErrors.nome && !newErrors.email && !newErrors.senha
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (validateForm()) {
-      // Salva dados temporários no localStorage para usar na próxima tela
-      localStorage.setItem('cadastro_temp', JSON.stringify({
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+
+  if (!validateForm()) return
+
+  try {
+    // 1. Cria usuário no Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.senha,
+    })
+
+    if (error) throw error
+    if (!data.user) throw new Error('Usuário não criado')
+
+    // 2. Cria perfil na tabela profiles
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: data.user.id,
         nome: formData.nome,
-        email: formData.email,
-        senha: formData.senha,
-        dataCadastro: new Date().toISOString()
-      }))
-      
-      // Redireciona para verificação de selfie
-      router.push('/verificacao-selfie')
-    }
+      })
+
+    if (profileError) throw profileError
+
+    // 3. Redireciona para selfie
+    router.push('/verificacao-selfie')
+
+  } catch (err: any) {
+    console.error(err)
+    alert(err.message || 'Erro ao criar conta')
   }
+}
+
 
   return (
     <div className="min-h-screen bg-[#000000] flex flex-col px-4 py-8 relative overflow-hidden">
