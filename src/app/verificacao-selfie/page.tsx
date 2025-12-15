@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function VerificacaoSelfiePage() {
   const router = useRouter()
@@ -15,16 +16,46 @@ export default function VerificacaoSelfiePage() {
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'success' | 'failed'>('idle')
   const [tentativas, setTentativas] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
-  const [cadastroData, setCadastroData] = useState<any>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
-    // Recupera dados do cadastro
-    const data = localStorage.getItem('cadastro_temp')
-    if (!data) {
-      router.push('/cadastro')
-      return
+    const ensureSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.user) {
+        router.replace('/login')
+        return
+      }
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, selfie_verified')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (error) {
+        setErrorMessage('Não foi possível carregar seu perfil. Tente novamente.')
+        return
+      }
+
+      if (!profile) {
+        await supabase.from('profiles').insert({
+          id: session.user.id,
+          email: session.user.email,
+          selfie_verified: false,
+          selfie_verified_at: null,
+        })
+      } else if (profile.selfie_verified) {
+        router.replace('/home')
+        return
+      }
+
+      setUserId(session.user.id)
+      setIsReady(true)
     }
-    setCadastroData(JSON.parse(data))
+
+    ensureSession()
   }, [router])
 
   const startCamera = async () => {
@@ -67,52 +98,52 @@ export default function VerificacaoSelfiePage() {
     }
   }
 
-  const verifySelfie = async () => {
-    setIsVerifying(true)
-    setVerificationStatus('idle')
-
-    // Simula verificação de liveness (em produção, usar API real)
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    // Simulação de verificação com 70% de chance de sucesso
-    const isValid = Math.random() > 0.3
-
-    if (isValid) {
-      setVerificationStatus('success')
-      
-      // Salva perfil no localStorage (em produção, usar banco de dados)
-      const perfil = {
-        id: Date.now().toString(),
-        nome: cadastroData.nome,
-        email: cadastroData.email,
-        dataCadastro: cadastroData.dataCadastro,
-        statusSelfie: 'aprovada',
-        fotoVerificacao: capturedImage
+    const verifySelfie = async () => {
+      if (!userId) {
+        setErrorMessage('Usuário não autenticado. Faça login novamente.')
+        return
       }
 
-      localStorage.setItem('usuario_perfil', JSON.stringify(perfil))
-      localStorage.removeItem('cadastro_temp')
+      if (!capturedImage) {
+        setErrorMessage('Capture uma selfie antes de continuar.')
+        return
+      }
 
-      // Redireciona para home após 2 segundos
-      setTimeout(() => {
-        router.push('/home')
-      }, 2000)
-    } else {
-      const novasTentativas = tentativas + 1
-      setTentativas(novasTentativas)
-      setVerificationStatus('failed')
-      setErrorMessage('Selfie inválida. Tente novamente em um ambiente com boa iluminação.')
+      setIsVerifying(true)
+      setVerificationStatus('idle')
+      setErrorMessage('')
 
-      if (novasTentativas >= 3) {
-        setErrorMessage('Você atingiu o limite de 3 tentativas. Tente novamente mais tarde.')
+      try {
+        const response = await fetch('/api/verify-selfie', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ image: capturedImage }),
+        })
+
+        const result = await response.json()
+
+        if (!response.ok) {
+          setVerificationStatus('failed')
+          setErrorMessage(result.error || 'Não foi possível concluir a verificação.')
+          setTentativas((prev) => prev + 1)
+          return
+        }
+
+        setVerificationStatus('success')
+
         setTimeout(() => {
-          router.push('/cadastro')
-        }, 3000)
+          router.push('/perfil')
+        }, 1200)
+      } catch (error) {
+        setVerificationStatus('failed')
+        setErrorMessage('Erro inesperado ao processar sua selfie.')
+        setTentativas((prev) => prev + 1)
+      } finally {
+        setIsVerifying(false)
       }
     }
-
-    setIsVerifying(false)
-  }
 
   const retryCapture = () => {
     setCapturedImage(null)
@@ -122,9 +153,18 @@ export default function VerificacaoSelfiePage() {
   }
 
   useEffect(() => {
+    if (!isReady) return
     startCamera()
     return () => stopCamera()
-  }, [])
+  }, [isReady])
+
+  if (!isReady) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        {errorMessage || 'Preparando verificação...'}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#000000] flex flex-col px-4 py-8 relative overflow-hidden">
