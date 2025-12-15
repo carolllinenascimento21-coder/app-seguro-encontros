@@ -1,12 +1,15 @@
 'use client';
 
-import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs';
+import { createBrowserClient } from '@supabase/ssr';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Camera, Save } from 'lucide-react';
 
 export default function EditarPerfilPage() {
-  const supabase = createBrowserSupabaseClient();
+  const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: 'Maria Silva',
