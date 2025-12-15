@@ -48,6 +48,7 @@ export default function PerfilPage() {
         return;
       }
 
+codex/analyze-authentication-and-onboarding-flow-oz4moc
       let profileRow = data;
 
       if (!profileRow) {
@@ -71,6 +72,7 @@ export default function PerfilPage() {
       }
 
       setProfile(profileRow);
+
       setLoading(false);
     };
 

@@ -1,7 +1,9 @@
 'use client'
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+codex/analyze-authentication-and-onboarding-flow-oz4moc
 import { useState, FormEvent, useEffect } from 'react'
+
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +18,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
+codex/analyze-authentication-and-onboarding-flow-oz4moc
   const upsertProfile = async (payload: { id: string; email: string | null }) => {
     const { data: profile, error: upsertError } = await supabase
       .from('profiles')
@@ -88,7 +91,7 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-
+ codex/analyze-authentication-and-onboarding-flow-oz4moc
     let selfieVerified = false
     try {
       selfieVerified = await upsertProfile({ id: user.id, email: user.email })
@@ -97,6 +100,7 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
+
     if (selfieVerified) {
       router.push('/perfil')
     } else {

@@ -68,12 +68,15 @@ export default function CadastroPage() {
       const userId = sessionData.session?.user?.id ?? data.user?.id;
       if (!userId) throw new Error('Não foi possível identificar o usuário.');
 
+ codex/analyze-authentication-and-onboarding-flow-oz4moc
       const profilePayload = {
+
         id: userId,
         name: formData.nome,
         email: formData.email,
         selfie_verified: false,
         selfie_verified_at: null,
+codex/analyze-authentication-and-onboarding-flow-oz4moc
       };
 
       const { error: profileError } = await supabase
