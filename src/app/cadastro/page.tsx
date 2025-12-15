@@ -66,21 +66,30 @@ export default function CadastroPage() {
 
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id ?? data.user?.id;
-      if (!userId) throw new Error('Não foi possível identificar o usuário.');
 
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        id: userId,
-        name: formData.nome,
-        email: formData.email,
-        selfie_verified: false,
-        selfie_verified_at: null,
-      });
+      if (!userId) {
+        throw new Error('Não foi possível identificar o usuário.');
+      }
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: userId,
+          name: formData.nome,
+          email: formData.email,
+          selfie_verified: false,
+          selfie_verified_at: null,
+        });
 
       if (profileError) throw profileError;
 
       router.push('/verificacao-selfie');
-    } catch (err: any) {
-      alert(err.message || 'Erro ao criar conta');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(err.message);
+      } else {
+        alert('Erro ao criar conta');
+      }
     } finally {
       setLoading(false);
     }
@@ -126,6 +135,7 @@ export default function CadastroPage() {
         />
 
         <button
+          type="submit"
           disabled={loading}
           className="w-full bg-[#D4AF37] text-black py-2 rounded"
         >
