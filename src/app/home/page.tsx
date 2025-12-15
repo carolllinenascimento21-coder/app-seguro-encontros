@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { Search, Eye, Lock, Shield, AlertTriangle, Star } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
@@ -8,9 +10,23 @@ import { perfisMock } from '@/lib/mock-data';
 import { NivelReputacao } from '@/lib/types';
 
 export default function HomePage() {
+  const router = useRouter();
+
+useEffect(() => {
+  const checkSession = async () => {
+    const { data } = await supabase.auth.getSession();
+
+    if (!data.session) {
+      // Não logada → volta para onboarding
+      router.replace('/onboarding');
+    }
+  };
+
+  checkSession();
+}, [router]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState(perfisMock);
-
+  
   const handleSearch = (term: string) => {
     setSearchTerm(term);
     if (term.trim() === '') {
