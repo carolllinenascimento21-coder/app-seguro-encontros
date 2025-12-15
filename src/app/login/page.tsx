@@ -1,7 +1,6 @@
 'use client'
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-const supabase = createClientComponentClient();
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -9,23 +8,58 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 
+const supabase = createClientComponentClient();
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
-    if (error) {
-      alert(error.message)
+    if (signInError) {
+      alert(signInError.message)
+      setLoading(false)
+      return
+    }
+
+    const user = signInData.user
+
+    if (!user) {
+      alert('Não foi possível recuperar o usuário autenticado.')
+      setLoading(false)
+      return
+    }
+
+    const { data: profile, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: user.id,
+          email: user.email,
+        },
+        { onConflict: 'id' }
+      )
+      .select('selfie_verified')
+      .single()
+
+    if (upsertError) {
+      alert(upsertError.message)
+      setLoading(false)
+      return
+    }
+
+    const selfieVerified = profile?.selfie_verified ?? false
+    if (selfieVerified) {
+      router.push('/perfil')
     } else {
-      router.push('/')
+      router.push('/verificacao-selfie')
     }
     setLoading(false)
   }

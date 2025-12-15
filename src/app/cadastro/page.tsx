@@ -57,12 +57,26 @@ export default function CadastroPage() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.senha,
       });
 
       if (error) throw error;
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id ?? data.user?.id;
+      if (!userId) throw new Error('Não foi possível identificar o usuário.');
+
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: userId,
+        name: formData.nome,
+        email: formData.email,
+        selfie_verified: false,
+        selfie_verified_at: null,
+      });
+
+      if (profileError) throw profileError;
 
       router.push('/verificacao-selfie');
     } catch (err: any) {
