@@ -1,239 +1,160 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export default function CadastroPage() {
-  const router = useRouter()
-  const [showPassword, setShowPassword] = useState(false)
+  const router = useRouter();
+
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
-    senha: ''
-  })
-  
+    senha: '',
+  });
+
   const [errors, setErrors] = useState({
     nome: '',
     email: '',
-    senha: ''
-  })
+    senha: '',
+  });
+
+  const [loading, setLoading] = useState(false);
 
   const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
-  }
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
 
   const validateForm = () => {
     const newErrors = {
       nome: '',
       email: '',
-      senha: ''
-    }
+      senha: '',
+    };
 
     if (!formData.nome.trim()) {
-      newErrors.nome = 'Nome completo é obrigatório'
+      newErrors.nome = 'Nome completo é obrigatório';
     } else if (formData.nome.trim().split(' ').length < 2) {
-      newErrors.nome = 'Digite seu nome completo'
+      newErrors.nome = 'Digite seu nome completo';
     }
 
     if (!formData.email.trim()) {
-      newErrors.email = 'E-mail é obrigatório'
+      newErrors.email = 'E-mail é obrigatório';
     } else if (!validateEmail(formData.email)) {
-      newErrors.email = 'E-mail inválido'
+      newErrors.email = 'E-mail inválido';
     }
 
     if (!formData.senha) {
-      newErrors.senha = 'Senha é obrigatória'
+      newErrors.senha = 'Senha é obrigatória';
     } else if (formData.senha.length < 6) {
-      newErrors.senha = 'Senha deve ter no mínimo 6 caracteres'
+      newErrors.senha = 'Senha deve ter no mínimo 6 caracteres';
     }
 
-    setErrors(newErrors)
-    return !newErrors.nome && !newErrors.email && !newErrors.senha
-  }
+    setErrors(newErrors);
+    return !newErrors.nome && !newErrors.email && !newErrors.senha;
+  };
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault()
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
 
-  if (!validateForm()) return
+    setLoading(true);
 
-  try {
-    // 1. Cria usuário no Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.senha,
-    })
+    try {
+      // 1️⃣ Cria usuário no Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.senha,
+      });
 
-    if (error) throw error
-    if (!data.user) throw new Error('Usuário não criado')
+      if (error) throw error;
+      if (!data.user) throw new Error('Usuário não criado');
 
-    // 2. Cria perfil na tabela profiles
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: data.user.id,
-        nome: formData.nome,
-      })
+      const userId = data.user.id;
 
-    if (profileError) throw profileError
+      // 2️⃣ Garante que o perfil exista com id = auth.uid()
+      const { data: existingProfile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
 
-    // 3. Redireciona para selfie
-    router.push('/verificacao-selfie')
+      if (fetchError) throw fetchError;
 
-  } catch (err: any) {
-    console.error(err)
-    alert(err.message || 'Erro ao criar conta')
-  }
-}
+      if (!existingProfile) {
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            nome: formData.nome,
+          });
 
+        if (insertError) throw insertError;
+      }
+
+      // 3️⃣ Redireciona após cadastro
+      router.push('/verificacao-selfie');
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Erro ao criar conta');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#000000] flex flex-col px-4 py-8 relative overflow-hidden">
-      {/* Efeito de brilho dourado de fundo */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.1)_0%,_transparent_70%)]"></div>
-      
-      {/* Pontos dourados flutuantes */}
-      <div className="absolute inset-0">
-        {[...Array(15)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-[#D4AF37] rounded-full animate-pulse"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 2}s`,
-              opacity: Math.random() * 0.5 + 0.3
-            }}
-          />
-        ))}
-      </div>
+    <div className="min-h-screen bg-black flex items-center justify-center px-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md space-y-4 bg-black text-white"
+      >
+        <h1 className="text-xl font-semibold text-center">Criar conta</h1>
 
-      {/* Conteúdo principal */}
-      <div className="relative z-10 w-full max-w-md mx-auto">
-        {/* Botão voltar */}
-        <Button
-          onClick={() => router.back()}
-          variant="ghost"
-          className="text-[#D4AF37] hover:text-[#EFD9A7] hover:bg-[#D4AF37]/10 mb-6"
+        <input
+          type="text"
+          placeholder="Nome completo"
+          value={formData.nome}
+          onChange={(e) =>
+            setFormData({ ...formData, nome: e.target.value })
+          }
+          className="w-full border border-gray-700 p-2 rounded bg-black"
+        />
+        {errors.nome && <p className="text-red-500 text-sm">{errors.nome}</p>}
+
+        <input
+          type="email"
+          placeholder="E-mail"
+          value={formData.email}
+          onChange={(e) =>
+            setFormData({ ...formData, email: e.target.value })
+          }
+          className="w-full border border-gray-700 p-2 rounded bg-black"
+        />
+        {errors.email && (
+          <p className="text-red-500 text-sm">{errors.email}</p>
+        )}
+
+        <input
+          type="password"
+          placeholder="Senha"
+          value={formData.senha}
+          onChange={(e) =>
+            setFormData({ ...formData, senha: e.target.value })
+          }
+          className="w-full border border-gray-700 p-2 rounded bg-black"
+        />
+        {errors.senha && (
+          <p className="text-red-500 text-sm">{errors.senha}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-[#D4AF37] text-black py-2 rounded font-semibold disabled:opacity-50"
         >
-          <ArrowLeft className="w-5 h-5 mr-2" />
-          Voltar
-        </Button>
-
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <img 
-            src="https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/3e57b2bc-0cab-46ef-aeca-c129a3e01f01.png" 
-            alt="Confia+ Logo" 
-            className="w-32 h-auto mx-auto drop-shadow-2xl"
-          />
-        </div>
-
-        {/* Card de cadastro */}
-        <div className="bg-[#0A0A0A] border-2 border-[#D4AF37] rounded-3xl p-8 shadow-2xl">
-          <h1 className="text-[#D4AF37] text-3xl font-bold text-center mb-2">
-            Criar Conta
-          </h1>
-          <p className="text-[#EFD9A7] text-center mb-8 text-sm">
-            Preencha seus dados para começar
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Campo Nome Completo */}
-            <div className="space-y-2">
-              <Label htmlFor="nome" className="text-[#EFD9A7] font-semibold">
-                Nome Completo
-              </Label>
-              <Input
-                id="nome"
-                type="text"
-                placeholder="Digite seu nome completo"
-                value={formData.nome}
-                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                className="bg-[#000000] border-[#D4AF37] text-[#FFFFFF] placeholder:text-[#666666] focus:border-[#EFD9A7] focus:ring-[#EFD9A7] rounded-xl py-6"
-              />
-              {errors.nome && (
-                <p className="text-red-400 text-sm">{errors.nome}</p>
-              )}
-            </div>
-
-            {/* Campo E-mail */}
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-[#EFD9A7] font-semibold">
-                E-mail
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="bg-[#000000] border-[#D4AF37] text-[#FFFFFF] placeholder:text-[#666666] focus:border-[#EFD9A7] focus:ring-[#EFD9A7] rounded-xl py-6"
-              />
-              {errors.email && (
-                <p className="text-red-400 text-sm">{errors.email}</p>
-              )}
-            </div>
-
-            {/* Campo Senha */}
-            <div className="space-y-2">
-              <Label htmlFor="senha" className="text-[#EFD9A7] font-semibold">
-                Senha
-              </Label>
-              <div className="relative">
-                <Input
-                  id="senha"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Mínimo 6 caracteres"
-                  value={formData.senha}
-                  onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                  className="bg-[#000000] border-[#D4AF37] text-[#FFFFFF] placeholder:text-[#666666] focus:border-[#EFD9A7] focus:ring-[#EFD9A7] rounded-xl py-6 pr-12"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#D4AF37] hover:text-[#EFD9A7]"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-              {errors.senha && (
-                <p className="text-red-400 text-sm">{errors.senha}</p>
-              )}
-            </div>
-
-            {/* Botão Criar Conta */}
-            <Button
-              type="submit"
-              className="w-full bg-[#D4AF37] hover:bg-[#EFD9A7] text-[#000000] font-bold py-6 px-8 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 text-lg"
-            >
-              Criar Conta
-            </Button>
-          </form>
-
-          {/* Link para login */}
-          <div className="mt-6 text-center">
-            <p className="text-[#EFD9A7] text-sm">
-              Já tem uma conta?{' '}
-              <button
-                onClick={() => router.push('/onboarding')}
-                className="text-[#D4AF37] font-semibold hover:underline"
-              >
-                Fazer login
-              </button>
-            </p>
-          </div>
-        </div>
-      </div>
+          {loading ? 'Criando conta...' : 'Criar conta'}
+        </button>
+      </form>
     </div>
-  )
+  );
 }
