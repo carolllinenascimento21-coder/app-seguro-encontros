@@ -37,11 +37,15 @@ export default function EditarPerfilPage() {
     // 2. Atualiza perfil no Supabase
     const { error } = await supabase
       .from('profiles')
-      .update({
-        nome: formData.name,
-        cidade: formData.city,
-        foto_url: formData.profilePhoto,
-      })
+     .update({
+      nome: formData.name,
+      idade: formData.age,
+      cidade: formData.city,
+      estado: formData.state,
+      foto_url: formData.profilePhoto,
+      updated_at: new Date().toISOString(),
+})
+
       .eq('id', user.id);
 
     if (error) {
