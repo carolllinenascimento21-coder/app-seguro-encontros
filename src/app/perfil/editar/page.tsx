@@ -7,9 +7,6 @@ import { ArrowLeft, Camera, Save } from 'lucide-react';
 
 export default function EditarPerfilPage() {
   const supabase = createBrowserSupabaseClient();
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: 'Maria Silva',
