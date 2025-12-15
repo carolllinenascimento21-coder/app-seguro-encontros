@@ -88,25 +88,28 @@ export default function AvaliarPage() {
         return;
       }
 
-      // Inserir avaliação no banco
-      const { error } = await supabase
-        .from('avaliacoes')
-        .insert({
-          autor_id: user.id,
-          nome_homem: formData.nome,
-          telefone: formData.telefone || null,
-          cidade: formData.cidade || null,
-          nota_comportamento: formData.comportamento,
-          nota_seguranca_emocional: formData.segurancaEmocional,
-          nota_respeito: formData.respeito,
-          nota_carater: formData.carater,
-          nota_confianca: formData.confianca,
-          comentario: formData.relato || null,
-          red_flags: formData.redFlags,
+      const response = await fetch('/api/avaliacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: formData.nome,
+          telefone: formData.telefone,
+          cidade: formData.cidade,
+          comportamento: formData.comportamento,
+          segurancaEmocional: formData.segurancaEmocional,
+          respeito: formData.respeito,
+          carater: formData.carater,
+          confianca: formData.confianca,
+          relato: formData.relato,
+          redFlags: formData.redFlags,
           anonimo: formData.anonimo,
-        });
+        }),
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Erro ao enviar avaliação');
+      }
 
       setSubmitted(true);
       setTimeout(() => {

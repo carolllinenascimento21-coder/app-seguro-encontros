@@ -123,18 +123,29 @@ export default function EditarAvaliacao() {
         return;
       }
 
+      const notas = [
+        formData.nota_comportamento,
+        formData.nota_seguranca_emocional,
+        formData.nota_respeito,
+        formData.nota_carater,
+        formData.nota_confianca,
+      ];
+
+      const notaGeral = notas.reduce((acc, n) => acc + n, 0) / notas.length;
+
       // Atualizar avaliação (o trigger do banco salva automaticamente no histórico)
       const { error } = await supabase
         .from('avaliacoes')
         .update({
           nome_homem: formData.nome_homem,
-          telefone: formData.telefone,
-          cidade: formData.cidade,
+          telefone: formData.telefone || null,
+          cidade: formData.cidade || null,
           nota_comportamento: formData.nota_comportamento,
           nota_seguranca_emocional: formData.nota_seguranca_emocional,
           nota_respeito: formData.nota_respeito,
           nota_carater: formData.nota_carater,
           nota_confianca: formData.nota_confianca,
+          nota_geral: notaGeral,
           comentario: formData.comentario,
           red_flags: formData.red_flags,
           updated_at: new Date().toISOString(),

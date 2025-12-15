@@ -50,16 +50,18 @@ export default function MinhasAvaliacoes() {
 
       setCurrentUserId(user.id);
 
-      // Buscar avaliações do usuário
-      const { data, error } = await supabase
-        .from('avaliacoes')
-        .select('*')
-        .eq('autor_id', user.id)
-        .order('created_at', { ascending: false });
+      const response = await fetch('/api/avaliacoes');
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Falha ao carregar avaliações');
+      }
 
-      setAvaliacoes(data || []);
+      const payload = await response.json();
+      setAvaliacoes(payload.data || []);
     } catch (error) {
       console.error('Erro ao carregar avaliações:', error);
     } finally {

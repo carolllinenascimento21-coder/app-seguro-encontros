@@ -1,23 +1,99 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, Mail, MapPin, Calendar, CheckCircle, Edit, Trash2, FileText, Shield, Info } from 'lucide-react';
-import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+
+type Profile = {
+  id: string
+  name: string | null
+  email: string | null
+  selfie_verified: boolean
+  selfie_verified_at: string | null
+}
 
 export default function PerfilPage() {
   const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  // Dados mockados do usuário
+  useEffect(() => {
+    const loadProfile = async () => {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        setError('Não foi possível validar sua sessão.');
+        setLoading(false);
+        return;
+      }
+
+      const session = sessionData.session;
+      if (!session?.user) {
+        router.replace('/login');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, email, selfie_verified, selfie_verified_at')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (error) {
+        setError('Não foi possível carregar seu perfil.');
+        setLoading(false);
+        return;
+      }
+
+      let profileRow = data;
+
+      if (!profileRow) {
+        const { data: created, error: upsertError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.name ?? null,
+          })
+          .select('id, name, email, selfie_verified, selfie_verified_at')
+          .single();
+
+        if (upsertError) {
+          setError('Não foi possível criar seu perfil.');
+          setLoading(false);
+          return;
+        }
+
+        profileRow = created;
+      }
+
+      setProfile(profileRow);
+      setLoading(false);
+    };
+
+    loadProfile();
+  }, [router]);
+
+  const verificacaoFacial: 'verificado' | 'pendente' | 'nao_verificado' = profile?.selfie_verified
+    ? 'verificado'
+    : profile
+      ? 'pendente'
+      : 'nao_verificado';
+
   const usuario = {
-    nome: 'Maria Silva',
-    email: 'maria.silva@email.com',
-    idade: 28,
-    cidade: 'São Paulo',
-    estado: 'SP',
-    dataCadastro: '15 de Janeiro de 2024',
+    nome: profile?.name ?? 'Usuário',
+    email: profile?.email ?? 'E-mail não informado',
+    idade: null,
+    cidade: null,
+    estado: null,
+    dataCadastro: profile?.selfie_verified_at
+      ? new Date(profile.selfie_verified_at).toLocaleDateString('pt-BR')
+      : '—',
     fotoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop',
-    verificacaoFacial: 'verificado' // 'verificado', 'pendente', 'nao_verificado'
+    verificacaoFacial,
   };
 
   const handleApagarConta = () => {
@@ -52,6 +128,30 @@ export default function PerfilPage() {
         );
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        Carregando perfil...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        {error}
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        Perfil não disponível.
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black pb-20">
@@ -107,7 +207,9 @@ export default function PerfilPage() {
               <User className="w-5 h-5 text-gray-400" />
               <div>
                 <p className="text-gray-400 text-xs">Idade</p>
-                <p className="text-white text-sm">{usuario.idade} anos</p>
+                <p className="text-white text-sm">
+                  {usuario.idade ? `${usuario.idade} anos` : 'Atualize suas informações'}
+                </p>
               </div>
             </div>
 
@@ -115,7 +217,9 @@ export default function PerfilPage() {
               <MapPin className="w-5 h-5 text-gray-400" />
               <div>
                 <p className="text-gray-400 text-xs">Localização</p>
-                <p className="text-white text-sm">{usuario.cidade}, {usuario.estado}</p>
+                <p className="text-white text-sm">
+                  {usuario.cidade && usuario.estado ? `${usuario.cidade}, ${usuario.estado}` : 'Atualize suas informações'}
+                </p>
               </div>
             </div>
 
@@ -148,7 +252,7 @@ export default function PerfilPage() {
               </p>
             )}
 
-            {usuario.verificacaoFacial === 'nao_verificado' && (
+            {usuario.verificacaoFacial !== 'verificado' && (
               <button className="w-full bg-[#D4AF37] hover:bg-[#B8941F] text-black font-semibold py-3 rounded-xl transition-all">
                 Verificar Agora
               </button>
