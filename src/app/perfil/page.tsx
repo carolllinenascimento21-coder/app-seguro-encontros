@@ -48,13 +48,31 @@ export default function PerfilPage() {
         return;
       }
 
-      if (!data) {
-        setError('Perfil não encontrado.');
-        setLoading(false);
-        return;
+codex/analyze-authentication-and-onboarding-flow-oz4moc
+      let profileRow = data;
+
+      if (!profileRow) {
+        const { data: created, error: upsertError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.name ?? null,
+          })
+          .select('id, name, email, selfie_verified, selfie_verified_at')
+          .single();
+
+        if (upsertError) {
+          setError('Não foi possível criar seu perfil.');
+          setLoading(false);
+          return;
+        }
+
+        profileRow = created;
       }
 
-      setProfile(data);
+      setProfile(profileRow);
+
       setLoading(false);
     };
 

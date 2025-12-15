@@ -68,15 +68,35 @@ export default function CadastroPage() {
       const userId = sessionData.session?.user?.id ?? data.user?.id;
       if (!userId) throw new Error('Não foi possível identificar o usuário.');
 
-      const { error: profileError } = await supabase.from('profiles').upsert({
+ codex/analyze-authentication-and-onboarding-flow-oz4moc
+      const profilePayload = {
+
         id: userId,
         name: formData.nome,
         email: formData.email,
         selfie_verified: false,
         selfie_verified_at: null,
-      });
+codex/analyze-authentication-and-onboarding-flow-oz4moc
+      };
 
-      if (profileError) throw profileError;
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert(profilePayload);
+
+      if (profileError) {
+        const emailColumnMissing =
+          profileError.message?.toLowerCase().includes('email') &&
+          profileError.message?.toLowerCase().includes('profiles');
+
+        if (!emailColumnMissing) throw profileError;
+
+        const { email, ...profileWithoutEmail } = profilePayload;
+        const { error: retryError } = await supabase
+          .from('profiles')
+          .upsert(profileWithoutEmail);
+
+        if (retryError) throw retryError;
+      }
 
       router.push('/verificacao-selfie');
     } catch (err: any) {

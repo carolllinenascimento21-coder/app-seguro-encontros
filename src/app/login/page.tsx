@@ -1,7 +1,9 @@
 'use client'
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { useState, FormEvent } from 'react'
+codex/analyze-authentication-and-onboarding-flow-oz4moc
+import { useState, FormEvent, useEffect } from 'react'
+
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +17,59 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+
+codex/analyze-authentication-and-onboarding-flow-oz4moc
+  const upsertProfile = async (payload: { id: string; email: string | null }) => {
+    const { data: profile, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(payload, { onConflict: 'id' })
+      .select('selfie_verified')
+      .single()
+
+    if (upsertError) {
+      const emailColumnMissing =
+        upsertError.message?.toLowerCase().includes('email') &&
+        upsertError.message?.toLowerCase().includes('profiles')
+
+      if (!emailColumnMissing) {
+        throw upsertError
+      }
+
+      const { email: _email, ...profileWithoutEmail } = payload
+      const { data: fallbackProfile, error: retryError } = await supabase
+        .from('profiles')
+        .upsert(profileWithoutEmail, { onConflict: 'id' })
+        .select('selfie_verified')
+        .single()
+
+      if (retryError) {
+        throw retryError
+      }
+
+      return fallbackProfile?.selfie_verified ?? false
+    }
+
+    return profile?.selfie_verified ?? false
+  }
+
+  useEffect(() => {
+    const redirectIfAuthenticated = async () => {
+      const { data, error } = await supabase.auth.getSession()
+      if (error) return
+
+      const user = data.session?.user
+      if (!user) return
+
+      try {
+        const selfieVerified = await upsertProfile({ id: user.id, email: user.email })
+        router.replace(selfieVerified ? '/perfil' : '/verificacao-selfie')
+      } catch (err) {
+        console.error('Falha ao validar perfil existente:', err)
+      }
+    }
+
+    redirectIfAuthenticated()
+  }, [router])
 
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -36,26 +91,16 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-
-    const { data: profile, error: upsertError } = await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: user.id,
-          email: user.email,
-        },
-        { onConflict: 'id' }
-      )
-      .select('selfie_verified')
-      .single()
-
-    if (upsertError) {
-      alert(upsertError.message)
+ codex/analyze-authentication-and-onboarding-flow-oz4moc
+    let selfieVerified = false
+    try {
+      selfieVerified = await upsertProfile({ id: user.id, email: user.email })
+    } catch (err: any) {
+      alert(err.message || 'Erro ao atualizar perfil')
       setLoading(false)
       return
     }
 
-    const selfieVerified = profile?.selfie_verified ?? false
     if (selfieVerified) {
       router.push('/perfil')
     } else {
