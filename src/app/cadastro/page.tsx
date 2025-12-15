@@ -1,8 +1,3 @@
-diff --git a/src/app/cadastro/page.tsx b/src/app/cadastro/page.tsx
-index 0a9d7d5d04c4bb4f05e2bdb72db9e4273b6574a2..3398f51441d028d3b8d80fbab4c0f1b9aff7689d 100644
---- a/src/app/cadastro/page.tsx
-+++ b/src/app/cadastro/page.tsx
-@@ -1,28 +1,29 @@
  'use client';
  
 -import { useState } from 'react';
