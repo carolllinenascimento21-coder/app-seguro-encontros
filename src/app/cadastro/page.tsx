@@ -104,7 +104,7 @@ export default function CadastroPage() {
 
       if (profileError) throw profileError;
 
-      router.push('/verificacao-selfie');
+      router.push('/verification-pending');
     } catch (err: unknown) {
       if (err instanceof Error) {
         alert(err.message);
