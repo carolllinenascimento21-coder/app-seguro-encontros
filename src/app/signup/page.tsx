@@ -57,42 +57,20 @@ export default function SignupPage() {
     setErrorMessage('')
     setLoading(true)
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           gender,
           selfie_verified: false,
+          onboarding_completed: false,
         },
       },
     })
 
     if (error) {
       setErrorMessage(error.message)
-      setLoading(false)
-      return
-    }
-
-    const userId = data.user?.id
-    const userEmail = data.user?.email ?? email
-
-    if (!userId) {
-      setErrorMessage('Não foi possível identificar o usuário criado.')
-      setLoading(false)
-      return
-    }
-
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: userId,
-      email: userEmail,
-      gender,
-      selfie_verified: false,
-      selfie_verified_at: null,
-    })
-
-    if (profileError) {
-      setErrorMessage(profileError.message)
       setLoading(false)
       return
     }
