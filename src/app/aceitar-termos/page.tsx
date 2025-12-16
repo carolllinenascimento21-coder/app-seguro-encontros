@@ -1,11 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FileText, Shield, CheckCircle } from 'lucide-react';
 
 export default function AceitarTermosPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = useMemo(
+    () => searchParams?.get('next') ?? '/signup',
+    [searchParams]
+  );
   const [termosAceitos, setTermosAceitos] = useState(false);
   const [privacidadeAceita, setPrivacidadeAceita] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -23,15 +28,14 @@ export default function AceitarTermosPage() {
       termosAceitos: true,
       privacidadeAceita: true,
       dataAceite: new Date().toISOString(),
-      userId: 'user-123' // Em produção, usar ID real do usuário autenticado
     };
 
     localStorage.setItem('confia_termos_aceite', JSON.stringify(aceite));
 
-    // Redirecionar para home
+    // Redirecionar para o próximo passo definido no fluxo
     setTimeout(() => {
-      router.push('/home');
-    }, 500);
+      router.push(next || '/signup');
+    }, 300);
   };
 
   return (

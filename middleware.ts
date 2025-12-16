@@ -18,13 +18,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('selfie_verified')
     .eq('id', session.user.id)
     .maybeSingle()
 
-  if (!profile?.selfie_verified) {
+  const selfieVerified =
+    profileError?.code === '42703'
+      ? false
+      : profile?.selfie_verified ?? false
+
+  if (!selfieVerified) {
     const redirectUrl = req.nextUrl.clone()
     redirectUrl.pathname = '/verificacao-selfie'
     return NextResponse.redirect(redirectUrl)

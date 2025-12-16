@@ -33,10 +33,12 @@ export default function OnboardingPage() {
       return
     }
 
+    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/aceitar-termos?next=/home')}`
+
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
       },
     })
   }
@@ -84,7 +86,11 @@ export default function OnboardingPage() {
         <div className="text-center text-sm text-gray-400">ou</div>
 
         <Button
-          onClick={() => router.push('/cadastro')}
+          onClick={() =>
+            router.push(
+              `/aceitar-termos?next=${encodeURIComponent('/cadastro')}`
+            )
+          }
           variant="outline"
           className="w-full border-[#D4AF37] text-[#D4AF37] py-6 rounded-2xl"
         >
