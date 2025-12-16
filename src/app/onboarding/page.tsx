@@ -12,16 +12,21 @@ export default function OnboardingPage() {
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // 🔐 Se já estiver logada, não mostra onboarding
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession()
-      if (data.session) {
+      const session = data.session
+      const onboardingCompleted =
+        session?.user?.user_metadata?.onboarding_completed === true
+
+      if (session && onboardingCompleted) {
         router.replace('/home')
-      } else {
-        setLoading(false)
+        return
       }
+
+      setLoading(false)
     }
+
     checkSession()
   }, [router])
 
