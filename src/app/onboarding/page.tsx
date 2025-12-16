@@ -122,7 +122,7 @@ export default function OnboardingPage() {
         <Button
           onClick={() =>
             router.push(
-              `/aceitar-termos?next=${encodeURIComponent('/cadastro')}`
+              `/aceitar-termos?next=${encodeURIComponent('/signup')}`
             )
           }
           variant="outline"

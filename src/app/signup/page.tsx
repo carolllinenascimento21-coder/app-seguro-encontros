@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-const supabase = createSupabaseBrowserClient();
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
+
+const supabase = createSupabaseBrowserClient();
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -16,6 +17,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const [termsOk, setTermsOk] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     const storedAcceptance = localStorage.getItem('confia_termos_aceite')
@@ -39,12 +41,23 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (gender.toLowerCase() !== 'female') {
-      alert('Este aplicativo é exclusivo para mulheres; não é possível concluir o cadastro.')
+
+    if (!gender) {
+      setErrorMessage('Selecione seu gênero para continuar.')
       return
     }
+
+    if (gender.toLowerCase() !== 'female') {
+      setErrorMessage(
+        'Este aplicativo é exclusivo para mulheres; não é possível concluir o cadastro.'
+      )
+      return
+    }
+
+    setErrorMessage('')
     setLoading(true)
-    const { error } = await supabase.auth.signUp({
+
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -54,13 +67,38 @@ export default function SignupPage() {
         },
       },
     })
+
     if (error) {
-      alert(error.message)
-    } else {
-      alert('Verifique seu e-mail para confirmar a conta')
-      router.push('/login')
+      setErrorMessage(error.message)
+      setLoading(false)
+      return
     }
+
+    const userId = data.user?.id
+    const userEmail = data.user?.email ?? email
+
+    if (!userId) {
+      setErrorMessage('Não foi possível identificar o usuário criado.')
+      setLoading(false)
+      return
+    }
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: userId,
+      email: userEmail,
+      gender,
+      selfie_verified: false,
+      selfie_verified_at: null,
+    })
+
+    if (profileError) {
+      setErrorMessage(profileError.message)
+      setLoading(false)
+      return
+    }
+
     setLoading(false)
+    router.push('/verification-pending')
   }
 
   return (
@@ -68,8 +106,15 @@ export default function SignupPage() {
       <div className="w-full max-w-md space-y-8 p-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold">Cadastrar</h2>
-          <p className="text-muted-foreground">Crie sua conta</p>
+          <p className="text-muted-foreground">
+            Crie sua conta e conclua a selfie antes de acessar o app completo.
+          </p>
         </div>
+        {errorMessage && (
+          <div className="rounded-md bg-red-950/60 border border-red-900 px-4 py-3 text-sm text-red-200">
+            {errorMessage}
+          </div>
+        )}
         <form
           onSubmit={handleSignup}
           className="space-y-6"
