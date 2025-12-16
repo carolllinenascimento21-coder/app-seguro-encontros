@@ -11,6 +11,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [gender, setGender] = useState('')
 
   useEffect(() => {
     const checkSession = async () => {
@@ -38,12 +39,21 @@ export default function OnboardingPage() {
       return
     }
 
+    if (gender.toLowerCase() !== 'female') {
+      alert('Este aplicativo é exclusivo para mulheres; não é possível concluir o cadastro.')
+      return
+    }
+
     const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/aceitar-termos?next=/home')}`
 
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: callbackUrl,
+        data: {
+          gender,
+          selfie_verified: false,
+        },
       },
     })
   }
@@ -80,9 +90,28 @@ export default function OnboardingPage() {
           </p>
         </div>
 
+        <div className="space-y-2">
+          <p className="text-sm text-[#EFD9A7] font-semibold">Gênero</p>
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-[#EFD9A7]"
+          >
+            <option value="" className="bg-black text-[#EFD9A7]">
+              Selecione seu gênero
+            </option>
+            <option value="female" className="bg-black text-[#EFD9A7]">
+              Mulher
+            </option>
+            <option value="other" className="bg-black text-[#EFD9A7]">
+              Outro (não permitido)
+            </option>
+          </select>
+        </div>
+
         <Button
           onClick={handleGoogleLogin}
-          disabled={!agreed}
+          disabled={!agreed || !gender}
           className="w-full bg-[#D4AF37] text-black py-6 rounded-2xl"
         >
           Continuar com Google

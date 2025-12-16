@@ -60,7 +60,7 @@ export default function LoginPage() {
     if (selfieVerified) {
       router.push('/perfil')
     } else {
-      router.push('/verificacao-selfie')
+      router.push('/verification-pending')
     }
     setLoading(false)
   }

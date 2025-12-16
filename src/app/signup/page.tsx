@@ -12,6 +12,7 @@ import Link from 'next/link'
 export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [gender, setGender] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const [termsOk, setTermsOk] = useState(false)
@@ -38,10 +39,20 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (gender.toLowerCase() !== 'female') {
+      alert('Este aplicativo é exclusivo para mulheres; não é possível concluir o cadastro.')
+      return
+    }
     setLoading(true)
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          gender,
+          selfie_verified: false,
+        },
+      },
     })
     if (error) {
       alert(error.message)
@@ -76,6 +87,23 @@ export default function SignupPage() {
             />
           </div>
           <div>
+            <Label htmlFor="gender">Gênero</Label>
+            <select
+              id="gender"
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              required
+              disabled={!termsOk}
+              className="w-full rounded-md border border-input bg-background px-3 py-2"
+            >
+              <option value="" disabled>
+                Selecione seu gênero
+              </option>
+              <option value="female">Mulher</option>
+              <option value="other">Outro (não permitido)</option>
+            </select>
+          </div>
+          <div>
             <Label htmlFor="password">Senha</Label>
             <Input
               id="password"
@@ -86,7 +114,11 @@ export default function SignupPage() {
               disabled={!termsOk}
             />
           </div>
-          <Button type="submit" className="w-full" disabled={loading || !termsOk}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loading || !termsOk || !gender}
+          >
             {loading ? 'Cadastrando...' : 'Cadastrar'}
           </Button>
         </form>
