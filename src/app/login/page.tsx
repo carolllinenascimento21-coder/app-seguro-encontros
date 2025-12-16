@@ -49,13 +49,14 @@ export default function LoginPage() {
       .select('selfie_verified')
       .single()
 
-    if (upsertError) {
+    if (upsertError && upsertError.code !== '42703') {
       alert(upsertError.message)
       setLoading(false)
       return
     }
 
-    const selfieVerified = profile?.selfie_verified ?? false
+    const selfieVerified =
+      upsertError?.code === '42703' ? false : profile?.selfie_verified ?? false
     if (selfieVerified) {
       router.push('/perfil')
     } else {

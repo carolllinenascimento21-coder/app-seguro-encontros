@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Camera } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function CadastroPage() {
   const router = useRouter();
+  const [termsOk, setTermsOk] = useState(false);
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -21,6 +22,26 @@ export default function CadastroPage() {
   });
 
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const storedAcceptance = localStorage.getItem('confia_termos_aceite');
+    if (!storedAcceptance) {
+      router.replace('/aceitar-termos?next=/cadastro');
+      return;
+    }
+
+    try {
+      const aceite = JSON.parse(storedAcceptance);
+      if (aceite?.termosAceitos && aceite?.privacidadeAceita) {
+        setTermsOk(true);
+        return;
+      }
+    } catch (error) {
+      // Se houver erro de parsing, força o fluxo correto
+    }
+
+    router.replace('/aceitar-termos?next=/cadastro');
+  }, [router]);
 
   const validateEmail = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -52,7 +73,7 @@ export default function CadastroPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm() || !termsOk) return;
 
     setLoading(true);
 
@@ -100,6 +121,7 @@ export default function CadastroPage() {
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-md space-y-4 bg-black text-white"
+        aria-disabled={!termsOk}
       >
         <div className="flex items-center justify-center gap-2">
           <Camera size={18} />
@@ -113,6 +135,7 @@ export default function CadastroPage() {
             setFormData({ ...formData, nome: e.target.value })
           }
           className="w-full p-2 border rounded bg-black"
+          disabled={!termsOk}
         />
 
         <input
@@ -122,6 +145,7 @@ export default function CadastroPage() {
             setFormData({ ...formData, email: e.target.value })
           }
           className="w-full p-2 border rounded bg-black"
+          disabled={!termsOk}
         />
 
         <input
@@ -132,11 +156,12 @@ export default function CadastroPage() {
             setFormData({ ...formData, senha: e.target.value })
           }
           className="w-full p-2 border rounded bg-black"
+          disabled={!termsOk}
         />
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !termsOk}
           className="w-full bg-[#D4AF37] text-black py-2 rounded"
         >
           {loading ? 'Criando conta...' : 'Criar conta'}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 const supabase = createSupabaseBrowserClient();
@@ -14,6 +14,27 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const [termsOk, setTermsOk] = useState(false)
+
+  useEffect(() => {
+    const storedAcceptance = localStorage.getItem('confia_termos_aceite')
+    if (!storedAcceptance) {
+      router.replace('/aceitar-termos?next=/signup')
+      return
+    }
+
+    try {
+      const aceite = JSON.parse(storedAcceptance)
+      if (aceite?.termosAceitos && aceite?.privacidadeAceita) {
+        setTermsOk(true)
+        return
+      }
+    } catch (error) {
+      // Caso o JSON esteja corrompido, força o fluxo correto
+    }
+
+    router.replace('/aceitar-termos?next=/signup')
+  }, [router])
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +59,11 @@ export default function SignupPage() {
           <h2 className="text-3xl font-bold">Cadastrar</h2>
           <p className="text-muted-foreground">Crie sua conta</p>
         </div>
-        <form onSubmit={handleSignup} className="space-y-6">
+        <form
+          onSubmit={handleSignup}
+          className="space-y-6"
+          aria-disabled={!termsOk}
+        >
           <div>
             <Label htmlFor="email">E-mail</Label>
             <Input
@@ -47,6 +72,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={!termsOk}
             />
           </div>
           <div>
@@ -57,9 +83,10 @@ export default function SignupPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={!termsOk}
             />
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !termsOk}>
             {loading ? 'Cadastrando...' : 'Cadastrar'}
           </Button>
         </form>
