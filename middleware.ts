@@ -13,6 +13,7 @@ export async function middleware(req: NextRequest) {
     '/verification-pending',
     '/auth/callback',
     '/login',
+    '/cadastro',
     '/signup',
   ]
   if (alwaysAllowed.some((route) => pathname.startsWith(route))) {
