@@ -2,54 +2,40 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Mail, MapPin, Calendar, CheckCircle, Edit, Trash2, FileText, Shield, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type Profile = {
-  id: string
-  name: string | null
-  email: string | null
-  selfie_verified: boolean
-  selfie_verified_at: string | null
-}
+  id: string;
+  name: string | null;
+  email: string | null;
+  selfie_verified: boolean;
+};
 
 export default function PerfilPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        setError('Não foi possível validar sua sessão.');
-        setLoading(false);
-        return;
-      }
+      const { data: sessionData } = await supabase.auth.getSession();
 
       const session = sessionData.session;
-      if (!session?.user) {
-        router.replace('/login');
+      if (!session) {
+        router.push('/login');
         return;
       }
+
+      const userId = session.user.id;
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, name, email, selfie_verified, selfie_verified_at')
-        .eq('id', session.user.id)
-        .maybeSingle();
+        .select('*')
+        .eq('id', userId)
+        .single();
 
       if (error) {
-        setError('Não foi possível carregar seu perfil.');
-        setLoading(false);
-        return;
-      }
-
-      if (!data) {
-        setError('Perfil não encontrado.');
+        console.error(error);
         setLoading(false);
         return;
       }
@@ -61,58 +47,6 @@ export default function PerfilPage() {
     loadProfile();
   }, [router]);
 
-  const verificacaoFacial: 'verificado' | 'pendente' | 'nao_verificado' = profile?.selfie_verified
-    ? 'verificado'
-    : profile
-      ? 'pendente'
-      : 'nao_verificado';
-
-  const usuario = {
-    nome: profile?.name ?? 'Usuário',
-    email: profile?.email ?? 'E-mail não informado',
-    idade: null,
-    cidade: null,
-    estado: null,
-    dataCadastro: profile?.selfie_verified_at
-      ? new Date(profile.selfie_verified_at).toLocaleDateString('pt-BR')
-      : '—',
-    fotoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop',
-    verificacaoFacial,
-  };
-
-  const handleApagarConta = () => {
-    // Lógica para apagar conta
-    alert('Sua conta foi excluída com sucesso.');
-    setShowDeleteModal(false);
-    router.push('/');
-  };
-
-  const getVerificacaoBadge = () => {
-    switch (usuario.verificacaoFacial) {
-      case 'verificado':
-        return (
-          <div className="flex items-center gap-2 bg-green-900/30 border border-green-500/50 rounded-full px-4 py-2">
-            <CheckCircle className="w-4 h-4 text-green-500" />
-            <span className="text-green-400 text-sm font-medium">Verificado</span>
-          </div>
-        );
-      case 'pendente':
-        return (
-          <div className="flex items-center gap-2 bg-yellow-900/30 border border-yellow-500/50 rounded-full px-4 py-2">
-            <Calendar className="w-4 h-4 text-yellow-500" />
-            <span className="text-yellow-400 text-sm font-medium">Pendente</span>
-          </div>
-        );
-      default:
-        return (
-          <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-full px-4 py-2">
-            <User className="w-4 h-4 text-gray-400" />
-            <span className="text-gray-400 text-sm font-medium">Não Verificado</span>
-          </div>
-        );
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -121,222 +55,26 @@ export default function PerfilPage() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        {error}
-      </div>
-    );
-  }
-
   if (!profile) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        Perfil não disponível.
+        Não foi possível carregar seu perfil.
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black pb-20">
-      {/* Header */}
-      <div className="bg-gradient-to-b from-[#D4AF37]/20 to-transparent pt-8 pb-6 px-4">
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            onClick={() => router.push('/home')}
-            className="text-white hover:text-[#D4AF37] transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
-          <h1 className="text-2xl font-bold text-white">Minha Conta</h1>
-        </div>
+    <div className="min-h-screen bg-black text-white p-6">
+      <h1 className="text-2xl font-bold mb-4">Meu Perfil</h1>
 
-        {/* Foto e Nome */}
-        <div className="flex flex-col items-center">
-          <div className="relative mb-4">
-            <img
-              src={usuario.fotoUrl}
-              alt={usuario.nome}
-              className="w-24 h-24 rounded-full object-cover border-4 border-[#D4AF37]"
-            />
-            {usuario.verificacaoFacial === 'verificado' && (
-              <div className="absolute bottom-0 right-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-2 border-black">
-                <CheckCircle className="w-5 h-5 text-white" />
-              </div>
-            )}
-          </div>
-          <h2 className="text-xl font-bold text-white mb-2">{usuario.nome}</h2>
-          {getVerificacaoBadge()}
-        </div>
+      <div className="space-y-2">
+        <p><strong>Nome:</strong> {profile.name}</p>
+        <p><strong>Email:</strong> {profile.email}</p>
+        <p>
+          <strong>Selfie verificada:</strong>{' '}
+          {profile.selfie_verified ? 'Sim' : 'Não'}
+        </p>
       </div>
-
-      <div className="max-w-2xl mx-auto px-4 space-y-6">
-        {/* Informações Pessoais */}
-        <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
-          <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-            <User className="w-5 h-5 text-[#D4AF37]" />
-            Informações Pessoais
-          </h3>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Mail className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-gray-400 text-xs">E-mail</p>
-                <p className="text-white text-sm">{usuario.email}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <User className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-gray-400 text-xs">Idade</p>
-                <p className="text-white text-sm">
-                  {usuario.idade ? `${usuario.idade} anos` : 'Atualize suas informações'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <MapPin className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-gray-400 text-xs">Localização</p>
-                <p className="text-white text-sm">
-                  {usuario.cidade && usuario.estado ? `${usuario.cidade}, ${usuario.estado}` : 'Atualize suas informações'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-gray-400 text-xs">Membro desde</p>
-                <p className="text-white text-sm">{usuario.dataCadastro}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Verificação Facial */}
-        <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
-          <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-[#D4AF37]" />
-            Status da Verificação
-          </h3>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400 text-sm">Verificação Facial</span>
-              {getVerificacaoBadge()}
-            </div>
-
-            {usuario.verificacaoFacial === 'verificado' && (
-              <p className="text-gray-400 text-xs leading-relaxed">
-                Sua identidade foi verificada com sucesso. Isso aumenta a confiança na plataforma.
-              </p>
-            )}
-
-            {usuario.verificacaoFacial !== 'verificado' && (
-              <button className="w-full bg-[#D4AF37] hover:bg-[#B8941F] text-black font-semibold py-3 rounded-xl transition-all">
-                Verificar Agora
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Ações */}
-        <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-3">
-          <h3 className="text-white font-semibold mb-4">Ações</h3>
-
-          <button
-            onClick={() => router.push('/perfil/editar')}
-            className="w-full flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <Edit className="w-5 h-5 text-[#D4AF37]" />
-              <span className="text-white text-sm font-medium">Editar Perfil</span>
-            </div>
-            <span className="text-gray-400 text-sm">→</span>
-          </button>
-
-          <button
-            onClick={() => router.push('/perfil/status-termos')}
-            className="w-full flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <Info className="w-5 h-5 text-[#D4AF37]" />
-              <span className="text-white text-sm font-medium">Status dos Termos</span>
-            </div>
-            <span className="text-gray-400 text-sm">→</span>
-          </button>
-
-          <button
-            onClick={() => router.push('/perfil/termos')}
-            className="w-full flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <FileText className="w-5 h-5 text-[#D4AF37]" />
-              <span className="text-white text-sm font-medium">Ver Termos de Uso</span>
-            </div>
-            <span className="text-gray-400 text-sm">→</span>
-          </button>
-
-          <button
-            onClick={() => router.push('/perfil/privacidade')}
-            className="w-full flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-[#D4AF37]" />
-              <span className="text-white text-sm font-medium">Ver Política de Privacidade</span>
-            </div>
-            <span className="text-gray-400 text-sm">→</span>
-          </button>
-
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="w-full flex items-center justify-between p-4 bg-red-900/20 hover:bg-red-900/30 border border-red-500/30 rounded-xl transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <Trash2 className="w-5 h-5 text-red-500" />
-              <span className="text-red-400 text-sm font-medium">Apagar Conta</span>
-            </div>
-            <span className="text-red-400 text-sm">→</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Modal de Confirmação de Exclusão */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-2xl p-6 max-w-md w-full border border-red-500/30">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-red-900/30 rounded-full flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-500" />
-              </div>
-              <h3 className="text-xl font-bold text-white">Apagar Conta</h3>
-            </div>
-
-            <p className="text-gray-400 text-sm leading-relaxed mb-6">
-              Tem certeza que deseja apagar sua conta? Esta ação é irreversível e todos os seus dados serão permanentemente excluídos.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl transition-all"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleApagarConta}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl transition-all"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
