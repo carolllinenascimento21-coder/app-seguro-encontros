@@ -89,6 +89,9 @@ export default function AvaliarPage() {
       }
 
       // Inserir avaliação no banco
+      // ⚠️ O backend espera uma tabela "avaliacoes" no Supabase para armazenar as avaliações,
+      // mas ela não está declarada nas migrações locais. Ajuste o nome da tabela aqui caso o
+      // schema real utilize outra nomenclatura.
       const { error } = await supabase
         .from('avaliacoes')
         .insert({
@@ -106,14 +109,30 @@ export default function AvaliarPage() {
           anonimo: formData.anonimo,
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error(
+          'Erro ao enviar avaliação (verifique a tabela "avaliacoes" no Supabase):',
+          {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+          }
+        );
+        alert('Erro ao enviar avaliação. Tente novamente.');
+        return;
+      }
 
       setSubmitted(true);
       setTimeout(() => {
         router.push('/minhas-avaliacoes');
       }, 2000);
-    } catch (error) {
-      console.error('Erro ao enviar avaliação:', error);
+    } catch (error: any) {
+      console.error('Erro inesperado ao enviar avaliação:', {
+        code: error?.code,
+        message: error?.message,
+        error,
+      });
       alert('Erro ao enviar avaliação. Tente novamente.');
     } finally {
       setSubmitting(false);
