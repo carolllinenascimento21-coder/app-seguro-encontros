@@ -8,7 +8,7 @@ type Profile = {
   id: string;
   name: string | null;
   email: string | null;
-  selfie_verified: boolean;
+  selfie_verified: boolean | null;
 };
 
 export default function PerfilPage() {
@@ -19,8 +19,8 @@ export default function PerfilPage() {
   useEffect(() => {
     const loadProfile = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
-
       const session = sessionData.session;
+
       if (!session) {
         router.push('/login');
         return;
@@ -30,12 +30,20 @@ export default function PerfilPage() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, name, email, selfie_verified')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // 🔴 CORREÇÃO PRINCIPAL
 
       if (error) {
-        console.error(error);
+        console.error('Erro ao buscar perfil:', error);
+        setLoading(false);
+        return;
+      }
+
+      // Caso não exista perfil ainda
+      if (!data) {
+        console.warn('Perfil não encontrado para o usuário');
+        setProfile(null);
         setLoading(false);
         return;
       }
@@ -58,7 +66,7 @@ export default function PerfilPage() {
   if (!profile) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        Não foi possível carregar seu perfil.
+        Perfil não encontrado.
       </div>
     );
   }
@@ -68,7 +76,7 @@ export default function PerfilPage() {
       <h1 className="text-2xl font-bold mb-4">Meu Perfil</h1>
 
       <div className="space-y-2">
-        <p><strong>Nome:</strong> {profile.name}</p>
+        <p><strong>Nome:</strong> {profile.name ?? 'Não informado'}</p>
         <p><strong>Email:</strong> {profile.email}</p>
         <p>
           <strong>Selfie verificada:</strong>{' '}
