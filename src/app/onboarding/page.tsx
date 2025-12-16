@@ -53,6 +53,7 @@ export default function OnboardingPage() {
         data: {
           gender,
           selfie_verified: false,
+          onboarding_completed: false,
         },
       },
     })
