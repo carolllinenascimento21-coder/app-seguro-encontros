@@ -33,6 +33,7 @@ export default function EditarPerfilPage() {
   // 🔹 Carrega perfil do usuário autenticado
   useEffect(() => {
     const loadProfile = async () => {
+      setError(null);
       try {
         const {
           data: { user },
@@ -48,10 +49,46 @@ export default function EditarPerfilPage() {
           .from('profiles')
           .select('name, age, city, state, email, profilePhoto')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
         if (profileError) {
           throw profileError;
+        }
+
+        if (!profile) {
+          const { error: insertError } = await supabase.from('profiles').insert({
+            id: user.id,
+            email: user.email ?? '',
+            selfie_verified: false,
+          });
+
+          if (insertError) {
+            throw insertError;
+          }
+
+          const { data: createdProfile, error: createdProfileError } = await supabase
+            .from('profiles')
+            .select('name, age, city, state, email, profilePhoto')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (createdProfileError) {
+            throw createdProfileError;
+          }
+
+          if (!createdProfile) {
+            throw new Error('Perfil não encontrado após criação.');
+          }
+
+          setFormData({
+            name: createdProfile?.name ?? '',
+            age: createdProfile?.age ?? 0,
+            city: createdProfile?.city ?? '',
+            state: createdProfile?.state ?? '',
+            email: createdProfile?.email ?? user.email ?? '',
+            profilePhoto: createdProfile?.profilePhoto ?? '',
+          });
+          return;
         }
 
         setFormData({
