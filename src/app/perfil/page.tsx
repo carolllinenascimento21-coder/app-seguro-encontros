@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 type Profile = {
@@ -12,9 +11,9 @@ type Profile = {
 };
 
 export default function PerfilPage() {
-  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authMissing, setAuthMissing] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -22,7 +21,8 @@ export default function PerfilPage() {
       const session = sessionData.session;
 
       if (!session) {
-        router.push('/login');
+        setAuthMissing(true);
+        setLoading(false);
         return;
       }
 
@@ -53,12 +53,20 @@ export default function PerfilPage() {
     };
 
     loadProfile();
-  }, [router]);
+  }, []);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         Carregando perfil...
+      </div>
+    );
+  }
+
+  if (authMissing) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        Faça login para visualizar seu perfil.
       </div>
     );
   }
