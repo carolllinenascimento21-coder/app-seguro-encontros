@@ -1,15 +1,43 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { FileText, Shield, CheckCircle } from 'lucide-react'
 
 export default function AceitarTermosClient() {
+  const router = useRouter()
   const searchParams = useSearchParams()
-  const token = searchParams.get('token')
+
+  const next = useMemo(
+    () => searchParams?.get('next') ?? '/signup',
+    [searchParams]
+  )
+
+  const [termosAceitos, setTermosAceitos] = useState(false)
+  const [privacidadeAceita, setPrivacidadeAceita] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const handleAceitar = () => {
+    if (!termosAceitos || !privacidadeAceita) return
+
+    setLoading(true)
+
+    const aceite = {
+      termosAceitos: true,
+      privacidadeAceita: true,
+      dataAceite: new Date().toISOString(),
+    }
+
+    localStorage.setItem('confia_termos_aceite', JSON.stringify(aceite))
+
+    setTimeout(() => {
+      router.push(next)
+    }, 300)
+  }
 
   return (
-    <div>
-      <h1>Aceitar Termos</h1>
-      <p>Token: {token}</p>
+    <div className="min-h-screen bg-black flex flex-col">
+      {/* TODO: seu JSX exatamente como você já tem */}
     </div>
   )
 }
