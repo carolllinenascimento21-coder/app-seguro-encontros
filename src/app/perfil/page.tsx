@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 type Profile = {
@@ -12,7 +11,6 @@ type Profile = {
 };
 
 export default function PerfilPage() {
-  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -22,7 +20,7 @@ export default function PerfilPage() {
       const session = sessionData.session;
 
       if (!session) {
-        router.push('/login');
+        setLoading(false);
         return;
       }
 
@@ -53,7 +51,7 @@ export default function PerfilPage() {
     };
 
     loadProfile();
-  }, [router]);
+    }, []);
 
   if (loading) {
     return (

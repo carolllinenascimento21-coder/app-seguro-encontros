@@ -36,14 +36,15 @@ export default function EditarPerfilPage() {
       setError(null);
       try {
         const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-        if (userError || !user) {
-          router.push('/login');
-          return;
-        }
+      if (userError || !user) {
+        setError('Usuário não autenticado');
+        setIsLoading(false);
+        return;
+      }
 
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
