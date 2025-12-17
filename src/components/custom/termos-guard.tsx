@@ -13,7 +13,6 @@ export default function TermosGuard({ children }: { children: React.ReactNode })
     // Páginas que não precisam de verificação
     const paginasLivres = [
       '/',
-      '/splash',
       '/onboarding',
       '/aceitar-termos',
       '/perfil/termos',
