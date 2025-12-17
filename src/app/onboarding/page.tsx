@@ -15,23 +15,30 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      const session = data.session
-      const onboardingCompleted =
-        session?.user?.user_metadata?.onboarding_completed === true
+      try {
+        const { data } = await supabase.auth.getSession()
+        const session = data.session
+        const onboardingCompleted =
+          session?.user?.user_metadata?.onboarding_completed === true
 
-      if (session && onboardingCompleted) {
-        router.replace('/home')
-        return
+        if (session && onboardingCompleted) {
+          router.replace('/home')
+          return
+        }
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     }
 
     checkSession()
   }, [router])
 
-  if (loading) return null
+  if (loading)
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-[#EFD9A7]">
+        Carregando...
+      </div>
+    )
 
   const handleGoogleLogin = async () => {
     if (!agreed) {
