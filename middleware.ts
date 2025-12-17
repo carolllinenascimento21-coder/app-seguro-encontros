@@ -16,7 +16,7 @@ export async function middleware(req: NextRequest) {
     '/cadastro',
     '/signup',
   ]
-  if (alwaysAllowed.some((route) => pathname.startsWith(route))) {
+  if (pathname === '/' || alwaysAllowed.some((route) => pathname.startsWith(route))) {
     return res
   }
 
@@ -27,7 +27,7 @@ export async function middleware(req: NextRequest) {
 
   if (!session?.user) {
     const redirectUrl = req.nextUrl.clone()
-    redirectUrl.pathname = '/login'
+    redirectUrl.pathname = '/splash'
     return NextResponse.redirect(redirectUrl)
   }
 
