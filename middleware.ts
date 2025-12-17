@@ -19,11 +19,19 @@ export async function middleware(req: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession()
 
-  if (!session?.user) {
+  const redirectTo = (path: string) => {
+    if (pathname === path) {
+      return res
+    }
+
     const redirectUrl = req.nextUrl.clone()
-    redirectUrl.pathname = '/login'
-    redirectUrl.searchParams.delete('next')
+    redirectUrl.pathname = path
+    redirectUrl.search = ''
     return NextResponse.redirect(redirectUrl)
+  }
+
+  if (!session?.user) {
+    return redirectTo('/login')
   }
 
   const { data: profile } = await supabase
@@ -33,48 +41,22 @@ export async function middleware(req: NextRequest) {
     .maybeSingle()
 
   if (!profile) {
-    if (pathname !== '/onboarding/selfie') {
-      const redirectUrl = req.nextUrl.clone()
-      redirectUrl.pathname = '/onboarding/selfie'
-      return NextResponse.redirect(redirectUrl)
-    }
-    return res
+    return redirectTo('/onboarding/selfie')
   }
 
   if (!profile.selfie_url) {
-    if (pathname !== '/onboarding/selfie') {
-      const redirectUrl = req.nextUrl.clone()
-      redirectUrl.pathname = '/onboarding/selfie'
-      return NextResponse.redirect(redirectUrl)
-    }
-    return res
+    return redirectTo('/onboarding/selfie')
   }
 
   if (!profile.selfie_verified) {
-    if (pathname !== '/verification-pending') {
-      const redirectUrl = req.nextUrl.clone()
-      redirectUrl.pathname = '/verification-pending'
-      return NextResponse.redirect(redirectUrl)
-    }
-    return res
+    return redirectTo('/verification-pending')
   }
 
   if (!profile.onboarding_completed) {
-    if (pathname !== '/onboarding') {
-      const redirectUrl = req.nextUrl.clone()
-      redirectUrl.pathname = '/onboarding'
-      return NextResponse.redirect(redirectUrl)
-    }
-    return res
+    return redirectTo('/onboarding')
   }
 
-  if (pathname !== '/home') {
-    const redirectUrl = req.nextUrl.clone()
-    redirectUrl.pathname = '/home'
-    return NextResponse.redirect(redirectUrl)
-  }
-
-  return res
+  return redirectTo('/home')
 }
 
 export const config = {

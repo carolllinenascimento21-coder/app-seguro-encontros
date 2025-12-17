@@ -29,26 +29,14 @@ export default function LoginPage() {
       return
     }
 
-    const user = signInData.user
-
-    if (!user) {
+    if (!signInData.user) {
       alert('Não foi possível recuperar o usuário autenticado.')
       setLoading(false)
       return
     }
 
-    await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: user.id,
-          email: user.email,
-        },
-        { onConflict: 'id' }
-      )
-
     setLoading(false)
-    router.push('/home')
+    router.replace('/')
   }
 
   return (
