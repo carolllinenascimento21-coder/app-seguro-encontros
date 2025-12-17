@@ -95,17 +95,11 @@ export default function AvaliarPage() {
       const { error } = await supabase
         .from('avaliacoes')
         .insert({
-          autor_id: user.id,
-          nome_homem: formData.nome,
+          nome: formData.nome,
           telefone: formData.telefone || null,
           cidade: formData.cidade || null,
-          nota_comportamento: formData.comportamento,
-          nota_seguranca_emocional: formData.segurancaEmocional,
-          nota_respeito: formData.respeito,
-          nota_carater: formData.carater,
-          nota_confianca: formData.confianca,
-          comentario: formData.relato || null,
-          red_flags: formData.redFlags,
+          flags: formData.redFlags,
+          relato: formData.relato,
           anonimo: formData.anonimo,
         });
 
