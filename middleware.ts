@@ -1,70 +1,72 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { createMiddlewareClient as createMiddlewareSupabaseClient } from '@supabase/auth-helpers-nextjs'
+
+const PUBLIC_PATHS = [
+  '/login',
+  '/signup',
+  '/onboarding',
+  '/onboarding/selfie',
+  '/verification-pending',
+  '/auth/callback',
+  '/api',
+]
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
-  const alwaysAllowed = [
-    '/splash',
-    '/onboarding',
-    '/aceitar-termos',
-    '/verification-pending',
-    '/auth/callback',
-    '/login',
-    '/cadastro',
-    '/signup',
-  ]
-  if (pathname === '/' || alwaysAllowed.some((route) => pathname.startsWith(route))) {
+  const isPublic = PUBLIC_PATHS.some((route) =>
+    route === '/api' ? pathname.startsWith(route) : pathname === route || pathname.startsWith(`${route}/`)
+  )
+
+  const supabase = createMiddlewareSupabaseClient({ req, res })
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (isPublic) {
     return res
   }
 
-  const supabase = createMiddlewareClient({ req, res })
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session?.user) {
+  if (!user) {
     const redirectUrl = req.nextUrl.clone()
-    redirectUrl.pathname = '/splash'
+    redirectUrl.pathname = '/login'
+    redirectUrl.search = ''
     return NextResponse.redirect(redirectUrl)
   }
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('selfie_verified, gender')
-    .eq('id', session.user.id)
+    .select('selfie_url, selfie_verified, onboarding_completed')
+    .eq('id', user.id)
     .maybeSingle()
 
-  const gender = profile?.gender?.toLowerCase()
-
-  if (gender !== 'female') {
+  if (!profile || !profile.selfie_url) {
     const redirectUrl = req.nextUrl.clone()
-    redirectUrl.pathname = '/login'
-    redirectUrl.searchParams.set('error', 'invalid_gender')
+    redirectUrl.pathname = '/onboarding/selfie'
+    redirectUrl.search = ''
     return NextResponse.redirect(redirectUrl)
   }
 
-  const selfieVerified = profile?.selfie_verified ?? false
-  if (!selfieVerified && !pathname.startsWith('/verification-pending')) {
+  if (!profile.selfie_verified) {
     const redirectUrl = req.nextUrl.clone()
     redirectUrl.pathname = '/verification-pending'
+    redirectUrl.search = ''
     return NextResponse.redirect(redirectUrl)
   }
 
-  const onboardingCompleted =
-    session?.user?.user_metadata?.onboarding_completed === true
-
-  if (!onboardingCompleted && !pathname.startsWith('/onboarding')) {
+  if (!profile.onboarding_completed) {
     const redirectUrl = req.nextUrl.clone()
     redirectUrl.pathname = '/onboarding'
+    redirectUrl.search = ''
     return NextResponse.redirect(redirectUrl)
   }
 
-  if (session?.user && onboardingCompleted && pathname === '/') {
+  if (pathname === '/') {
     const redirectUrl = req.nextUrl.clone()
     redirectUrl.pathname = '/home'
+    redirectUrl.search = ''
     return NextResponse.redirect(redirectUrl)
   }
 
