@@ -8,7 +8,9 @@ export async function middleware(req: NextRequest) {
 
   const publicRoutes = ['/login', '/signup', '/auth/callback']
   const isPublicRoute =
-    publicRoutes.includes(pathname) || pathname.startsWith('/_next')
+    publicRoutes.includes(pathname) ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/')
 
   if (isPublicRoute) {
     return res
@@ -16,8 +18,8 @@ export async function middleware(req: NextRequest) {
 
   const supabase = createMiddlewareClient({ req, res })
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
   const redirectTo = (path: string) => {
     if (pathname === path) {
@@ -30,18 +32,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  if (!session?.user) {
+  if (!user) {
     return redirectTo('/login')
   }
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('selfie_url, selfie_verified, onboarding_completed')
-    .eq('id', session.user.id)
+    .select('selfie_url, selfie_verified')
+    .eq('id', user.id)
     .maybeSingle()
 
   if (!profile) {
-    return redirectTo('/onboarding/selfie')
+    return redirectTo('/onboarding')
   }
 
   if (!profile.selfie_url) {
@@ -50,10 +52,6 @@ export async function middleware(req: NextRequest) {
 
   if (!profile.selfie_verified) {
     return redirectTo('/verification-pending')
-  }
-
-  if (!profile.onboarding_completed) {
-    return redirectTo('/onboarding')
   }
 
   return redirectTo('/home')

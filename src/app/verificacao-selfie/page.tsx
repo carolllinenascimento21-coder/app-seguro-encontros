@@ -21,10 +21,12 @@ export default function VerificacaoSelfiePage() {
 
   useEffect(() => {
     const ensureSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
       if (!session?.user) {
-        router.replace('/login')
+        setErrorMessage('Sessão não encontrada. Faça login novamente.')
         return
       }
 
@@ -47,7 +49,7 @@ export default function VerificacaoSelfiePage() {
           selfie_verified_at: null,
         })
       } else if (profile.selfie_verified) {
-        router.replace('/home')
+        setErrorMessage('Sua selfie já foi verificada.')
         return
       }
 
@@ -56,7 +58,7 @@ export default function VerificacaoSelfiePage() {
     }
 
     ensureSession()
-  }, [router])
+  }, [])
 
   const startCamera = async () => {
     try {
