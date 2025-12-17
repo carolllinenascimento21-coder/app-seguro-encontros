@@ -10,18 +10,12 @@ export const metadata: Metadata = {
   description: 'Plataforma premium para compartilhar experiências de encontros de forma segura e anônima',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR">
       <body className={inter.className}>
-        <TermosGuard>
           {children}
-        </TermosGuard>
-      </body>
+          </body>
     </html>
   )
 }
