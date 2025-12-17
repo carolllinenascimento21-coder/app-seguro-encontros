@@ -58,7 +58,9 @@ export async function middleware(req: NextRequest) {
   if (!profile.onboarding_completed) {
     return redirectTo('/onboarding')
   }
-
+if (pathname === '/home') {
+  return res
+}
   return redirectTo('/home')
 }
 
