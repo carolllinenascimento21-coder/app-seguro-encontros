@@ -14,6 +14,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [gender, setGender] = useState('')
+  const [selfieFile, setSelfieFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const [termsOk, setTermsOk] = useState(false)
@@ -54,10 +55,15 @@ export default function SignupPage() {
       return
     }
 
+    if (!selfieFile) {
+      setErrorMessage('Envie uma selfie para concluir o cadastro.')
+      return
+    }
+
     setErrorMessage('')
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({
+    const { data: signupData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -71,6 +77,47 @@ export default function SignupPage() {
 
     if (error) {
       setErrorMessage(error.message)
+      setLoading(false)
+      return
+    }
+
+    const user = signupData.user
+
+    if (!user) {
+      setErrorMessage('Não foi possível recuperar o usuário criado.')
+      setLoading(false)
+      return
+    }
+
+    const fileExt = selfieFile.name.split('.').pop() || 'jpg'
+    const fileName = `${user.id}/signup-selfie-${Date.now()}.${fileExt}`
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('selfie-verifications')
+      .upload(fileName, selfieFile, {
+        contentType: selfieFile.type,
+      })
+
+    if (uploadError) {
+      setErrorMessage(uploadError.message)
+      setLoading(false)
+      return
+    }
+
+    const { error: profileError } = await supabase.from('profiles').upsert(
+      {
+        id: user.id,
+        email: user.email,
+        gender,
+        selfie_url: uploadData?.path ?? null,
+        selfie_verified: false,
+        onboarding_completed: false,
+      },
+      { onConflict: 'id' }
+    )
+
+    if (profileError) {
+      setErrorMessage(profileError.message)
       setLoading(false)
       return
     }
@@ -137,10 +184,23 @@ export default function SignupPage() {
               disabled={!termsOk}
             />
           </div>
+          <div>
+            <Label htmlFor="selfie">Selfie</Label>
+            <Input
+              id="selfie"
+              type="file"
+              accept="image/*"
+              required
+              disabled={!termsOk}
+              onChange={(event) =>
+                setSelfieFile(event.target.files?.[0] ?? null)
+              }
+            />
+          </div>
           <Button
             type="submit"
             className="w-full"
-            disabled={loading || !termsOk || !gender}
+            disabled={loading || !termsOk || !gender || !selfieFile}
           >
             {loading ? 'Cadastrando...' : 'Cadastrar'}
           </Button>

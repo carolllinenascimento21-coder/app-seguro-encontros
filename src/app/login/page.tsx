@@ -19,7 +19,7 @@ export default function LoginPage() {
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -29,39 +29,7 @@ export default function LoginPage() {
       return
     }
 
-    const user = signInData.user
-
-    if (!user) {
-      alert('Não foi possível recuperar o usuário autenticado.')
-      setLoading(false)
-      return
-    }
-
-    const { data: profile, error: upsertError } = await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: user.id,
-          email: user.email,
-        },
-        { onConflict: 'id' }
-      )
-      .select('selfie_verified')
-      .single()
-
-    if (upsertError && upsertError.code !== '42703') {
-      alert(upsertError.message)
-      setLoading(false)
-      return
-    }
-
-    const selfieVerified =
-      upsertError?.code === '42703' ? false : profile?.selfie_verified ?? false
-    if (selfieVerified) {
-      router.push('/perfil')
-    } else {
-      router.push('/verification-pending')
-    }
+    router.push('/home')
     setLoading(false)
   }
 
