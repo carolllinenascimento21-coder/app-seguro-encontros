@@ -3,6 +3,16 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FileText, Shield, CheckCircle } from 'lucide-react';
+import { Suspense } from 'react'
+import AceitarTermosClient from './AceitarTermosClient'
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <AceitarTermosClient />
+    </Suspense>
+  )
+}
 
 export default function AceitarTermosPage() {
   const router = useRouter();
