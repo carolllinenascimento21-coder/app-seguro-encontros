@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -10,35 +10,7 @@ import { supabase } from '@/lib/supabase'
 export default function OnboardingPage() {
   const router = useRouter()
   const [agreed, setAgreed] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [gender, setGender] = useState('')
-
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const { data } = await supabase.auth.getSession()
-        const session = data.session
-        const onboardingCompleted =
-          session?.user?.user_metadata?.onboarding_completed === true
-
-        if (session && onboardingCompleted) {
-          router.replace('/home')
-          return
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    checkSession()
-  }, [router])
-
-  if (loading)
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-[#EFD9A7]">
-        Carregando...
-      </div>
-    )
 
   const handleGoogleLogin = async () => {
     if (!agreed) {
@@ -129,9 +101,7 @@ export default function OnboardingPage() {
 
         <Button
           onClick={() =>
-            router.push(
-              `/aceitar-termos?next=${encodeURIComponent('/signup')}`
-            )
+            router.push(`/aceitar-termos?next=${encodeURIComponent('/signup')}`)
           }
           variant="outline"
           className="w-full border-[#D4AF37] text-[#D4AF37] py-6 rounded-2xl"

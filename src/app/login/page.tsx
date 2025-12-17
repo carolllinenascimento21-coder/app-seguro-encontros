@@ -37,7 +37,7 @@ export default function LoginPage() {
       return
     }
 
-    const { data: profile, error: upsertError } = await supabase
+    await supabase
       .from('profiles')
       .upsert(
         {
@@ -46,23 +46,9 @@ export default function LoginPage() {
         },
         { onConflict: 'id' }
       )
-      .select('selfie_verified')
-      .single()
 
-    if (upsertError && upsertError.code !== '42703') {
-      alert(upsertError.message)
-      setLoading(false)
-      return
-    }
-
-    const selfieVerified =
-      upsertError?.code === '42703' ? false : profile?.selfie_verified ?? false
-    if (selfieVerified) {
-      router.push('/perfil')
-    } else {
-      router.push('/verification-pending')
-    }
     setLoading(false)
+    router.push('/home')
   }
 
   return (
