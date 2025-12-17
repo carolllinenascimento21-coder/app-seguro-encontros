@@ -36,7 +36,8 @@ export default function AceitarTermosClient() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+   <div className="min-h-screen bg-black flex items-center justify-center">
+    <h1 className="text-white text-2xl">Página Aceitar Termos OK</h1>
       {/* TODO: seu JSX exatamente como você já tem */}
     </div>
   )
