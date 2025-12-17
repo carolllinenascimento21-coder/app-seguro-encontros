@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 
+const PUBLIC_ROUTES = ['/login', '/signup', '/auth/callback']
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
-  const publicRoutes = ['/login', '/signup', '/auth/callback']
   const isPublicRoute =
-    publicRoutes.includes(pathname) ||
+    PUBLIC_ROUTES.includes(pathname) ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/')
 
@@ -38,12 +39,12 @@ export async function middleware(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('selfie_url, selfie_verified')
+    .select('selfie_url, selfie_verified, onboarding_completed')
     .eq('id', user.id)
     .maybeSingle()
 
   if (!profile) {
-    return redirectTo('/onboarding')
+    return redirectTo('/onboarding/selfie')
   }
 
   if (!profile.selfie_url) {
@@ -52,6 +53,10 @@ export async function middleware(req: NextRequest) {
 
   if (!profile.selfie_verified) {
     return redirectTo('/verification-pending')
+  }
+
+  if (!profile.onboarding_completed) {
+    return redirectTo('/onboarding')
   }
 
   return redirectTo('/home')
