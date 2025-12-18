@@ -88,19 +88,23 @@ export default function AvaliarPage() {
       }
 
       const { error } = await supabase.from('avaliacoes').insert({
-        user_id: user.id,
-        nome: formData.nome,
-        telefone: formData.telefone || null,
-        cidade: formData.cidade || null,
-        flags: formData.redFlags,
-        relato: formData.relato,
-        anonima: formData.anonimo,
-        comportamento: formData.comportamento,
-        seguranca_emocional: formData.segurancaEmocional,
-        respeito: formData.respeito,
-        carater: formData.carater,
-        confianca: formData.confianca,
-      });
+      user_id: user.id,
+
+      nome: formData.nome,
+      telefone: formData.telefone || null,
+      cidade: formData.cidade || null,
+
+      comportamento: formData.comportamento,
+      seguranca_emocional: formData.segurancaEmocional,
+      respeito: formData.respeito,
+      carater: formData.carater,
+      confianca: formData.confianca,
+
+      flags: formData.redFlags,
+      relato: formData.relato || null,
+      anonima: formData.anonimo,
+     })
+
 
       if (error) {
         console.error(error);
