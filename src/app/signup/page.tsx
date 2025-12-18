@@ -18,9 +18,6 @@ export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [gender, setGender] = useState('female')
-  const [selfie, setSelfie] = useState<File | null>(null)
-
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [termsOk, setTermsOk] = useState(false)
@@ -46,8 +43,6 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!termsOk) return
-
     if (!fullName || !birthDate || !email || !password || !confirmPassword) {
       setErrorMessage('Preencha todos os campos.')
       return
@@ -58,20 +53,10 @@ export default function SignupPage() {
       return
     }
 
-    if (gender !== 'female') {
-      setErrorMessage('Este aplicativo é exclusivo para mulheres.')
-      return
-    }
-
-    if (!selfie) {
-      setErrorMessage('É obrigatório enviar uma selfie.')
-      return
-    }
-
     setLoading(true)
     setErrorMessage('')
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -85,22 +70,8 @@ export default function SignupPage() {
       },
     })
 
-    if (error || !data.user) {
-      setErrorMessage(error?.message || 'Erro ao criar conta.')
-      setLoading(false)
-      return
-    }
-
-    // Upload da selfie
-    const fileExt = selfie.name.split('.').pop()
-    const filePath = `selfies/${data.user.id}.${fileExt}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('selfies')
-      .upload(filePath, selfie, { upsert: true })
-
-    if (uploadError) {
-      setErrorMessage('Conta criada, mas erro ao enviar selfie.')
+    if (error) {
+      setErrorMessage(error.message)
       setLoading(false)
       return
     }
@@ -110,25 +81,26 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-md space-y-8 p-8">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold">Criar conta</h2>
-          <p className="text-muted-foreground">
-            Preencha seus dados e envie uma selfie para sua segurança.
+    <div className="min-h-screen flex items-center justify-center bg-black text-white">
+      <div className="w-full max-w-md space-y-8 p-8 rounded-2xl border border-[#D4AF37]">
+        <div className="text-center space-y-2">
+          <h2 className="text-3xl font-bold text-[#D4AF37]">Criar conta</h2>
+          <p className="text-sm text-gray-300">
+            Preencha seus dados para criar sua conta com segurança.
           </p>
         </div>
 
         {errorMessage && (
-          <div className="rounded-md bg-red-950/60 border border-red-900 px-4 py-3 text-sm text-red-200">
+          <div className="rounded-md bg-red-900/60 border border-red-700 px-4 py-3 text-sm text-red-200">
             {errorMessage}
           </div>
         )}
 
         <form onSubmit={handleSignup} className="space-y-5">
           <div>
-            <Label>Nome completo</Label>
+            <Label className="text-gray-300">Nome completo</Label>
             <Input
+              className="bg-black border-[#D4AF37] text-white"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               disabled={!termsOk}
@@ -137,9 +109,10 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <Label>Data de nascimento</Label>
+            <Label className="text-gray-300">Data de nascimento</Label>
             <Input
               type="date"
+              className="bg-black border-[#D4AF37] text-white"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
               disabled={!termsOk}
@@ -148,9 +121,10 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <Label>E-mail</Label>
+            <Label className="text-gray-300">E-mail</Label>
             <Input
               type="email"
+              className="bg-black border-[#D4AF37] text-white"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={!termsOk}
@@ -159,9 +133,10 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <Label>Senha</Label>
+            <Label className="text-gray-300">Senha</Label>
             <Input
               type="password"
+              className="bg-black border-[#D4AF37] text-white"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={!termsOk}
@@ -170,9 +145,10 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <Label>Confirmar senha</Label>
+            <Label className="text-gray-300">Confirmar senha</Label>
             <Input
               type="password"
+              className="bg-black border-[#D4AF37] text-white"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={!termsOk}
@@ -181,30 +157,26 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <Label>Gênero</Label>
-            <Input value="Mulher" disabled />
-          </div>
-
-          <div>
-            <Label>Selfie (obrigatória)</Label>
+            <Label className="text-gray-300">Gênero</Label>
             <Input
-              type="file"
-              accept="image/*"
-              capture="user"
-              onChange={(e) => setSelfie(e.target.files?.[0] || null)}
-              disabled={!termsOk}
-              required
+              value="Mulher"
+              disabled
+              className="bg-black border-[#D4AF37] text-[#D4AF37]"
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full bg-[#D4AF37] text-black hover:bg-[#e6c65c]"
+            disabled={loading}
+          >
             {loading ? 'Criando conta...' : 'Cadastrar'}
           </Button>
         </form>
 
-        <p className="text-center text-sm">
+        <p className="text-center text-sm text-gray-300">
           Já tem conta?{' '}
-          <Link href="/login" className="text-primary font-semibold">
+          <Link href="/login" className="text-[#D4AF37] font-semibold hover:underline">
             Entrar
           </Link>
         </p>
