@@ -26,28 +26,17 @@ export default function OnboardingPage() {
     return true
   }
 
+  // ✅ GOOGLE OAUTH CORRIGIDO
   const handleGoogleLogin = async () => {
-  if (!agreed) {
-    alert('Por favor, aceite os termos para continuar.')
-    return
-  }
+    if (!validatePreconditions()) return
 
-  if (gender !== 'female') {
-    alert('Este aplicativo é exclusivo para mulheres.')
-    return
-  }
-
-  await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
-      data: {
-        gender: 'female',
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
-    },
-  })
-}
-
+    })
+  }
 
   const handleSignup = () => {
     if (!validatePreconditions()) return
@@ -69,6 +58,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-4 relative">
+      {/* Botão Ver Planos */}
       <div className="absolute top-6 right-6 z-20">
         <button
           onClick={() => router.push('/planos')}
@@ -80,18 +70,21 @@ export default function OnboardingPage() {
       </div>
 
       <div className="w-full max-w-md space-y-8">
+        {/* Logo */}
         <img
           src="https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/3e57b2bc-0cab-46ef-aeca-c129a3e01f01.png"
           alt="Confia+ Logo"
           className="w-48 mx-auto"
         />
 
+        {/* Headline */}
         <div className="border-2 border-[#D4AF37] rounded-3xl p-8">
           <p className="text-white text-2xl font-bold text-center">
             Ferramenta segura para mulheres
           </p>
         </div>
 
+        {/* Termos */}
         <div className="flex items-start gap-3">
           <Checkbox checked={agreed} onCheckedChange={(v) => setAgreed(!!v)} />
           <p className="text-sm text-[#EFD9A7]">
@@ -99,6 +92,7 @@ export default function OnboardingPage() {
           </p>
         </div>
 
+        {/* Gênero */}
         <div className="space-y-2">
           <p className="text-sm text-[#EFD9A7] font-semibold">Gênero</p>
           <select
@@ -118,6 +112,7 @@ export default function OnboardingPage() {
           </select>
         </div>
 
+        {/* Google */}
         <Button
           onClick={handleGoogleLogin}
           disabled={!agreed || !gender}
@@ -128,6 +123,7 @@ export default function OnboardingPage() {
 
         <div className="text-center text-sm text-gray-400">ou</div>
 
+        {/* Email */}
         <Button
           onClick={handleSignup}
           variant="outline"
@@ -136,6 +132,7 @@ export default function OnboardingPage() {
           Criar conta com e-mail
         </Button>
 
+        {/* Login */}
         <p className="text-center text-sm text-[#EFD9A7]">
           Já tem uma conta?{' '}
           <button
