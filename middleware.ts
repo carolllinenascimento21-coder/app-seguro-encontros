@@ -9,24 +9,17 @@ const PUBLIC_ROUTES = [
   '/login',
   '/signup',
   '/auth/callback',
-  '/verification-pending',
 ]
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
-  // Assets e APIs
   if (
+    PUBLIC_ROUTES.includes(pathname) ||
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
-    pathname === '/favicon.ico'
+    pathname.startsWith('/api')
   ) {
-    return res
-  }
-
-  // Rotas públicas
-  if (PUBLIC_ROUTES.includes(pathname)) {
     return res
   }
 
@@ -36,48 +29,37 @@ export async function middleware(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Usuária não logada
   if (!user) {
     return redirect(req, '/login')
   }
 
-  // Email ainda não confirmado
-  if (!user.email_confirmed_at) {
-    if (pathname !== '/verification-pending') {
-      return redirect(req, '/verification-pending')
-    }
-    return res
-  }
-
-  // Buscar perfil
   const { data: profile } = await supabase
     .from('profiles')
-    .select('termos_aceitos')
+    .select('*')
     .eq('id', user.id)
     .maybeSingle()
 
-  // Perfil ainda não criado (edge case)
   if (!profile) {
+    return redirect(req, '/onboarding')
+  }
+
+  if (!profile.termos_aceitos) {
     return redirect(req, '/onboarding/aceitar-termos')
   }
 
-  // Termos obrigatórios
-  if (!profile.termos_aceitos) {
-    if (!pathname.startsWith('/onboarding/aceitar-termos')) {
-      return redirect(req, '/onboarding/aceitar-termos?next=/home')
-    }
-    return res
+  if (!profile.onboarding_completed) {
+    return redirect(req, '/onboarding')
   }
 
-  // Tudo certo → acesso liberado
+  if (!profile.selfie_verified) {
+    return redirect(req, '/verification-pending')
+  }
+
   return res
 }
 
 function redirect(req: NextRequest, path: string) {
-  if (req.nextUrl.pathname === path) {
-    return NextResponse.next()
-  }
-
+  if (req.nextUrl.pathname === path) return NextResponse.next()
   const url = req.nextUrl.clone()
   url.pathname = path
   url.search = ''
@@ -85,5 +67,5 @@ function redirect(req: NextRequest, path: string) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
