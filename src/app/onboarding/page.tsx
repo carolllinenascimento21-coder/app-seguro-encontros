@@ -27,24 +27,27 @@ export default function OnboardingPage() {
   }
 
   const handleGoogleLogin = async () => {
-    if (!validatePreconditions()) return
-
-    // Salva escolhas localmente (pré-login)
-    localStorage.setItem(
-      'pre_onboarding',
-      JSON.stringify({
-        agreed: true,
-        gender: 'female',
-      })
-    )
-
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+  if (!agreed) {
+    alert('Por favor, aceite os termos para continuar.')
+    return
   }
+
+  if (gender !== 'female') {
+    alert('Este aplicativo é exclusivo para mulheres.')
+    return
+  }
+
+  await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+      data: {
+        gender: 'female',
+      },
+    },
+  })
+}
+
 
   const handleSignup = () => {
     if (!validatePreconditions()) return
