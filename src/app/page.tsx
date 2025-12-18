@@ -1,5 +1,10 @@
-import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
+import AceitarTermosClient from './AceitarTermosClient'
 
 export default function Page() {
-  redirect('/onboarding')
+  return (
+    <Suspense fallback={null}>
+      <AceitarTermosClient />
+    </Suspense>
+  )
 }
