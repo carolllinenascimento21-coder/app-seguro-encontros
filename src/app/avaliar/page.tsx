@@ -68,13 +68,27 @@ export default function AvaliarPage() {
       setSubmitting(true);
 
       // Verificar se usuário está autenticado
-      const { data: { user } } = await supabase.auth.getUser();
-      
+     const {
+      data: { user },
+      error: userError,
+      } = await supabase.auth.getUser()
+
       if (!user) {
-        alert('Você precisa estar logado para fazer uma avaliação.');
-        router.push('/login');
-        return;
+      alert('Usuária não autenticada')
+      return
       }
+
+    const { error } = await supabase.from('avaliacoes').insert({
+      user_id: user.id,        // 🔴 ESSENCIAL
+      flags: selectedFlags,    // array ou json
+      relato: relatoTexto,
+      anonima: isAnonima,
+      })
+
+    if (error) {
+      console.error('Erro Supabase:', error)
+      alert('Erro ao enviar avaliação')
+    }
 
       // Validar notas
       if (
