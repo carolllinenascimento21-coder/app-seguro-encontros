@@ -2,22 +2,28 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 
-const supabase = createSupabaseClient();
+const supabase = createSupabaseClient()
 
 export default function SignupPage() {
+  const router = useRouter()
+
+  const [fullName, setFullName] = useState('')
+  const [birthDate, setBirthDate] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [gender, setGender] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [gender, setGender] = useState('female')
+  const [selfie, setSelfie] = useState<File | null>(null)
+
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
-  const [termsOk, setTermsOk] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [termsOk, setTermsOk] = useState(false)
 
   useEffect(() => {
     const storedAcceptance = localStorage.getItem('confia_termos_aceite')
@@ -32,9 +38,7 @@ export default function SignupPage() {
         setTermsOk(true)
         return
       }
-    } catch (error) {
-      // Caso o JSON esteja corrompido, força o fluxo correto
-    }
+    } catch {}
 
     router.replace('/aceitar-termos?next=/signup')
   }, [router])
@@ -42,35 +46,61 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!gender) {
-      setErrorMessage('Selecione seu gênero para continuar.')
+    if (!termsOk) return
+
+    if (!fullName || !birthDate || !email || !password || !confirmPassword) {
+      setErrorMessage('Preencha todos os campos.')
       return
     }
 
-    if (gender.toLowerCase() !== 'female') {
-      setErrorMessage(
-        'Este aplicativo é exclusivo para mulheres; não é possível concluir o cadastro.'
-      )
+    if (password !== confirmPassword) {
+      setErrorMessage('As senhas não coincidem.')
       return
     }
 
-    setErrorMessage('')
+    if (gender !== 'female') {
+      setErrorMessage('Este aplicativo é exclusivo para mulheres.')
+      return
+    }
+
+    if (!selfie) {
+      setErrorMessage('É obrigatório enviar uma selfie.')
+      return
+    }
+
     setLoading(true)
+    setErrorMessage('')
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          gender,
+          full_name: fullName,
+          birth_date: birthDate,
+          gender: 'female',
           selfie_verified: false,
           onboarding_completed: false,
         },
       },
     })
 
-    if (error) {
-      setErrorMessage(error.message)
+    if (error || !data.user) {
+      setErrorMessage(error?.message || 'Erro ao criar conta.')
+      setLoading(false)
+      return
+    }
+
+    // Upload da selfie
+    const fileExt = selfie.name.split('.').pop()
+    const filePath = `selfies/${data.user.id}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('selfies')
+      .upload(filePath, selfie, { upsert: true })
+
+    if (uploadError) {
+      setErrorMessage('Conta criada, mas erro ao enviar selfie.')
       setLoading(false)
       return
     }
@@ -83,70 +113,100 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md space-y-8 p-8">
         <div className="text-center">
-          <h2 className="text-3xl font-bold">Cadastrar</h2>
+          <h2 className="text-3xl font-bold">Criar conta</h2>
           <p className="text-muted-foreground">
-            Crie sua conta e conclua a selfie antes de acessar o app completo.
+            Preencha seus dados e envie uma selfie para sua segurança.
           </p>
         </div>
+
         {errorMessage && (
           <div className="rounded-md bg-red-950/60 border border-red-900 px-4 py-3 text-sm text-red-200">
             {errorMessage}
           </div>
         )}
-        <form
-          onSubmit={handleSignup}
-          className="space-y-6"
-          aria-disabled={!termsOk}
-        >
+
+        <form onSubmit={handleSignup} className="space-y-5">
           <div>
-            <Label htmlFor="email">E-mail</Label>
+            <Label>Nome completo</Label>
             <Input
-              id="email"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              disabled={!termsOk}
+              required
+            />
+          </div>
+
+          <div>
+            <Label>Data de nascimento</Label>
+            <Input
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              disabled={!termsOk}
+              required
+            />
+          </div>
+
+          <div>
+            <Label>E-mail</Label>
+            <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
               disabled={!termsOk}
+              required
             />
           </div>
+
           <div>
-            <Label htmlFor="gender">Gênero</Label>
-            <select
-              id="gender"
-              value={gender}
-              onChange={(e) => setGender(e.target.value)}
-              required
-              disabled={!termsOk}
-              className="w-full rounded-md border border-input bg-background px-3 py-2"
-            >
-              <option value="" disabled>
-                Selecione seu gênero
-              </option>
-              <option value="female">Mulher</option>
-              <option value="other">Outro (não permitido)</option>
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="password">Senha</Label>
+            <Label>Senha</Label>
             <Input
-              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
               disabled={!termsOk}
+              required
             />
           </div>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={loading || !termsOk || !gender}
-          >
-            {loading ? 'Cadastrando...' : 'Cadastrar'}
+
+          <div>
+            <Label>Confirmar senha</Label>
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={!termsOk}
+              required
+            />
+          </div>
+
+          <div>
+            <Label>Gênero</Label>
+            <Input value="Mulher" disabled />
+          </div>
+
+          <div>
+            <Label>Selfie (obrigatória)</Label>
+            <Input
+              type="file"
+              accept="image/*"
+              capture="user"
+              onChange={(e) => setSelfie(e.target.files?.[0] || null)}
+              disabled={!termsOk}
+              required
+            />
+          </div>
+
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Criando conta...' : 'Cadastrar'}
           </Button>
         </form>
-        <p className="text-center">
-          Já tem conta? <Link href="/login" className="text-primary">Entrar</Link>
+
+        <p className="text-center text-sm">
+          Já tem conta?{' '}
+          <Link href="/login" className="text-primary font-semibold">
+            Entrar
+          </Link>
         </p>
       </div>
     </div>
