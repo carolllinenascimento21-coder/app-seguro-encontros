@@ -24,16 +24,13 @@ export default function AceitarTermosClient() {
 
     setLoading(true)
 
-    const { data, error } = await supabase.auth.getUser()
-    const user = data?.user
-
-    if (!user || error) {
-      console.error('Usuário não autenticado', error)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
       setLoading(false)
       return
     }
 
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from('profiles')
       .update({
         termos_aceitos: true,
@@ -41,8 +38,8 @@ export default function AceitarTermosClient() {
       })
       .eq('id', user.id)
 
-    if (updateError) {
-      console.error('Erro ao salvar termos', updateError)
+    if (error) {
+      console.error(error)
       setLoading(false)
       return
     }
@@ -53,61 +50,45 @@ export default function AceitarTermosClient() {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-6">
       <div className="w-full max-w-sm space-y-6 text-center">
-        <div className="flex justify-center">
-          <Shield className="w-10 h-10 text-yellow-400" />
-        </div>
+        <Shield className="w-10 h-10 text-yellow-400 mx-auto" />
 
         <h1 className="text-2xl font-bold text-white">
           Aceite dos Termos
         </h1>
 
         <p className="text-gray-400 text-sm">
-          Para continuar, leia e aceite os{' '}
-          <a
-            href="/perfil/termos"
-            className="text-yellow-400 underline"
-            target="_blank"
-          >
+          Para continuar, leia e aceite os
+          <a href="/perfil/termos" className="text-yellow-400 underline mx-1">
             Termos de Uso
-          </a>{' '}
-          e a{' '}
-          <a
-            href="/perfil/privacidade"
-            className="text-yellow-400 underline"
-            target="_blank"
-          >
+          </a>
+          e a
+          <a href="/perfil/privacidade" className="text-yellow-400 underline mx-1">
             Política de Privacidade
           </a>.
         </p>
 
-        <div className="space-y-3 text-left">
-          <label className="flex items-center gap-2 text-white text-sm">
-            <input
-              type="checkbox"
-              checked={termosAceitos}
-              onChange={(e) => setTermosAceitos(e.target.checked)}
-            />
-            Li e aceito os Termos de Uso
-          </label>
+        <label className="flex items-center gap-2 text-white text-sm">
+          <input
+            type="checkbox"
+            checked={termosAceitos}
+            onChange={(e) => setTermosAceitos(e.target.checked)}
+          />
+          Li e aceito os Termos de Uso
+        </label>
 
-          <label className="flex items-center gap-2 text-white text-sm">
-            <input
-              type="checkbox"
-              checked={privacidadeAceita}
-              onChange={(e) => setPrivacidadeAceita(e.target.checked)}
-            />
-            Li e aceito a Política de Privacidade
-          </label>
-        </div>
+        <label className="flex items-center gap-2 text-white text-sm">
+          <input
+            type="checkbox"
+            checked={privacidadeAceita}
+            onChange={(e) => setPrivacidadeAceita(e.target.checked)}
+          />
+          Li e aceito a Política de Privacidade
+        </label>
 
         <button
           onClick={handleAceitar}
           disabled={!termosAceitos || !privacidadeAceita || loading}
-          className={`w-full py-3 rounded-xl font-semibold transition ${
-            termosAceitos && privacidadeAceita
-              ? 'bg-yellow-400 text-black hover:bg-yellow-500'
-              : 'bg-gray-800 text-gray-500 cursor-not-allowed'
-          }`}
+          className="w-full py-3 rounded-xl font-semibold bg-yellow-400 text-black disabled:opacity-50"
         >
           {loading ? 'Processando...' : 'Aceitar e continuar'}
         </button>
