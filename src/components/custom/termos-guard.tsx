@@ -32,7 +32,7 @@ export default function TermosGuard({ children }: { children: React.ReactNode })
       
       if (!aceiteStr) {
         // Não aceitou ainda - redireciona
-        router.push('/aceitar-termos');
+        router.push('/onboarding/aceitar-termos');
         setLoading(false);
         return;
       }
@@ -43,11 +43,11 @@ export default function TermosGuard({ children }: { children: React.ReactNode })
         if (aceite.termosAceitos && aceite.privacidadeAceita) {
           setTermosAceitos(true);
         } else {
-          router.push('/aceitar-termos');
+          router.push('/onboarding/aceitar-termos');
         }
       } catch (error) {
         // Erro ao parsear - redireciona
-        router.push('/aceitar-termos');
+        router.push('/onboarding/aceitar-termos');
       }
     }
 
