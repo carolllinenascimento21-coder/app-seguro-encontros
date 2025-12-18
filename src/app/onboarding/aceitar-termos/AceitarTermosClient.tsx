@@ -1,97 +1,89 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Button } from '@/components/ui/button'
 import { Shield } from 'lucide-react'
-import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
 
 export default function AceitarTermosClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createBrowserSupabaseClient()
 
-  const next = useMemo(
-    () => searchParams?.get('next') ?? '/home',
-    [searchParams]
-  )
+  const nextPath = searchParams.get('next') || '/signup'
 
-  const [termosAceitos, setTermosAceitos] = useState(false)
-  const [privacidadeAceita, setPrivacidadeAceita] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [termos, setTermos] = useState(false)
+  const [privacidade, setPrivacidade] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleAceitar = async () => {
-    if (!termosAceitos || !privacidadeAceita) return
-
-    setLoading(true)
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setLoading(false)
+  const handleContinue = () => {
+    if (!termos || !privacidade) {
+      setError('Você precisa aceitar os termos para continuar.')
       return
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        termos_aceitos: true,
-        onboarding_completed: true,
+    localStorage.setItem(
+      'confia_termos_aceite',
+      JSON.stringify({
+        termosAceitos: true,
+        privacidadeAceita: true,
+        acceptedAt: new Date().toISOString(),
       })
-      .eq('id', user.id)
+    )
 
-    if (error) {
-      console.error(error)
-      setLoading(false)
-      return
-    }
-
-    router.replace(next)
+    router.replace(nextPath)
   }
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-6">
-      <div className="w-full max-w-sm space-y-6 text-center">
-        <Shield className="w-10 h-10 text-yellow-400 mx-auto" />
+    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+      <div className="w-full max-w-md border border-[#D4AF37] rounded-2xl p-8 space-y-6">
+        <div className="text-center space-y-2">
+          <Shield className="mx-auto text-[#D4AF37]" size={36} />
+          <h1 className="text-2xl font-bold text-[#D4AF37]">
+            Aceite dos Termos
+          </h1>
+          <p className="text-sm text-gray-400">
+            Para continuar, confirme que leu e concorda com nossos termos.
+          </p>
+        </div>
 
-        <h1 className="text-2xl font-bold text-white">
-          Aceite dos Termos
-        </h1>
+        {error && (
+          <div className="text-sm text-red-300 border border-red-700 bg-red-950/60 px-4 py-2 rounded">
+            {error}
+          </div>
+        )}
 
-        <p className="text-gray-400 text-sm">
-          Para continuar, leia e aceite os
-          <a href="/perfil/termos" className="text-yellow-400 underline mx-1">
-            Termos de Uso
-          </a>
-          e a
-          <a href="/perfil/privacidade" className="text-yellow-400 underline mx-1">
-            Política de Privacidade
-          </a>.
-        </p>
+        <div className="space-y-3 text-sm text-gray-300">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={termos}
+              onChange={(e) => setTermos(e.target.checked)}
+            />
+            Li e aceito os{' '}
+            <span className="text-[#D4AF37] underline cursor-pointer">
+              Termos de Uso
+            </span>
+          </label>
 
-        <label className="flex items-center gap-2 text-white text-sm">
-          <input
-            type="checkbox"
-            checked={termosAceitos}
-            onChange={(e) => setTermosAceitos(e.target.checked)}
-          />
-          Li e aceito os Termos de Uso
-        </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={privacidade}
+              onChange={(e) => setPrivacidade(e.target.checked)}
+            />
+            Li e aceito a{' '}
+            <span className="text-[#D4AF37] underline cursor-pointer">
+              Política de Privacidade
+            </span>
+          </label>
+        </div>
 
-        <label className="flex items-center gap-2 text-white text-sm">
-          <input
-            type="checkbox"
-            checked={privacidadeAceita}
-            onChange={(e) => setPrivacidadeAceita(e.target.checked)}
-          />
-          Li e aceito a Política de Privacidade
-        </label>
-
-        <button
-          onClick={handleAceitar}
-          disabled={!termosAceitos || !privacidadeAceita || loading}
-          className="w-full py-3 rounded-xl font-semibold bg-yellow-400 text-black disabled:opacity-50"
+        <Button
+          onClick={handleContinue}
+          className="w-full bg-[#D4AF37] text-black hover:bg-[#c9a634]"
         >
-          {loading ? 'Processando...' : 'Aceitar e continuar'}
-        </button>
+          Aceitar e continuar
+        </Button>
       </div>
     </div>
   )
