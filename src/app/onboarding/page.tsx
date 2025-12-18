@@ -12,30 +12,56 @@ export default function OnboardingPage() {
   const [agreed, setAgreed] = useState(false)
   const [gender, setGender] = useState('')
 
-  const handleGoogleLogin = async () => {
+  const validatePreconditions = () => {
     if (!agreed) {
-      alert('Por favor, aceite os termos para continuar.')
-      return
+      alert('Você precisa aceitar os termos para continuar.')
+      return false
     }
 
-    if (gender.toLowerCase() !== 'female') {
-      alert('Este aplicativo é exclusivo para mulheres; não é possível concluir o cadastro.')
-      return
+    if (gender !== 'female') {
+      alert('Este aplicativo é exclusivo para mulheres.')
+      return false
     }
 
-    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/aceitar-termos?next=/home')}`
+    return true
+  }
+
+  const handleGoogleLogin = async () => {
+    if (!validatePreconditions()) return
+
+    // Salva escolhas localmente (pré-login)
+    localStorage.setItem(
+      'pre_onboarding',
+      JSON.stringify({
+        agreed: true,
+        gender: 'female',
+      })
+    )
 
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: callbackUrl,
-        data: {
-          gender,
-          selfie_verified: false,
-          onboarding_completed: false,
-        },
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
+  }
+
+  const handleSignup = () => {
+    if (!validatePreconditions()) return
+
+    localStorage.setItem(
+      'pre_onboarding',
+      JSON.stringify({
+        agreed: true,
+        gender: 'female',
+      })
+    )
+
+    router.push('/signup')
+  }
+
+  const handleLogin = () => {
+    router.push('/login')
   }
 
   return (
@@ -100,9 +126,7 @@ export default function OnboardingPage() {
         <div className="text-center text-sm text-gray-400">ou</div>
 
         <Button
-          onClick={() =>
-            router.push(`/aceitar-termos?next=${encodeURIComponent('/signup')}`)
-          }
+          onClick={handleSignup}
           variant="outline"
           className="w-full border-[#D4AF37] text-[#D4AF37] py-6 rounded-2xl"
         >
@@ -112,7 +136,7 @@ export default function OnboardingPage() {
         <p className="text-center text-sm text-[#EFD9A7]">
           Já tem uma conta?{' '}
           <button
-            onClick={() => router.push('/login')}
+            onClick={handleLogin}
             className="text-[#D4AF37] font-semibold hover:underline"
           >
             Fazer login
