@@ -42,59 +42,58 @@ export default function SignupPage() {
     router.replace('/onboarding/aceitar-termos?next=/signup')
   }, [router])
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault()
+ const handleSignup = async (e: React.FormEvent) => {
+  e.preventDefault()
 
-    if (!fullName || !birthDate || !email || !password || !confirmPassword) {
-      setErrorMessage('Preencha todos os campos.')
-      return
-    }
+  if (!fullName || !birthDate || !email || !password || !confirmPassword) {
+    setErrorMessage('Preencha todos os campos.')
+    return
+  }
 
-    if (password !== confirmPassword) {
-      setErrorMessage('As senhas não coincidem.')
-      return
-    }
+  if (password !== confirmPassword) {
+    setErrorMessage('As senhas não coincidem.')
+    return
+  }
 
-    // 🔞 Validação mínima de maioridade (18+)
-    const birth = new Date(birthDate)
-    const today = new Date()
-    const age =
-      today.getFullYear() -
-      birth.getFullYear() -
-      (today < new Date(birth.setFullYear(today.getFullYear())) ? 1 : 0)
+  setLoading(true)
+  setErrorMessage('')
 
-    if (age < 18) {
-      setErrorMessage('Você precisa ter mais de 18 anos para criar uma conta.')
-      return
-    }
+  // 1️⃣ Cria o usuário
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  })
 
-    setLoading(true)
-    setErrorMessage('')
+  if (error || !data.user) {
+    setErrorMessage(error?.message || 'Erro ao criar conta')
+    setLoading(false)
+    return
+  }
 
-    const { error } = await supabase.auth.signUp({
+  // 2️⃣ Cria o perfil
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .insert({
+      id: data.user.id,
       email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          birth_date: birthDate,
-          gender: 'female',
-          selfie_verified: false,
-          onboarding_completed: false,
-          termos_aceitos: true,
-        },
-      },
+      full_name: fullName,
+      birth_date: birthDate,
+      gender: 'female',
+      selfie_verified: false,
+      termos_aceitos: true,
+      onboarding_completed: false,
     })
 
-    if (error) {
-      setErrorMessage(error.message)
-      setLoading(false)
-      return
-    }
-
+  if (profileError) {
+    setErrorMessage('Conta criada, mas erro ao criar perfil.')
     setLoading(false)
-    router.push('/verification-pending')
+    return
   }
+
+  setLoading(false)
+  router.push('/verification-pending')
+}
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black px-4 text-white">
