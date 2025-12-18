@@ -1,19 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { FileText, Shield, CheckCircle } from 'lucide-react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Shield } from 'lucide-react'
 import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
 
 export default function AceitarTermosClient() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const supabase = createBrowserSupabaseClient()
-
-  const next = useMemo(
-    () => searchParams?.get('next') ?? '/home',
-    [searchParams]
-  )
 
   const [termosAceitos, setTermosAceitos] = useState(false)
   const [privacidadeAceita, setPrivacidadeAceita] = useState(false)
@@ -24,35 +18,35 @@ export default function AceitarTermosClient() {
 
     setLoading(true)
 
-    // 1. Obter usuário autenticado
+    // 1. Usuário autenticado
     const {
       data: { user },
-      error: userError,
+      error,
     } = await supabase.auth.getUser()
 
-    if (userError || !user) {
-      console.error('Usuário não autenticado', userError)
+    if (error || !user) {
+      console.error('Usuário não autenticado')
       setLoading(false)
+      router.replace('/login')
       return
     }
 
-    // 2. Atualizar perfil no Supabase
+    // 2. Atualiza SOMENTE termos
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
         termos_aceitos: true,
-        onboarding_completed: true,
       })
       .eq('id', user.id)
 
     if (updateError) {
-      console.error('Erro ao salvar aceite de termos', updateError)
+      console.error('Erro ao salvar termos:', updateError)
       setLoading(false)
       return
     }
 
-    // 3. Redirecionar para o próximo passo
-    router.replace(next)
+    // 3. NÃO decide rota — middleware decide
+    router.replace('/onboarding')
   }
 
   return (
@@ -72,43 +66,4 @@ export default function AceitarTermosClient() {
             Termos de Uso
           </a>{' '}
           e a{' '}
-          <a href="/perfil/privacidade" className="text-yellow-400 underline">
-            Política de Privacidade
-          </a>.
-        </p>
-
-        <div className="space-y-3 text-left">
-          <label className="flex items-center gap-2 text-white text-sm">
-            <input
-              type="checkbox"
-              checked={termosAceitos}
-              onChange={(e) => setTermosAceitos(e.target.checked)}
-            />
-            Li e aceito os Termos de Uso
-          </label>
-
-          <label className="flex items-center gap-2 text-white text-sm">
-            <input
-              type="checkbox"
-              checked={privacidadeAceita}
-              onChange={(e) => setPrivacidadeAceita(e.target.checked)}
-            />
-            Li e aceito a Política de Privacidade
-          </label>
-        </div>
-
-        <button
-          onClick={handleAceitar}
-          disabled={!termosAceitos || !privacidadeAceita || loading}
-          className={`w-full py-3 rounded-xl font-semibold transition ${
-            termosAceitos && privacidadeAceita
-              ? 'bg-yellow-400 text-black hover:bg-yellow-500'
-              : 'bg-gray-800 text-gray-500 cursor-not-allowed'
-          }`}
-        >
-          {loading ? 'Processando...' : 'Aceitar e continuar'}
-        </button>
-      </div>
-    </div>
-  )
-}
+          <a href="/perfil/privacidade" className="text-yellow-400 und
