@@ -1,19 +1,17 @@
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
+export async function GET(request: NextRequest) {
+  const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
 
   if (code) {
     const supabase = createRouteHandlerClient({ cookies })
     await supabase.auth.exchangeCodeForSession(code)
   }
-  // após setSession
-return NextResponse.redirect(
-  new URL('/onboarding/aceitar-termos', request.url)
-)
 
+  // 🔑 Sempre entrega o controle ao middleware
+  return NextResponse.redirect(`${origin}/home`)
 }
-
