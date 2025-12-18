@@ -25,7 +25,7 @@ export default function SignupPage() {
   useEffect(() => {
     const storedAcceptance = localStorage.getItem('confia_termos_aceite')
     if (!storedAcceptance) {
-      router.replace('/aceitar-termos?next=/signup')
+      router.replace('/onboarding/aceitar-termos?next=/signup')
       return
     }
 
@@ -37,7 +37,7 @@ export default function SignupPage() {
       }
     } catch {}
 
-    router.replace('/aceitar-termos?next=/signup')
+    router.replace('/onboarding/aceitar-termos?next=/signup')
   }, [router])
 
   const handleSignup = async (e: React.FormEvent) => {
