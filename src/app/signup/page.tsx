@@ -22,8 +22,10 @@ export default function SignupPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [termsOk, setTermsOk] = useState(false)
 
+  // 🔒 Garante que termos foram aceitos antes do cadastro
   useEffect(() => {
     const storedAcceptance = localStorage.getItem('confia_termos_aceite')
+
     if (!storedAcceptance) {
       router.replace('/onboarding/aceitar-termos?next=/signup')
       return
@@ -53,6 +55,19 @@ export default function SignupPage() {
       return
     }
 
+    // 🔞 Validação mínima de maioridade (18+)
+    const birth = new Date(birthDate)
+    const today = new Date()
+    const age =
+      today.getFullYear() -
+      birth.getFullYear() -
+      (today < new Date(birth.setFullYear(today.getFullYear())) ? 1 : 0)
+
+    if (age < 18) {
+      setErrorMessage('Você precisa ter mais de 18 anos para criar uma conta.')
+      return
+    }
+
     setLoading(true)
     setErrorMessage('')
 
@@ -66,6 +81,7 @@ export default function SignupPage() {
           gender: 'female',
           selfie_verified: false,
           onboarding_completed: false,
+          termos_aceitos: true,
         },
       },
     })
@@ -81,17 +97,19 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black text-white">
-      <div className="w-full max-w-md space-y-8 p-8 rounded-2xl border border-[#D4AF37]">
-        <div className="text-center space-y-2">
-          <h2 className="text-3xl font-bold text-[#D4AF37]">Criar conta</h2>
-          <p className="text-sm text-gray-300">
+    <div className="min-h-screen flex items-center justify-center bg-black px-4 text-white">
+      <div className="w-full max-w-md space-y-8 rounded-2xl border border-[#D4AF37] p-8">
+        <div className="space-y-2 text-center">
+          <h2 className="text-3xl font-bold text-[#D4AF37]">
+            Criar conta
+          </h2>
+          <p className="text-sm text-gray-400">
             Preencha seus dados para criar sua conta com segurança.
           </p>
         </div>
 
         {errorMessage && (
-          <div className="rounded-md bg-red-900/60 border border-red-700 px-4 py-3 text-sm text-red-200">
+          <div className="rounded-md border border-red-700 bg-red-950/60 px-4 py-3 text-sm text-red-200">
             {errorMessage}
           </div>
         )}
@@ -100,11 +118,11 @@ export default function SignupPage() {
           <div>
             <Label className="text-gray-300">Nome completo</Label>
             <Input
-              className="bg-black border-[#D4AF37] text-white"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               disabled={!termsOk}
               required
+              className="bg-black border-[#D4AF37] text-white placeholder:text-gray-500"
             />
           </div>
 
@@ -112,11 +130,11 @@ export default function SignupPage() {
             <Label className="text-gray-300">Data de nascimento</Label>
             <Input
               type="date"
-              className="bg-black border-[#D4AF37] text-white"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
               disabled={!termsOk}
               required
+              className="bg-black border-[#D4AF37] text-white"
             />
           </div>
 
@@ -124,11 +142,11 @@ export default function SignupPage() {
             <Label className="text-gray-300">E-mail</Label>
             <Input
               type="email"
-              className="bg-black border-[#D4AF37] text-white"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={!termsOk}
               required
+              className="bg-black border-[#D4AF37] text-white placeholder:text-gray-500"
             />
           </div>
 
@@ -136,11 +154,11 @@ export default function SignupPage() {
             <Label className="text-gray-300">Senha</Label>
             <Input
               type="password"
-              className="bg-black border-[#D4AF37] text-white"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={!termsOk}
               required
+              className="bg-black border-[#D4AF37] text-white"
             />
           </div>
 
@@ -148,11 +166,11 @@ export default function SignupPage() {
             <Label className="text-gray-300">Confirmar senha</Label>
             <Input
               type="password"
-              className="bg-black border-[#D4AF37] text-white"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={!termsOk}
               required
+              className="bg-black border-[#D4AF37] text-white"
             />
           </div>
 
@@ -167,16 +185,19 @@ export default function SignupPage() {
 
           <Button
             type="submit"
-            className="w-full bg-[#D4AF37] text-black hover:bg-[#e6c65c]"
-            disabled={loading}
+            disabled={loading || !termsOk}
+            className="w-full rounded-xl bg-[#D4AF37] py-3 font-semibold text-black hover:bg-[#c9a634] disabled:opacity-50"
           >
             {loading ? 'Criando conta...' : 'Cadastrar'}
           </Button>
         </form>
 
-        <p className="text-center text-sm text-gray-300">
+        <p className="text-center text-sm text-gray-400">
           Já tem conta?{' '}
-          <Link href="/login" className="text-[#D4AF37] font-semibold hover:underline">
+          <Link
+            href="/login"
+            className="font-semibold text-[#D4AF37] hover:underline"
+          >
             Entrar
           </Link>
         </p>
