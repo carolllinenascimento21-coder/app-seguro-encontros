@@ -116,7 +116,7 @@ export default function StatusTermosPage() {
               Você ainda não aceitou os termos. Para usar o Confia+, é necessário aceitar os Termos de Uso e a Política de Privacidade.
             </p>
             <button
-              onClick={() => router.push('/aceitar-termos')}
+              onClick={() => router.push('/onboarding/aceitar-termos')}
               className="w-full bg-[#D4AF37] hover:bg-[#B8941F] text-black font-semibold py-3 rounded-xl transition-all"
             >
               Aceitar Termos Agora
