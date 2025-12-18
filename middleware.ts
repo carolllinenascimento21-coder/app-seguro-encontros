@@ -2,13 +2,24 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 
-const PUBLIC_ROUTES = ['/login', '/signup', '/auth/callback']
+const PUBLIC_ROUTES = [
+  '/',
+  '/onboarding',
+  '/onboarding/aceitar-termos',
+  '/login',
+  '/signup',
+  '/auth/callback',
+]
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
   // Rotas públicas
+  if (!profile.onboarding_completed && pathname.startsWith('/onboarding')) {
+  return res
+  }
+
   if (
     PUBLIC_ROUTES.includes(pathname) ||
     pathname.startsWith('/_next') ||
