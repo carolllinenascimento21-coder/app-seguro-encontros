@@ -26,8 +26,8 @@ export default function AvaliarPage() {
     anonimo: true,
   });
 
-  const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const categorias = [
     { key: 'comportamento', label: 'Comportamento' },
@@ -48,18 +48,18 @@ export default function AvaliarPage() {
     'Golpe amoroso',
     'Stalking',
     'Comportamento abusivo',
-    'Liso', // ✅ adicionada
+    'Liso',
   ];
 
   const handleRating = (categoria: string, valor: number) => {
-    setFormData((prev) => ({ ...prev, [categoria]: valor }));
+    setFormData(prev => ({ ...prev, [categoria]: valor }));
   };
 
   const toggleRedFlag = (flag: string) => {
-    setFormData((prev) => ({
+    setFormData(prev => ({
       ...prev,
       redFlags: prev.redFlags.includes(flag)
-        ? prev.redFlags.filter((f) => f !== flag)
+        ? prev.redFlags.filter(f => f !== flag)
         : [...prev.redFlags, flag],
     }));
   };
@@ -70,62 +70,47 @@ export default function AvaliarPage() {
     try {
       setSubmitting(true);
 
-      // 1️⃣ Verificar autenticação
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
         alert('Usuária não autenticada');
         return;
       }
 
-      // 2️⃣ Validar notas obrigatórias
-      if (
-        formData.comportamento === 0 ||
-        formData.segurancaEmocional === 0 ||
-        formData.respeito === 0 ||
-        formData.carater === 0 ||
-        formData.confianca === 0
-      ) {
-        alert('Por favor, avalie todas as categorias antes de enviar.');
+      if (Object.values({
+        comportamento: formData.comportamento,
+        segurancaEmocional: formData.segurancaEmocional,
+        respeito: formData.respeito,
+        carater: formData.carater,
+        confianca: formData.confianca,
+      }).some(v => v === 0)) {
+        alert('Avalie todas as categorias.');
         return;
       }
 
-      // 3️⃣ Inserir avaliação (UMA ÚNICA VEZ)
-      const { error: insertError } = await supabase
-        .from('avaliacoes')
-        .insert({
-          user_id: user.id, // 🔑 obrigatório para RLS
-          nome: formData.nome,
-          telefone: formData.telefone || null,
-          cidade: formData.cidade || null,
-          flags: formData.redFlags,
-          relato: formData.relato,
-          anonima: formData.anonimo,
-          comportamento: formData.comportamento,
-          seguranca_emocional: formData.segurancaEmocional,
-          respeito: formData.respeito,
-          carater: formData.carater,
-          confianca: formData.confianca,
-        });
+      const { error } = await supabase.from('avaliacoes').insert({
+        user_id: user.id,
+        nome: formData.nome,
+        telefone: formData.telefone || null,
+        cidade: formData.cidade || null,
+        flags: formData.redFlags,
+        relato: formData.relato,
+        anonima: formData.anonimo,
+        comportamento: formData.comportamento,
+        seguranca_emocional: formData.segurancaEmocional,
+        respeito: formData.respeito,
+        carater: formData.carater,
+        confianca: formData.confianca,
+      });
 
-      if (insertError) {
-        console.error('Erro Supabase:', insertError);
-        alert('Erro ao enviar avaliação. Tente novamente.');
+      if (error) {
+        console.error(error);
+        alert('Erro ao enviar avaliação.');
         return;
       }
 
-      // 4️⃣ Sucesso
       setSubmitted(true);
-      setTimeout(() => {
-        router.push('/minhas-avaliacoes');
-      }, 2000);
+      setTimeout(() => router.push('/minhas-avaliacoes'), 2000);
 
-    } catch (err) {
-      console.error('Erro inesperado:', err);
-      alert('Erro inesperado ao enviar avaliação.');
     } finally {
       setSubmitting(false);
     }
@@ -134,40 +119,80 @@ export default function AvaliarPage() {
   if (submitted) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center px-4">
-          <div className="w-20 h-20 bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] rounded-full flex items-center justify-center mx-auto mb-6">
-            <Send className="w-10 h-10 text-black" />
-          </div>
-          <h2 className="text-2xl font-bold text-[#D4AF37] mb-2">
-            Avaliação Enviada!
-          </h2>
-          <p className="text-gray-400">
-            Obrigada por contribuir com a segurança de outras mulheres.
-          </p>
+        <div className="text-center">
+          <Send className="w-12 h-12 text-[#D4AF37] mx-auto mb-4" />
+          <h2 className="text-xl font-bold">Avaliação enviada!</h2>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20">
-      <header className="bg-gradient-to-b from-black to-black/95 border-b border-[#D4AF37]/20 sticky top-0 z-40">
-        <div className="max-w-md mx-auto px-4 py-4">
-          <Link
-            href="/home"
-            className="flex items-center gap-2 text-[#D4AF37] hover:text-[#C0C0C0]"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Voltar</span>
-          </Link>
-        </div>
+    <div className="min-h-screen bg-black text-white pb-24">
+      <header className="border-b border-[#D4AF37]/20 p-4">
+        <Link href="/home" className="text-[#D4AF37] flex items-center gap-2">
+          <ArrowLeft size={18} /> Voltar
+        </Link>
       </header>
 
-      <div className="max-w-md mx-auto px-4 py-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* (resto do JSX permanece igual ao seu original) */}
-        </form>
-      </div>
+      <form onSubmit={handleSubmit} className="max-w-md mx-auto p-4 space-y-6">
+        <input
+          required
+          placeholder="Nome completo"
+          className="w-full p-3 rounded bg-white/5"
+          value={formData.nome}
+          onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))}
+        />
+
+        {categorias.map(cat => (
+          <div key={cat.key}>
+            <p className="mb-2">{cat.label}</p>
+            <div className="flex gap-2">
+              {[1,2,3,4,5].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => handleRating(cat.key, n)}
+                >
+                  <Star className={formData[cat.key as keyof typeof formData] >= n ? 'text-[#D4AF37]' : 'text-gray-600'} />
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div className="flex flex-wrap gap-2">
+          {redFlagsOptions.map(flag => (
+            <button
+              type="button"
+              key={flag}
+              onClick={() => toggleRedFlag(flag)}
+              className={`px-3 py-1 rounded-full text-sm ${
+                formData.redFlags.includes(flag)
+                  ? 'bg-red-600'
+                  : 'bg-white/10'
+              }`}
+            >
+              {flag}
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          placeholder="Relato (opcional)"
+          className="w-full p-3 rounded bg-white/5"
+          rows={4}
+          value={formData.relato}
+          onChange={e => setFormData(p => ({ ...p, relato: e.target.value }))}
+        />
+
+        <button
+          disabled={submitting}
+          className="w-full bg-[#D4AF37] text-black py-3 rounded"
+        >
+          {submitting ? <Loader2 className="animate-spin mx-auto" /> : 'Enviar avaliação'}
+        </button>
+      </form>
 
       <Navbar />
     </div>
