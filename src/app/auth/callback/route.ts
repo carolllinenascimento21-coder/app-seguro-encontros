@@ -10,7 +10,10 @@ export async function GET(request: Request) {
     const supabase = createRouteHandlerClient({ cookies })
     await supabase.auth.exchangeCodeForSession(code)
   }
+  // após setSession
+return NextResponse.redirect(
+  new URL('/onboarding/aceitar-termos', request.url)
+)
 
-  return NextResponse.redirect(new URL('/onboarding', request.url))
 }
 
