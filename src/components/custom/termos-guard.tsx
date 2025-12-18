@@ -14,7 +14,7 @@ export default function TermosGuard({ children }: { children: React.ReactNode })
     const paginasLivres = [
       '/',
       '/onboarding',
-      '/onboarding/aceitar-termos',
+      '/aceitar-termos',
       '/perfil/termos',
       '/perfil/privacidade'
     ];
