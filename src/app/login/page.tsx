@@ -16,18 +16,24 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setLoading(true)
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (signInError) {
-      alert(signInError.message)
-      setLoading(false)
-      return
-    }
+  const handleLogin = async () => {
+  setLoading(true)
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    console.error(error.message)
+    setLoading(false)
+    return
+  }
+
+  // 🔴 ESSA LINHA ESTÁ FALTANDO HOJE
+  router.replace('/onboarding')
+}
+
 
     if (!signInData.user) {
       alert('Não foi possível recuperar o usuário autenticado.')
