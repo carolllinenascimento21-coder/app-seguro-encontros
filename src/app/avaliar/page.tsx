@@ -1,11 +1,11 @@
 'use client';
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Star, AlertTriangle, Send, Loader2 } from 'lucide-react';
-import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft, Star, AlertTriangle, Send, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import Navbar from '@/components/custom/navbar';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 const supabase = createClientComponentClient();
 
@@ -14,8 +14,8 @@ export default function AvaliarPage() {
 
   const [formData, setFormData] = useState({
     nome: '',
-    telefone: '',
     cidade: '',
+    contato: '',
     comportamento: 0,
     segurancaEmocional: 0,
     respeito: 0,
@@ -51,8 +51,8 @@ export default function AvaliarPage() {
     'Liso',
   ];
 
-  const handleRating = (categoria: string, valor: number) => {
-    setFormData(prev => ({ ...prev, [categoria]: valor }));
+  const handleRating = (key: string, value: number) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
   };
 
   const toggleRedFlag = (flag: string) => {
@@ -63,151 +63,223 @@ export default function AvaliarPage() {
         : [...prev.redFlags, flag],
     }));
   };
-  const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
 
-  try {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.nome) {
+      alert('O nome é obrigatório.');
+      return;
+    }
+
+    if (
+      !formData.comportamento ||
+      !formData.segurancaEmocional ||
+      !formData.respeito ||
+      !formData.carater ||
+      !formData.confianca
+    ) {
+      alert('Avalie todas as categorias.');
+      return;
+    }
+
     setSubmitting(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      alert('Usuária não autenticada');
-      return;
+      if (!user) {
+        alert('Usuária não autenticada');
+        return;
+      }
+
+      /**
+       * 1️⃣ Insere avaliação SEM identidade da usuária
+       */
+      const { data: avaliacao, error: insertError } = await supabase
+        .from('avaliacoes')
+        .insert({
+          nome: formData.nome,
+          cidade: formData.cidade || null,
+          contato: formData.contato || null,
+          flags: formData.redFlags,
+          relato: formData.relato || null,
+          comportamento: formData.comportamento,
+          seguranca_emocional: formData.segurancaEmocional,
+          respeito: formData.respeito,
+          carater: formData.carater,
+          confianca: formData.confianca,
+          anonimo: formData.anonimo,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      /**
+       * 2️⃣ Cria vínculo anônimo com a autora
+       */
+      const { error: linkError } = await supabase
+        .from('avaliacoes_autoras')
+        .insert({
+          avaliacao_id: avaliacao.id,
+          autora_id: user.id,
+        });
+
+      if (linkError) throw linkError;
+
+      setSubmitted(true);
+
+      setTimeout(() => {
+        router.push('/minhas-avaliacoes');
+      }, 2000);
+
+    } catch (err) {
+      console.error('Erro ao enviar avaliação:', err);
+      alert('Erro ao enviar avaliação.');
+    } finally {
+      setSubmitting(false);
     }
-
-    // 1️⃣ Inserir avaliação pública (anônima)
-    const { data: avaliacao, error: avaliacaoError } = await supabase
-      .from('avaliacoes')
-      .insert({
-        nome: formData.nome,
-        telefone: formData.telefone || null,
-        cidade: formData.cidade || null,
-        comportamento: formData.comportamento,
-        seguranca_emocional: formData.segurancaEmocional,
-        respeito: formData.respeito,
-        carater: formData.carater,
-        confianca: formData.confianca,
-        flags: formData.redFlags,
-        relato: formData.relato,
-        anonima: true,
-      })
-      .select('id')
-      .single();
-
-    if (avaliacaoError || !avaliacao) {
-      console.error(avaliacaoError);
-      alert('Erro ao salvar avaliação');
-      return;
-    }
-
-    // 2️⃣ Criar vínculo privado (NÃO público)
-    const { error: linkError } = await supabase
-      .from('avaliacoes_autoras')
-      .insert({
-        avaliacao_id: avaliacao.id,
-        user_id: user.id,
-      });
-
-    if (linkError) {
-      console.error(linkError);
-      alert('Erro ao finalizar avaliação');
-      return;
-    }
-
-    setSubmitted(true);
-    setTimeout(() => {
-      router.push('/minhas-avaliacoes');
-    }, 1500);
-
-  } catch (err) {
-    console.error(err);
-    alert('Erro inesperado');
-  } finally {
-    setSubmitting(false);
-  }
-};
-
+  };
 
   if (submitted) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="text-center">
-          <Send className="w-12 h-12 text-[#D4AF37] mx-auto mb-4" />
-          <h2 className="text-xl font-bold">Avaliação enviada!</h2>
+          <Send className="w-12 h-12 mx-auto text-[#D4AF37] mb-4" />
+          <h2 className="text-xl font-bold text-[#D4AF37]">
+            Avaliação enviada com sucesso
+          </h2>
+          <p className="text-gray-400 mt-2">
+            Obrigada por ajudar outras mulheres.
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-24">
-      <header className="border-b border-[#D4AF37]/20 p-4">
-        <Link href="/home" className="text-[#D4AF37] flex items-center gap-2">
-          <ArrowLeft size={18} /> Voltar
+    <div className="min-h-screen bg-black text-white pb-20">
+      <header className="border-b border-[#D4AF37]/20 px-4 py-4">
+        <Link href="/home" className="flex items-center gap-2 text-[#D4AF37]">
+          <ArrowLeft className="w-5 h-5" />
+          Voltar
         </Link>
       </header>
 
-      <form onSubmit={handleSubmit} className="max-w-md mx-auto p-4 space-y-6">
-        <input
-          required
-          placeholder="Nome completo"
-          className="w-full p-3 rounded bg-white/5"
-          value={formData.nome}
-          onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))}
-        />
+      <div className="max-w-md mx-auto px-4 py-6">
+        <h1 className="text-2xl font-bold text-[#D4AF37] mb-1">
+          Avaliar um homem
+        </h1>
+        <p className="text-gray-400 text-sm mb-6">
+          Sua identidade nunca será revelada.
+        </p>
 
-        {categorias.map(cat => (
-          <div key={cat.key}>
-            <p className="mb-2">{cat.label}</p>
-            <div className="flex gap-2">
-              {[1,2,3,4,5].map(n => (
+        <form onSubmit={handleSubmit} className="space-y-6">
+
+          {/* Identificação */}
+          <div className="bg-white/5 border border-[#D4AF37]/20 rounded-xl p-5 space-y-4">
+            <div>
+              <label className="text-sm text-gray-300">Nome *</label>
+              <input
+                className="w-full bg-black border border-[#D4AF37]/40 rounded-lg px-3 py-2 text-white"
+                value={formData.nome}
+                onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-300">Cidade (opcional)</label>
+              <input
+                className="w-full bg-black border border-[#D4AF37]/40 rounded-lg px-3 py-2 text-white"
+                placeholder="Ex: Belo Horizonte - MG"
+                value={formData.cidade}
+                onChange={e => setFormData(p => ({ ...p, cidade: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-300">Contato (opcional)</label>
+              <input
+                className="w-full bg-black border border-[#D4AF37]/40 rounded-lg px-3 py-2 text-white"
+                placeholder="Telefone, Instagram, @, link…"
+                value={formData.contato}
+                onChange={e => setFormData(p => ({ ...p, contato: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          {/* Categorias */}
+          <div className="space-y-4">
+            {categorias.map(c => (
+              <div key={c.key}>
+                <p className="text-sm text-gray-300 mb-2">{c.label}</p>
+                <div className="flex gap-2">
+                  {[1,2,3,4,5].map(v => (
+                    <button
+                      type="button"
+                      key={v}
+                      onClick={() => handleRating(c.key, v)}
+                    >
+                      <Star
+                        className={`w-7 h-7 ${
+                          (formData as any)[c.key] >= v
+                            ? 'text-[#D4AF37] fill-[#D4AF37]'
+                            : 'text-gray-600'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Red Flags */}
+          <div className="bg-white/5 border border-[#D4AF37]/20 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              <p className="font-semibold">Red Flags</p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {redFlagsOptions.map(flag => (
                 <button
-                  key={n}
                   type="button"
-                  onClick={() => handleRating(cat.key, n)}
+                  key={flag}
+                  onClick={() => toggleRedFlag(flag)}
+                  className={`px-3 py-1.5 rounded-full text-xs ${
+                    formData.redFlags.includes(flag)
+                      ? 'bg-red-500 text-white'
+                      : 'bg-white/5 text-gray-400 border border-gray-600'
+                  }`}
                 >
-                  <Star className={formData[cat.key as keyof typeof formData] >= n ? 'text-[#D4AF37]' : 'text-gray-600'} />
+                  {flag}
                 </button>
               ))}
             </div>
           </div>
-        ))}
 
-        <div className="flex flex-wrap gap-2">
-          {redFlagsOptions.map(flag => (
-            <button
-              type="button"
-              key={flag}
-              onClick={() => toggleRedFlag(flag)}
-              className={`px-3 py-1 rounded-full text-sm ${
-                formData.redFlags.includes(flag)
-                  ? 'bg-red-600'
-                  : 'bg-white/10'
-              }`}
-            >
-              {flag}
-            </button>
-          ))}
-        </div>
+          {/* Relato */}
+          <textarea
+            className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-4 py-3 text-white"
+            rows={5}
+            placeholder="Relato detalhado (opcional)"
+            value={formData.relato}
+            onChange={e => setFormData(p => ({ ...p, relato: e.target.value }))}
+          />
 
-        <textarea
-          placeholder="Relato (opcional)"
-          className="w-full p-3 rounded bg-white/5"
-          rows={4}
-          value={formData.relato}
-          onChange={e => setFormData(p => ({ ...p, relato: e.target.value }))}
-        />
-
-        <button
-          disabled={submitting}
-          className="w-full bg-[#D4AF37] text-black py-3 rounded"
-        >
-          {submitting ? <Loader2 className="animate-spin mx-auto" /> : 'Enviar avaliação'}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-[#D4AF37] text-black font-bold py-4 rounded-xl flex items-center justify-center gap-2"
+          >
+            {submitting ? <Loader2 className="animate-spin" /> : <Send />}
+            Enviar avaliação
+          </button>
+        </form>
+      </div>
 
       <Navbar />
     </div>
