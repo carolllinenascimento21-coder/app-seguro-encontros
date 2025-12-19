@@ -39,9 +39,7 @@ export default function MinhasAvaliacoes() {
     try {
       setLoading(true);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
         router.push('/login');
@@ -49,8 +47,9 @@ export default function MinhasAvaliacoes() {
       }
 
       /**
-       * Busca SOMENTE avaliações da usuária logada
-       * via tabela de vínculo (anonimato real)
+       * Anonimato real:
+       * a usuária vê apenas as avaliações vinculadas a ela
+       * via tabela de relacionamento
        */
       const { data, error } = await supabase
         .from('avaliacoes_autoras')
@@ -105,7 +104,7 @@ export default function MinhasAvaliacoes() {
 
       if (error) throw error;
 
-      setAvaliacoes((prev) => prev.filter((a) => a.id !== avaliacaoToDelete));
+      setAvaliacoes(prev => prev.filter(a => a.id !== avaliacaoToDelete));
       setShowDeleteModal(false);
       setAvaliacaoToDelete(null);
     } catch (err) {
@@ -120,8 +119,7 @@ export default function MinhasAvaliacoes() {
         a.seguranca_emocional +
         a.respeito +
         a.carater +
-        a.confianca) /
-      5
+        a.confianca) / 5
     ).toFixed(1);
 
   const formatDate = (d: string) =>
@@ -138,25 +136,35 @@ export default function MinhasAvaliacoes() {
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
+
+        {/* Título */}
         <h1 className="text-2xl font-bold text-white mb-1">
           Minhas Avaliações
         </h1>
-        <p className="text-gray-400 text-sm mb-6">
+        <p className="text-gray-400 text-sm">
           Apenas você pode ver estas avaliações.
         </p>
 
+        {/* CTA SEMPRE VISÍVEL */}
+        <div className="mt-4 mb-6">
+          <button
+            onClick={() => router.push('/avaliar')}
+            className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-xl hover:opacity-90 transition"
+          >
+            + Fazer nova avaliação
+          </button>
+          <p className="text-xs text-gray-500 text-center mt-2">
+            Você pode avaliar quantas pessoas quiser.
+          </p>
+        </div>
+
+        {/* Conteúdo */}
         {avaliacoes.length === 0 ? (
           <div className="bg-[#1A1A1A] rounded-xl p-6 text-center">
             <AlertCircle className="w-10 h-10 mx-auto text-gray-500 mb-3" />
-            <p className="text-gray-400 text-sm mb-4">
+            <p className="text-gray-400 text-sm">
               Você ainda não fez nenhuma avaliação.
             </p>
-            <button
-              onClick={() => router.push('/avaliar')}
-              className="bg-[#D4AF37] text-black px-6 py-2 rounded-lg font-semibold"
-            >
-              Fazer primeira avaliação
-            </button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -170,24 +178,10 @@ export default function MinhasAvaliacoes() {
                     <h3 className="text-white font-bold">
                       {a.nome || 'Nome não informado'}
                     </h3>
-
-                    {a.cidade && (
-                      <p className="text-gray-400 text-xs">
-                        📍 {a.cidade}
-                      </p>
-                    )}
-
-                    {a.contato && (
-                      <p className="text-gray-400 text-xs break-all">
-                        🔗 {a.contato}
-                      </p>
-                    )}
-
-                    <p className="text-gray-500 text-xs mt-1">
+                    <p className="text-gray-400 text-xs">
                       {formatDate(a.created_at)}
                     </p>
                   </div>
-
                   <div className="flex items-center gap-1">
                     <Star className="w-5 h-5 text-[#D4AF37] fill-current" />
                     <span className="text-[#D4AF37] font-bold">
@@ -195,6 +189,18 @@ export default function MinhasAvaliacoes() {
                     </span>
                   </div>
                 </div>
+
+                {a.cidade && (
+                  <p className="text-gray-400 text-xs mb-1">
+                    📍 {a.cidade}
+                  </p>
+                )}
+
+                {a.contato && (
+                  <p className="text-gray-400 text-xs mb-2 break-all">
+                    📞 {a.contato}
+                  </p>
+                )}
 
                 {a.relato && (
                   <p className="text-gray-300 text-sm mb-3 line-clamp-2">
@@ -237,6 +243,7 @@ export default function MinhasAvaliacoes() {
         )}
       </div>
 
+      {/* Modal de exclusão */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-[#1A1A1A] p-6 rounded-xl w-full max-w-sm">
