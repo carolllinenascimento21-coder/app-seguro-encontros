@@ -63,62 +63,73 @@ export default function AvaliarPage() {
         : [...prev.redFlags, flag],
     }));
   };
-
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    try {
-      setSubmitting(true);
+  try {
+    setSubmitting(true);
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        alert('Usuária não autenticada');
-        return;
-      }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      if (Object.values({
+    if (!user) {
+      alert('Usuária não autenticada');
+      return;
+    }
+
+    // 1️⃣ Inserir avaliação pública (anônima)
+    const { data: avaliacao, error: avaliacaoError } = await supabase
+      .from('avaliacoes')
+      .insert({
+        nome: formData.nome,
+        telefone: formData.telefone || null,
+        cidade: formData.cidade || null,
         comportamento: formData.comportamento,
-        segurancaEmocional: formData.segurancaEmocional,
+        seguranca_emocional: formData.segurancaEmocional,
         respeito: formData.respeito,
         carater: formData.carater,
         confianca: formData.confianca,
-      }).some(v => v === 0)) {
-        alert('Avalie todas as categorias.');
-        return;
-      }
+        flags: formData.redFlags,
+        relato: formData.relato,
+        anonima: true,
+      })
+      .select('id')
+      .single();
 
-      const { error } = await supabase.from('avaliacoes').insert({
-      user_id: user.id,
-
-      nome: formData.nome,
-      telefone: formData.telefone || null,
-      cidade: formData.cidade || null,
-
-      comportamento: formData.comportamento,
-      seguranca_emocional: formData.segurancaEmocional,
-      respeito: formData.respeito,
-      carater: formData.carater,
-      confianca: formData.confianca,
-
-      flags: formData.redFlags,
-      relato: formData.relato || null,
-      anonima: formData.anonimo,
-     })
-
-
-      if (error) {
-        console.error(error);
-        alert('Erro ao enviar avaliação.');
-        return;
-      }
-
-      setSubmitted(true);
-      setTimeout(() => router.push('/minhas-avaliacoes'), 2000);
-
-    } finally {
-      setSubmitting(false);
+    if (avaliacaoError || !avaliacao) {
+      console.error(avaliacaoError);
+      alert('Erro ao salvar avaliação');
+      return;
     }
-  };
+
+    // 2️⃣ Criar vínculo privado (NÃO público)
+    const { error: linkError } = await supabase
+      .from('avaliacoes_autoras')
+      .insert({
+        avaliacao_id: avaliacao.id,
+        user_id: user.id,
+      });
+
+    if (linkError) {
+      console.error(linkError);
+      alert('Erro ao finalizar avaliação');
+      return;
+    }
+
+    setSubmitted(true);
+    setTimeout(() => {
+      router.push('/minhas-avaliacoes');
+    }, 1500);
+
+  } catch (err) {
+    console.error(err);
+    alert('Erro inesperado');
+  } finally {
+    setSubmitting(false);
+  }
+};
+
 
   if (submitted) {
     return (
