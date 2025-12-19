@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Star, Edit, Trash2, History, AlertCircle, Loader2 } from 'lucide-react';
+import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -12,6 +12,7 @@ interface Avaliacao {
   id: string;
   nome: string | null;
   cidade: string | null;
+  contato: string | null;
   flags: string[];
   relato: string | null;
   comportamento: number;
@@ -58,6 +59,7 @@ export default function MinhasAvaliacoes() {
             id,
             nome,
             cidade,
+            contato,
             flags,
             relato,
             comportamento,
@@ -136,7 +138,9 @@ export default function MinhasAvaliacoes() {
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-1">Minhas Avaliações</h1>
+        <h1 className="text-2xl font-bold text-white mb-1">
+          Minhas Avaliações
+        </h1>
         <p className="text-gray-400 text-sm mb-6">
           Apenas você pode ver estas avaliações.
         </p>
@@ -166,10 +170,24 @@ export default function MinhasAvaliacoes() {
                     <h3 className="text-white font-bold">
                       {a.nome || 'Nome não informado'}
                     </h3>
-                    <p className="text-gray-400 text-xs">
+
+                    {a.cidade && (
+                      <p className="text-gray-400 text-xs">
+                        📍 {a.cidade}
+                      </p>
+                    )}
+
+                    {a.contato && (
+                      <p className="text-gray-400 text-xs break-all">
+                        🔗 {a.contato}
+                      </p>
+                    )}
+
+                    <p className="text-gray-500 text-xs mt-1">
                       {formatDate(a.created_at)}
                     </p>
                   </div>
+
                   <div className="flex items-center gap-1">
                     <Star className="w-5 h-5 text-[#D4AF37] fill-current" />
                     <span className="text-[#D4AF37] font-bold">
