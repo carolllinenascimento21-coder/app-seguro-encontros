@@ -50,21 +50,25 @@ export default function MinhasAvaliacoes() {
 
       setCurrentUserId(user.id);
 
-      // Buscar avaliações do usuário
       const { data, error } = await supabase
-        .from('avaliacoes')
-        .select('*')
-        .eq('autor_id', user.id)
-        .order('created_at', { ascending: false });
+  .from('avaliacoes_autoras')
+  .select(`
+    avaliacao_id,
+    avaliacoes (
+      id,
+      nome,
+      cidade,
+      flags,
+      relato,
+      comportamento,
+      seguranca_emocional,
+      respeito,
+      carater,
+      confianca,
+      created_at
+    )
+  `);
 
-      if (error) throw error;
-
-      setAvaliacoes(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar avaliações:', error);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleEdit = (id: string) => {
