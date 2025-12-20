@@ -75,9 +75,9 @@ export default function AvaliarPage() {
     setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-      if (!user) {
+      if (authError || !user) {
         router.push('/login');
         return;
       }
@@ -87,7 +87,12 @@ export default function AvaliarPage() {
         return;
       }
 
-      // 🔥 INSERT LIMPO — SEM SELECT
+      /**
+       * 🚨 INSERT PURO
+       * - sem select
+       * - sem vínculo manual
+       * - sem tocar em avaliacoes_autoras
+       */
       const { error } = await supabase
         .from('avaliacoes')
         .insert({
@@ -109,7 +114,7 @@ export default function AvaliarPage() {
       router.push('/minhas-avaliacoes');
 
     } catch (err) {
-      console.error('Erro ao inserir avaliação:', err);
+      console.error('Erro ao enviar avaliação:', err);
       setErro('Erro ao enviar avaliação. Tente novamente.');
     } finally {
       setLoading(false);
@@ -147,7 +152,7 @@ export default function AvaliarPage() {
         <div key={c.key} className="mb-4">
           <p className="text-gray-300 mb-1">{c.label}</p>
           <div className="flex gap-1">
-            {[1,2,3,4,5].map(n => (
+            {[1, 2, 3, 4, 5].map(n => (
               <Star
                 key={n}
                 onClick={() => setNota(c.key, n)}
