@@ -31,7 +31,6 @@ const redFlagsList = [
 
 export default function AvaliarPage() {
   const router = useRouter();
-
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -41,7 +40,6 @@ export default function AvaliarPage() {
     contato: '',
     relato: '',
     anonimo: true,
-    publica: true, // ✅ GARANTIA DE VISIBILIDADE
     flags: [] as string[],
     comportamento: 0,
     seguranca_emocional: 0,
@@ -70,31 +68,27 @@ export default function AvaliarPage() {
     setLoading(true);
 
     try {
-      // 🔐 garantir sessão
       const { data: { user } } = await supabase.auth.getUser();
+
       if (!user) {
         router.push('/login');
         return;
       }
 
-      // 🧪 validação mínima
-      if (!form.nome.trim() || form.comportamento === 0) {
+      if (!form.nome || form.comportamento === 0) {
         setErro('Preencha o nome e ao menos a avaliação de comportamento.');
-        setLoading(false);
         return;
       }
 
-      // ✅ INSERT SIMPLES (trigger cuida do vínculo)
       const { error } = await supabase
         .from('avaliacoes')
         .insert({
-          nome: form.nome.trim(),
+          nome: form.nome,
           cidade: form.cidade || null,
           contato: form.contato || null,
           relato: form.relato || null,
           flags: form.flags,
           anonimo: form.anonimo,
-          publica: true, // 🔒 explícito (evita falha de policy)
           comportamento: form.comportamento,
           seguranca_emocional: form.seguranca_emocional,
           respeito: form.respeito,
@@ -104,11 +98,10 @@ export default function AvaliarPage() {
 
       if (error) throw error;
 
-      // ✅ sucesso
       router.push('/minhas-avaliacoes');
 
     } catch (err) {
-      console.error('Erro ao enviar avaliação:', err);
+      console.error(err);
       setErro('Erro ao enviar avaliação. Tente novamente.');
     } finally {
       setLoading(false);
@@ -116,4 +109,99 @@ export default function AvaliarPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black px-4 py-8 max
+    <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto">
+      <h1 className="text-xl font-bold text-white mb-4">
+        Nova Avaliação
+      </h1>
+
+      {erro && (
+        <p className="text-red-500 mb-3">
+          {erro}
+        </p>
+      )}
+
+      <input
+        className="w-full mb-3 p-3 rounded bg-[#1A1A1A] text-white"
+        placeholder="Nome *"
+        value={form.nome}
+        onChange={e => setForm({ ...form, nome: e.target.value })}
+      />
+
+      <input
+        className="w-full mb-3 p-3 rounded bg-[#1A1A1A] text-white"
+        placeholder="Cidade (opcional)"
+        value={form.cidade}
+        onChange={e => setForm({ ...form, cidade: e.target.value })}
+      />
+
+      <input
+        className="w-full mb-3 p-3 rounded bg-[#1A1A1A] text-white"
+        placeholder="Contato / rede social (opcional)"
+        value={form.contato}
+        onChange={e => setForm({ ...form, contato: e.target.value })}
+      />
+
+      {criterios.map(c => (
+        <div key={c.key} className="mb-4">
+          <p className="text-gray-300 mb-1">{c.label}</p>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map(n => (
+              <Star
+                key={n}
+                onClick={() => setNota(c.key, n)}
+                className={`w-6 h-6 cursor-pointer ${
+                  (form as any)[c.key] >= n
+                    ? 'text-yellow-400 fill-current'
+                    : 'text-gray-600'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <p className="text-gray-300 mb-2 mt-4">Red Flags</p>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        {redFlagsList.map(f => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => toggleFlag(f)}
+            className={`px-3 py-1 rounded-full text-xs ${
+              form.flags.includes(f)
+                ? 'bg-red-500 text-white'
+                : 'bg-gray-700 text-gray-300'
+            }`}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      <textarea
+        className="w-full p-3 rounded bg-[#1A1A1A] text-white mb-4"
+        placeholder="Relato (opcional)"
+        value={form.relato}
+        onChange={e => setForm({ ...form, relato: e.target.value })}
+      />
+
+      <label className="flex items-center gap-2 text-gray-300 mb-6">
+        <input
+          type="checkbox"
+          checked={form.anonimo}
+          onChange={e => setForm({ ...form, anonimo: e.target.checked })}
+        />
+        Avaliação anônima (recomendado)
+      </label>
+
+      <button
+        onClick={enviar}
+        disabled={loading}
+        className="w-full bg-[#D4AF37] text-black py-3 rounded font-bold disabled:opacity-60"
+      >
+        {loading ? 'Enviando...' : 'Enviar avaliação'}
+      </button>
+    </div>
+  );
+}
