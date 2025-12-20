@@ -87,7 +87,7 @@ export default function AvaliarPage() {
         return;
       }
 
-      // ✅ INSERT PURO — SEM SELECT
+      // 🔥 INSERT LIMPO — SEM SELECT
       const { error } = await supabase
         .from('avaliacoes')
         .insert({
@@ -107,6 +107,7 @@ export default function AvaliarPage() {
       if (error) throw error;
 
       router.push('/minhas-avaliacoes');
+
     } catch (err) {
       console.error('Erro ao inserir avaliação:', err);
       setErro('Erro ao enviar avaliação. Tente novamente.');
@@ -117,9 +118,7 @@ export default function AvaliarPage() {
 
   return (
     <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto">
-      <h1 className="text-xl font-bold text-white mb-4">
-        Nova Avaliação
-      </h1>
+      <h1 className="text-xl font-bold text-white mb-4">Nova Avaliação</h1>
 
       {erro && <p className="text-red-500 mb-3">{erro}</p>}
 
@@ -148,7 +147,7 @@ export default function AvaliarPage() {
         <div key={c.key} className="mb-4">
           <p className="text-gray-300 mb-1">{c.label}</p>
           <div className="flex gap-1">
-            {[1, 2, 3, 4, 5].map(n => (
+            {[1,2,3,4,5].map(n => (
               <Star
                 key={n}
                 onClick={() => setNota(c.key, n)}
