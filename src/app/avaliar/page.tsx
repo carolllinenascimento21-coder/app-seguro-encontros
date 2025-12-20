@@ -87,6 +87,7 @@ export default function AvaliarPage() {
         return;
       }
 
+      // ✅ INSERT PURO — SEM SELECT
       const { error } = await supabase
         .from('avaliacoes')
         .insert({
@@ -101,14 +102,11 @@ export default function AvaliarPage() {
           respeito: form.respeito,
           carater: form.carater,
           confianca: form.confianca,
-        })
-        .select('id')
-        .single();
+        });
 
       if (error) throw error;
 
       router.push('/minhas-avaliacoes');
-
     } catch (err) {
       console.error('Erro ao inserir avaliação:', err);
       setErro('Erro ao enviar avaliação. Tente novamente.');
