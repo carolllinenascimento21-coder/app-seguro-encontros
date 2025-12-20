@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
@@ -32,29 +32,29 @@ export default function MinhasAvaliacoes() {
   const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAvaliacoes();
+    carregarAvaliacoes();
   }, []);
 
-  const loadAvaliacoes = async () => {
+  const carregarAvaliacoes = async () => {
     try {
       setLoading(true);
 
       const { data: { user } } = await supabase.auth.getUser();
-
       if (!user) {
         router.push('/login');
         return;
       }
 
       /**
-       * Anonimato real:
-       * a usuária vê apenas as avaliações vinculadas a ela
-       * via tabela de relacionamento
+       * 🔒 LISTAGEM SEGURA
+       * Somente avaliações vinculadas ao usuário logado
+       * via RLS em avaliacoes_autoras
        */
       const { data, error } = await supabase
         .from('avaliacoes_autoras')
         .select(`
-          avaliacao:avaliacoes (
+          avaliacao_id,
+          avaliacoes (
             id,
             nome,
             cidade,
@@ -68,15 +68,17 @@ export default function MinhasAvaliacoes() {
             confianca,
             created_at
           )
-        `);
+        `)
+        .order('created_at', { foreignTable: 'avaliacoes', ascending: false });
 
       if (error) throw error;
 
       const lista = (data || [])
-        .map((item: any) => item.avaliacao)
+        .map((item: any) => item.avaliacoes)
         .filter(Boolean);
 
       setAvaliacoes(lista);
+
     } catch (err) {
       console.error('Erro ao carregar avaliações:', err);
     } finally {
@@ -104,9 +106,13 @@ export default function MinhasAvaliacoes() {
 
       if (error) throw error;
 
-      setAvaliacoes(prev => prev.filter(a => a.id !== avaliacaoToDelete));
+      setAvaliacoes(prev =>
+        prev.filter(a => a.id !== avaliacaoToDelete)
+      );
+
       setShowDeleteModal(false);
       setAvaliacaoToDelete(null);
+
     } catch (err) {
       console.error('Erro ao excluir avaliação:', err);
       alert('Erro ao excluir avaliação.');
@@ -137,7 +143,6 @@ export default function MinhasAvaliacoes() {
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
 
-        {/* Título */}
         <h1 className="text-2xl font-bold text-white mb-1">
           Minhas Avaliações
         </h1>
@@ -145,20 +150,15 @@ export default function MinhasAvaliacoes() {
           Apenas você pode ver estas avaliações.
         </p>
 
-        {/* CTA SEMPRE VISÍVEL */}
         <div className="mt-4 mb-6">
           <button
             onClick={() => router.push('/avaliar')}
-            className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-xl hover:opacity-90 transition"
+            className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-xl"
           >
             + Fazer nova avaliação
           </button>
-          <p className="text-xs text-gray-500 text-center mt-2">
-            Você pode avaliar quantas pessoas quiser.
-          </p>
         </div>
 
-        {/* Conteúdo */}
         {avaliacoes.length === 0 ? (
           <div className="bg-[#1A1A1A] rounded-xl p-6 text-center">
             <AlertCircle className="w-10 h-10 mx-auto text-gray-500 mb-3" />
@@ -168,12 +168,12 @@ export default function MinhasAvaliacoes() {
           </div>
         ) : (
           <div className="space-y-4">
-            {avaliacoes.map((a) => (
+            {avaliacoes.map(a => (
               <div
                 key={a.id}
                 className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5"
               >
-                <div className="flex justify-between items-start mb-2">
+                <div className="flex justify-between mb-2">
                   <div>
                     <h3 className="text-white font-bold">
                       {a.nome || 'Nome não informado'}
@@ -190,35 +190,10 @@ export default function MinhasAvaliacoes() {
                   </div>
                 </div>
 
-                {a.cidade && (
-                  <p className="text-gray-400 text-xs mb-1">
-                    📍 {a.cidade}
-                  </p>
-                )}
-
-                {a.contato && (
-                  <p className="text-gray-400 text-xs mb-2 break-all">
-                    📞 {a.contato}
-                  </p>
-                )}
-
                 {a.relato && (
                   <p className="text-gray-300 text-sm mb-3 line-clamp-2">
                     {a.relato}
                   </p>
-                )}
-
-                {a.flags?.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {a.flags.map((f, i) => (
-                      <span
-                        key={i}
-                        className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded-full"
-                      >
-                        {f}
-                      </span>
-                    ))}
-                  </div>
                 )}
 
                 <div className="flex gap-2">
@@ -243,9 +218,8 @@ export default function MinhasAvaliacoes() {
         )}
       </div>
 
-      {/* Modal de exclusão */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-[#1A1A1A] p-6 rounded-xl w-full max-w-sm">
             <h3 className="text-white font-bold mb-3">
               Excluir avaliação?
