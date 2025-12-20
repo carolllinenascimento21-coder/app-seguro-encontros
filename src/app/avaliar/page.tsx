@@ -34,13 +34,13 @@ export default function AvaliarPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [form, setForm] = useState<any>({
+  const [form, setForm] = useState({
     nome: '',
     cidade: '',
     contato: '',
     relato: '',
     anonimo: true,
-    flags: [],
+    flags: [] as string[],
     comportamento: 0,
     seguranca_emocional: 0,
     respeito: 0,
@@ -49,19 +49,21 @@ export default function AvaliarPage() {
   });
 
   const setNota = (key: string, value: number) => {
-    setForm({ ...form, [key]: value });
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const toggleFlag = (flag: string) => {
-    setForm({
-      ...form,
-      flags: form.flags.includes(flag)
-        ? form.flags.filter((f: string) => f !== flag)
-        : [...form.flags, flag],
-    });
+    setForm((prev) => ({
+      ...prev,
+      flags: prev.flags.includes(flag)
+        ? prev.flags.filter((f) => f !== flag)
+        : [...prev.flags, flag],
+    }));
   };
 
   const enviar = async () => {
+    if (loading) return;
+
     setErro(null);
     setLoading(true);
 
@@ -73,6 +75,12 @@ export default function AvaliarPage() {
         return;
       }
 
+      // 🧪 Validação mínima
+      if (!form.nome || form.comportamento === 0) {
+        setErro('Preencha o nome e ao menos a avaliação de comportamento.');
+        return;
+      }
+
       // 1️⃣ Inserir avaliação
       const { data: avaliacao, error: errAvaliacao } = await supabase
         .from('avaliacoes')
@@ -80,7 +88,7 @@ export default function AvaliarPage() {
           nome: form.nome,
           cidade: form.cidade || null,
           contato: form.contato || null,
-          relato: form.relato,
+          relato: form.relato || null,
           flags: form.flags,
           anonimo: form.anonimo,
           comportamento: form.comportamento,
@@ -94,22 +102,29 @@ export default function AvaliarPage() {
 
       if (errAvaliacao) throw errAvaliacao;
 
-      // 2️⃣ Criar vínculo (autora_id vem do DEFAULT auth.uid())
+      // 2️⃣ Criar vínculo (user_id vem do DEFAULT auth.uid())
       const { error: errLink } = await supabase
         .from('avaliacoes_autoras')
         .insert({
           avaliacao_id: avaliacao.id,
-          // ❗ NÃO enviar autora_id
         });
 
-      if (errLink) throw errLink;
+      // 🔁 Rollback se falhar
+      if (errLink) {
+        await supabase
+          .from('avaliacoes')
+          .delete()
+          .eq('id', avaliacao.id);
+
+        throw errLink;
+      }
 
       // 3️⃣ Sucesso
       router.push('/minhas-avaliacoes');
 
     } catch (e) {
       console.error(e);
-      setErro('Erro ao enviar avaliação.');
+      setErro('Erro ao enviar avaliação. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -146,12 +161,14 @@ export default function AvaliarPage() {
         <div key={c.key} className="mb-4">
           <p className="text-gray-300 mb-1">{c.label}</p>
           <div className="flex gap-1">
-            {[1,2,3,4,5].map(n => (
+            {[1, 2, 3, 4, 5].map((n) => (
               <Star
                 key={n}
                 onClick={() => setNota(c.key, n)}
                 className={`w-6 h-6 cursor-pointer ${
-                  form[c.key] >= n ? 'text-yellow-400 fill-current' : 'text-gray-600'
+                  form[c.key as keyof typeof form] >= n
+                    ? 'text-yellow-400 fill-current'
+                    : 'text-gray-600'
                 }`}
               />
             ))}
@@ -161,44 +178,4 @@ export default function AvaliarPage() {
 
       <p className="text-gray-300 mb-2 mt-4">Red Flags</p>
       <div className="flex flex-wrap gap-2 mb-4">
-        {redFlagsList.map(f => (
-          <button
-            key={f}
-            onClick={() => toggleFlag(f)}
-            className={`px-3 py-1 rounded-full text-xs ${
-              form.flags.includes(f)
-                ? 'bg-red-500 text-white'
-                : 'bg-gray-700 text-gray-300'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <textarea
-        className="w-full p-3 rounded bg-[#1A1A1A] text-white mb-4"
-        placeholder="Relato (opcional)"
-        value={form.relato}
-        onChange={(e) => setForm({ ...form, relato: e.target.value })}
-      />
-
-      <label className="flex items-center gap-2 text-gray-300 mb-6">
-        <input
-          type="checkbox"
-          checked={form.anonimo}
-          onChange={(e) => setForm({ ...form, anonimo: e.target.checked })}
-        />
-        Avaliação anônima (recomendado)
-      </label>
-
-      <button
-        onClick={enviar}
-        disabled={loading}
-        className="w-full bg-[#D4AF37] text-black py-3 rounded font-bold"
-      >
-        {loading ? 'Enviando...' : 'Enviar avaliação'}
-      </button>
-    </div>
-  );
-}
+        {redFlagsList.map((f)
