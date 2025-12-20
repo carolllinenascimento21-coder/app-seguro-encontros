@@ -61,59 +61,59 @@ export default function AvaliarPage() {
     });
   };
 
-const enviar = async () => {
-  setErro(null);
-  setLoading(true);
+  const enviar = async () => {
+    setErro(null);
+    setLoading(true);
 
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push('/login');
-      return;
+    try {
+      // 🔐 Garantir usuário autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      // 1️⃣ Inserir avaliação
+      const { data: avaliacao, error: errAvaliacao } = await supabase
+        .from('avaliacoes')
+        .insert({
+          nome: form.nome,
+          cidade: form.cidade || null,
+          contato: form.contato || null,
+          relato: form.relato,
+          flags: form.flags,
+          anonimo: form.anonimo,
+          comportamento: form.comportamento,
+          seguranca_emocional: form.seguranca_emocional,
+          respeito: form.respeito,
+          carater: form.carater,
+          confianca: form.confianca,
+        })
+        .select()
+        .single();
+
+      if (errAvaliacao) throw errAvaliacao;
+
+      // 2️⃣ Criar vínculo (autora_id vem do DEFAULT auth.uid())
+      const { error: errLink } = await supabase
+        .from('avaliacoes_autoras')
+        .insert({
+          avaliacao_id: avaliacao.id,
+          // ❗ NÃO enviar autora_id
+        });
+
+      if (errLink) throw errLink;
+
+      // 3️⃣ Sucesso
+      router.push('/minhas-avaliacoes');
+
+    } catch (e) {
+      console.error(e);
+      setErro('Erro ao enviar avaliação.');
+    } finally {
+      setLoading(false);
     }
-
-    // 1️⃣ Inserir avaliação
-    const { data: avaliacao, error: errAvaliacao } = await supabase
-      .from('avaliacoes')
-      .insert({
-        nome: form.nome,
-        cidade: form.cidade || null,
-        contato: form.contato || null,
-        relato: form.relato,
-        flags: form.flags,
-        anonimo: form.anonimo,
-        comportamento: form.comportamento,
-        seguranca_emocional: form.seguranca_emocional,
-        respeito: form.respeito,
-        carater: form.carater,
-        confianca: form.confianca,
-      })
-      .select()
-      .single();
-
-    if (errAvaliacao) throw errAvaliacao;
-
-    // 2️⃣ Criar vínculo autora ↔ avaliação
-    const { error: errLink } = await supabase
-      .from('avaliacoes_autoras')
-      .insert({
-        avaliacao_id: avaliacao.id,
-        autora_id: user.id,
-      });
-
-    if (errLink) throw errLink;
-
-    // 3️⃣ Sucesso
-    router.push('/minhas-avaliacoes');
-
-  } catch (e) {
-    console.error(e);
-    setErro('Erro ao enviar avaliação.');
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   return (
     <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto">
