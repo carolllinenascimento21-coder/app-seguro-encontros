@@ -7,7 +7,14 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 const supabase = createClientComponentClient();
 
-const criterios = [
+type CriterioKey =
+  | 'comportamento'
+  | 'seguranca_emocional'
+  | 'respeito'
+  | 'carater'
+  | 'confianca';
+
+const criterios: { key: CriterioKey; label: string }[] = [
   { key: 'comportamento', label: 'Comportamento' },
   { key: 'seguranca_emocional', label: 'Segurança emocional' },
   { key: 'respeito', label: 'Respeito' },
@@ -48,7 +55,7 @@ export default function AvaliarPage() {
     confianca: 0,
   });
 
-  const setNota = (key: string, value: number) => {
+  const setNota = (key: CriterioKey, value: number) => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
@@ -94,14 +101,16 @@ export default function AvaliarPage() {
           respeito: form.respeito,
           carater: form.carater,
           confianca: form.confianca,
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
 
       router.push('/minhas-avaliacoes');
 
     } catch (err) {
-      console.error(err);
+      console.error('Erro ao inserir avaliação:', err);
       setErro('Erro ao enviar avaliação. Tente novamente.');
     } finally {
       setLoading(false);
@@ -114,11 +123,7 @@ export default function AvaliarPage() {
         Nova Avaliação
       </h1>
 
-      {erro && (
-        <p className="text-red-500 mb-3">
-          {erro}
-        </p>
-      )}
+      {erro && <p className="text-red-500 mb-3">{erro}</p>}
 
       <input
         className="w-full mb-3 p-3 rounded bg-[#1A1A1A] text-white"
@@ -150,7 +155,7 @@ export default function AvaliarPage() {
                 key={n}
                 onClick={() => setNota(c.key, n)}
                 className={`w-6 h-6 cursor-pointer ${
-                  (form as any)[c.key] >= n
+                  form[c.key] >= n
                     ? 'text-yellow-400 fill-current'
                     : 'text-gray-600'
                 }`}
