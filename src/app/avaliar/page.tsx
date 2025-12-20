@@ -81,8 +81,8 @@ export default function AvaliarPage() {
         return;
       }
 
-      // 1️⃣ Inserir avaliação
-      const { data: avaliacao, error: errAvaliacao } = await supabase
+      // ✅ INSERT SIMPLES (SEM SELECT)
+      const { error } = await supabase
         .from('avaliacoes')
         .insert({
           nome: form.nome,
@@ -96,30 +96,11 @@ export default function AvaliarPage() {
           respeito: form.respeito,
           carater: form.carater,
           confianca: form.confianca,
-        })
-        .select()
-        .single();
-
-      if (errAvaliacao) throw errAvaliacao;
-
-      // 2️⃣ Criar vínculo (user_id vem do DEFAULT auth.uid())
-      const { error: errLink } = await supabase
-        .from('avaliacoes_autoras')
-        .insert({
-          avaliacao_id: avaliacao.id,
         });
 
-      // 🔁 Rollback se falhar
-      if (errLink) {
-        await supabase
-          .from('avaliacoes')
-          .delete()
-          .eq('id', avaliacao.id);
+      if (error) throw error;
 
-        throw errLink;
-      }
-
-      // 3️⃣ Sucesso
+      // ✅ Sucesso
       router.push('/minhas-avaliacoes');
 
     } catch (e) {
@@ -181,8 +162,8 @@ export default function AvaliarPage() {
         {redFlagsList.map((f) => (
           <button
             key={f}
-            onClick={() => toggleFlag(f)}
             type="button"
+            onClick={() => toggleFlag(f)}
             className={`px-3 py-1 rounded-full text-xs ${
               form.flags.includes(f)
                 ? 'bg-red-500 text-white'
