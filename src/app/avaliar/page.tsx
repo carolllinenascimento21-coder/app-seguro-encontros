@@ -61,18 +61,21 @@ export default function AvaliarPage() {
     });
   };
 
-  const enviar = async () => {
-    setErro(null);
-    setLoading(true);
+const enviar = async () => {
+  setErro(null);
+  setLoading(true);
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
 
-      const { error } = await supabase.from('avaliacoes').insert({
+    // 1️⃣ Inserir avaliação
+    const { data: avaliacao, error: errAvaliacao } = await supabase
+      .from('avaliacoes')
+      .insert({
         nome: form.nome,
         cidade: form.cidade || null,
         contato: form.contato || null,
@@ -84,18 +87,33 @@ export default function AvaliarPage() {
         respeito: form.respeito,
         carater: form.carater,
         confianca: form.confianca,
+      })
+      .select()
+      .single();
+
+    if (errAvaliacao) throw errAvaliacao;
+
+    // 2️⃣ Criar vínculo autora ↔ avaliação
+    const { error: errLink } = await supabase
+      .from('avaliacoes_autoras')
+      .insert({
+        avaliacao_id: avaliacao.id,
+        autora_id: user.id,
       });
 
-      if (error) throw error;
+    if (errLink) throw errLink;
 
-      router.push('/minhas-avaliacoes');
-    } catch (e) {
-      console.error(e);
-      setErro('Erro ao enviar avaliação.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    // 3️⃣ Sucesso
+    router.push('/minhas-avaliacoes');
+
+  } catch (e) {
+    console.error(e);
+    setErro('Erro ao enviar avaliação.');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto">
