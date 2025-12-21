@@ -1,80 +1,95 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, MapPin, AlertTriangle, Star, TrendingUp, Shield } from 'lucide-react';
+import {
+  Search,
+  MapPin,
+  AlertTriangle,
+  Star,
+  TrendingUp,
+  Shield
+} from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-// Dados simulados para demonstração
-const mockResults = [
-  {
-    id: '1',
-    name: 'João S.',
-    city: 'São Paulo',
-    state: 'SP',
-    rating: 4.2,
-    totalReviews: 8,
-    keywords: ['respeitoso', 'confiável', 'gentil'],
-    hasAlerts: false
-  },
-  {
-    id: '2',
-    name: 'Carlos M.',
-    city: 'Rio de Janeiro',
-    state: 'RJ',
-    rating: 2.1,
-    totalReviews: 15,
-    keywords: ['agressivo', 'manipulador', 'desrespeitoso'],
-    hasAlerts: true
-  },
-  {
-    id: '3',
-    name: 'Pedro L.',
-    city: 'Belo Horizonte',
-    state: 'MG',
-    rating: 3.8,
-    totalReviews: 5,
-    keywords: ['educado', 'atencioso', 'respeitoso'],
-    hasAlerts: false
-  }
-];
+const supabase = createClientComponentClient();
+
+interface Resultado {
+  slug: string;
+  nome: string;
+  cidade: string | null;
+  estado: string | null;
+  rating: number;
+  total: number;
+  keywords: string[];
+  hasAlerts: boolean;
+}
 
 export default function ConsultarReputacao() {
   const router = useRouter();
-  const [searchName, setSearchName] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [results, setResults] = useState<typeof mockResults>([]);
+
+  const [nome, setNome] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [estado, setEstado] = useState('');
+  const [results, setResults] = useState<Resultado[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSearch = () => {
-    if (!searchName.trim()) {
-      alert('Por favor, digite um nome para buscar.');
+  const handleSearch = async () => {
+    if (!nome.trim()) {
+      alert('Digite um nome para buscar.');
       return;
     }
 
-    // Filtrar termos ilegais/sensíveis
-    const forbiddenTerms = ['cpf', 'rg', 'endereço', 'telefone', 'documento'];
-    const searchLower = searchName.toLowerCase();
-    
-    if (forbiddenTerms.some(term => searchLower.includes(term))) {
-      alert('Busca contém termos não permitidos. Por favor, busque apenas por nome.');
+    const forbidden = ['cpf', 'rg', 'endereço', 'telefone', 'documento'];
+    if (forbidden.some(t => nome.toLowerCase().includes(t))) {
+      alert('Busca contém termos não permitidos.');
       return;
     }
 
-    // Simular busca
-    let filtered = mockResults;
-    
-    if (city) {
-      filtered = filtered.filter(r => r.city.toLowerCase().includes(city.toLowerCase()));
-    }
-    
-    if (state) {
-      filtered = filtered.filter(r => r.state.toLowerCase() === state.toLowerCase());
-    }
+    try {
+      setLoading(true);
+      setHasSearched(true);
 
-    setResults(filtered);
-    setHasSearched(true);
+      let query = supabase
+        .from('avaliacoes')
+        .select(`
+          id,
+          nome,
+          cidade,
+          estado,
+          flags,
+          comportamento,
+          seguranca_emocional,
+          respeito,
+          carater,
+          confianca
+        `)
+        .eq('publica', true)
+        .ilike('nome', `%${nome}%`);
+
+      if (cidade) {
+        query = query.ilike('cidade', `%${cidade}%`);
+      }
+
+      if (estado) {
+        query = query.eq('estado', estado.toUpperCase());
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      const agrupado = agruparResultados(data || []);
+      setResults(agrupado);
+
+    } catch (err) {
+      console.error('Erro na busca pública:', err);
+      alert('Erro ao buscar reputação.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getRatingColor = (rating: number) => {
@@ -84,9 +99,9 @@ export default function ConsultarReputacao() {
   };
 
   const getKeywordColor = (keyword: string) => {
-    const negative = ['agressivo', 'manipulador', 'desrespeitoso', 'violento', 'abusivo'];
+    const negative = ['agressivo', 'manipulador', 'desrespeitoso', 'abusivo', 'violento'];
     const positive = ['respeitoso', 'confiável', 'gentil', 'educado', 'atencioso'];
-    
+
     if (negative.includes(keyword.toLowerCase())) {
       return 'bg-red-500/20 text-red-300 border-red-500/30';
     }
@@ -103,154 +118,118 @@ export default function ConsultarReputacao() {
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-3 mb-2">
             <Search className="w-8 h-8 text-[#D4AF37]" />
-            <h1 className="text-2xl font-bold text-white">Consultar Reputação</h1>
+            <h1 className="text-2xl font-bold text-white">
+              Consultar Reputação
+            </h1>
           </div>
           <p className="text-gray-400 text-sm">
-            Busque informações sobre comportamentos relatados por outras usuárias.
+            Busque informações públicas sobre comportamentos relatados.
           </p>
         </div>
       </div>
 
-      {/* Search Form */}
+      {/* Form */}
       <div className="px-4 max-w-md mx-auto mt-6">
         <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-[#D4AF37]/20">
-          {/* Nome */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Nome do homem *
+            <label className="text-sm text-gray-300 mb-2 block">
+              Nome *
             </label>
             <input
-              type="text"
-              value={searchName}
-              onChange={(e) => setSearchName(e.target.value)}
-              placeholder="Digite o nome completo"
-              className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors"
+              value={nome}
+              onChange={e => setNome(e.target.value)}
+              className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white"
+              placeholder="Nome completo"
             />
           </div>
 
-          {/* Filtros opcionais */}
           <div className="grid grid-cols-2 gap-3 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
-                Cidade (opcional)
-              </label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="Ex: São Paulo"
-                className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
-                Estado (opcional)
-              </label>
-              <input
-                type="text"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                placeholder="Ex: SP"
-                maxLength={2}
-                className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors text-sm uppercase"
-              />
-            </div>
+            <input
+              value={cidade}
+              onChange={e => setCidade(e.target.value)}
+              placeholder="Cidade"
+              className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+            />
+            <input
+              value={estado}
+              onChange={e => setEstado(e.target.value)}
+              placeholder="UF"
+              maxLength={2}
+              className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-white text-sm uppercase"
+            />
           </div>
 
-          {/* Botão Consultar */}
           <button
             onClick={handleSearch}
-            className="w-full bg-gradient-to-r from-[#D4AF37] to-[#F4D03F] text-black font-bold py-3 rounded-lg hover:shadow-lg hover:shadow-[#D4AF37]/50 transition-all duration-300 flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-lg"
           >
-            <Search className="w-5 h-5" />
-            Consultar
+            {loading ? 'Buscando...' : 'Consultar'}
           </button>
         </div>
 
-        {/* Aviso de segurança */}
+        {/* Aviso */}
         <div className="mt-4 bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 flex gap-3">
-          <Shield className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-blue-300 text-sm font-medium mb-1">
-              Informações protegidas
-            </p>
-            <p className="text-blue-200/70 text-xs">
-              Apenas informações não sensíveis são exibidas. Dados pessoais como CPF, endereço e telefone são protegidos.
-            </p>
-          </div>
+          <Shield className="w-5 h-5 text-blue-400" />
+          <p className="text-blue-200/70 text-xs">
+            Apenas informações públicas e não sensíveis são exibidas.
+          </p>
         </div>
       </div>
 
-      {/* Results */}
+      {/* Resultados */}
       {hasSearched && (
         <div className="px-4 max-w-md mx-auto mt-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-white">
-              Resultados ({results.length})
-            </h2>
-            {results.length === 0 && (
-              <p className="text-gray-400 text-sm">Nenhum resultado encontrado</p>
-            )}
-          </div>
+          <h2 className="text-lg font-bold text-white mb-4">
+            Resultados ({results.length})
+          </h2>
 
-          {/* Result Cards */}
           <div className="space-y-4">
-            {results.map((result) => (
+            {results.map(r => (
               <div
-                key={result.id}
-                className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800 hover:border-[#D4AF37]/50 transition-all"
+                key={r.slug}
+                className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800"
               >
-                {/* Header com alerta */}
-                <div className="flex items-start justify-between mb-3">
+                <div className="flex justify-between mb-2">
                   <div>
-                    <h3 className="text-white font-bold text-lg">{result.name}</h3>
-                    <div className="flex items-center gap-2 text-gray-400 text-sm mt-1">
+                    <h3 className="text-white font-bold">{r.nome}</h3>
+                    <div className="flex items-center gap-1 text-gray-400 text-sm">
                       <MapPin className="w-4 h-4" />
-                      <span>{result.city}, {result.state}</span>
+                      {r.cidade}{r.estado ? `, ${r.estado}` : ''}
                     </div>
                   </div>
-                  {result.hasAlerts && (
-                    <div className="bg-red-500/20 p-2 rounded-lg">
-                      <AlertTriangle className="w-5 h-5 text-red-400" />
-                    </div>
+                  {r.hasAlerts && (
+                    <AlertTriangle className="text-red-400 w-5 h-5" />
                   )}
                 </div>
 
-                {/* Rating */}
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex items-center gap-1">
-                    <Star className={`w-5 h-5 ${getRatingColor(result.rating)} fill-current`} />
-                    <span className={`font-bold text-lg ${getRatingColor(result.rating)}`}>
-                      {result.rating.toFixed(1)}
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Star className={`${getRatingColor(r.rating)} w-5 h-5 fill-current`} />
+                  <span className={`font-bold ${getRatingColor(r.rating)}`}>
+                    {r.rating.toFixed(1)}
+                  </span>
                   <span className="text-gray-400 text-sm">
-                    {result.totalReviews} avaliações
+                    ({r.total} avaliações)
                   </span>
                 </div>
 
-                {/* Keywords */}
-                <div className="mb-4">
-                  <p className="text-gray-400 text-xs mb-2">Palavras-chave mais frequentes:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {result.keywords.map((keyword, idx) => (
-                      <span
-                        key={idx}
-                        className={`px-3 py-1 rounded-full text-xs font-medium border ${getKeywordColor(keyword)}`}
-                      >
-                        {keyword}
-                      </span>
-                    ))}
-                  </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {r.keywords.map((k, i) => (
+                    <span
+                      key={i}
+                      className={`px-2 py-1 rounded-full text-xs border ${getKeywordColor(k)}`}
+                    >
+                      {k}
+                    </span>
+                  ))}
                 </div>
 
-                {/* Botão Ver Detalhes */}
                 <button
-                  onClick={() => router.push(`/consultar-reputacao/${result.id}`)}
-                  className="w-full bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#D4AF37] font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  onClick={() => router.push(`/consultar-reputacao/${encodeURIComponent(r.slug)}`)}
+                  className="w-full bg-[#D4AF37]/10 text-[#D4AF37] py-2 rounded-lg flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-4 h-4" />
-                  Ver mais detalhes
+                  Ver detalhes
                 </button>
               </div>
             ))}
@@ -261,4 +240,56 @@ export default function ConsultarReputacao() {
       <Navbar />
     </div>
   );
+}
+
+/**
+ * 🔧 AGREGA AVALIAÇÕES PÚBLICAS POR PESSOA
+ */
+function agruparResultados(lista: any[]): Resultado[] {
+  const mapa = new Map<string, any>();
+
+  lista.forEach(a => {
+    const key = `${a.nome}|${a.cidade}|${a.estado}`;
+
+    if (!mapa.has(key)) {
+      mapa.set(key, {
+        nome: a.nome,
+        cidade: a.cidade,
+        estado: a.estado,
+        soma: 0,
+        total: 0,
+        keywords: new Set<string>(),
+        hasAlerts: false
+      });
+    }
+
+    const media =
+      (a.comportamento +
+        a.seguranca_emocional +
+        a.respeito +
+        a.carater +
+        a.confianca) / 5;
+
+    const item = mapa.get(key);
+    item.soma += media;
+    item.total++;
+
+    (a.flags || []).forEach((f: string) => {
+      item.keywords.add(f);
+      if (['agressivo', 'abusivo', 'violento', 'manipulador'].includes(f)) {
+        item.hasAlerts = true;
+      }
+    });
+  });
+
+  return Array.from(mapa.entries()).map(([slug, v]) => ({
+    slug,
+    nome: v.nome,
+    cidade: v.cidade,
+    estado: v.estado,
+    rating: Number((v.soma / v.total).toFixed(1)),
+    total: v.total,
+    keywords: Array.from(v.keywords).slice(0, 6),
+    hasAlerts: v.hasAlerts
+  }));
 }
