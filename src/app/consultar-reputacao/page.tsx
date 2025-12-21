@@ -139,7 +139,7 @@ export default function ConsultarReputacao() {
                 </div>
 
                 <button
-                  onClick={() => router.push(`/consultar-reputacao/${encodeURIComponent(r.slug)}`)}
+                  onClick={() => alert('Detalhes completos em breve. Esta é uma consulta pública resumida.');}
                   className="w-full bg-[#D4AF37]/10 text-[#D4AF37] py-2 rounded-lg flex justify-center gap-2"
                 >
                   <TrendingUp className="w-4 h-4" />
