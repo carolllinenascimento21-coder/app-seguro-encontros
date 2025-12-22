@@ -1,29 +1,44 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Phone, Check, X } from 'lucide-react'
+import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
+import { ShieldAlert, Phone, XCircle } from 'lucide-react'
+
+type Location = {
+  lat: number
+  lng: number
+}
 
 export default function ModoSeguroPage() {
-  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const supabase = createBrowserSupabaseClient()
 
+  const [location, setLocation] = useState<Location | null>(null)
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [sendingAlert, setSendingAlert] = useState(false)
   const [alertError, setAlertError] = useState<string | null>(null)
   const [alertSuccess, setAlertSuccess] = useState(false)
 
-  // 📍 Captura localização
+  /* =========================
+     GEOLOCALIZAÇÃO
+  ========================== */
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
+      pos => {
         setLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-        }),
-      () => setLocation(null)
+        })
+      },
+      () => {
+        setAlertError('Não foi possível obter localização')
+      },
+      { enableHighAccuracy: true }
     )
   }, [])
 
-  // 🚨 Enviar alerta
+  /* =========================
+     ENVIAR ALERTA
+  ========================== */
   const sendEmergencyAlert = async () => {
     if (!location) {
       setAlertError('Localização não disponível')
@@ -34,10 +49,20 @@ export default function ModoSeguroPage() {
       setSendingAlert(true)
       setAlertError(null)
 
+      // 🔑 Token da usuária
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        throw new Error('Usuária não autenticada')
+      }
+
       const res = await fetch('/api/alerta-emergencia', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           latitude: location.lat,
@@ -45,12 +70,14 @@ export default function ModoSeguroPage() {
         }),
       })
 
+      const data = await res.json()
+
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Falha ao enviar alerta')
+        throw new Error(data.error || 'Erro ao enviar alerta')
       }
 
       setAlertSuccess(true)
+      setShowEmergencyModal(false)
     } catch (err: any) {
       setAlertError(err.message)
     } finally {
@@ -59,100 +86,98 @@ export default function ModoSeguroPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white px-4 py-8">
+    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+      <div className="w-full max-w-sm space-y-6">
 
-      {/* STATUS */}
-      <div className="border border-green-600 rounded-xl p-4 mb-6">
-        <p className="text-green-500 font-semibold">
-          Modo Encontro Seguro Ativo
-        </p>
-        {location && (
-          <p className="text-sm text-gray-400 mt-1">
-            📍 {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
+        {/* CARD PRINCIPAL */}
+        <div className="border border-green-600 rounded-2xl p-4">
+          <h1 className="text-green-500 font-bold text-lg flex items-center gap-2">
+            <ShieldAlert size={18} />
+            Modo Encontro Seguro
+          </h1>
+
+          <p className="text-sm text-gray-400 mt-2">
+            Sua localização será enviada aos contatos de emergência se você estiver em risco.
           </p>
-        )}
-      </div>
 
-      {/* BOTÕES PRINCIPAIS */}
-      <div className="space-y-4">
+          {location && (
+            <p className="text-xs text-gray-500 mt-2">
+              {location.lat}, {location.lng}
+            </p>
+          )}
+        </div>
+
+        {/* BOTÕES */}
         <button
           onClick={() => setShowEmergencyModal(true)}
-          className="w-full bg-red-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2"
+          className="w-full bg-red-600 py-3 rounded-xl font-bold"
         >
-          <AlertTriangle />
-          ESTOU EM RISCO
+          🚨 ESTOU EM RISCO
         </button>
 
         <button
-          className="w-full bg-green-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+          className="w-full bg-green-600 py-3 rounded-xl font-bold text-black"
         >
-          <Check />
-          Estou bem
+          ✓ Estou bem
         </button>
-      </div>
 
-      {/* MODAL DE EMERGÊNCIA */}
-      {showEmergencyModal && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center px-4">
-          <div className="bg-gray-900 border border-red-600 rounded-2xl p-6 w-full max-w-sm space-y-4">
+        {/* ERRO */}
+        {alertError && (
+          <p className="text-red-500 text-sm text-center">{alertError}</p>
+        )}
 
-            <h2 className="text-xl font-bold text-red-500 flex items-center gap-2">
-              <AlertTriangle />
-              Emergência
-            </h2>
+        {/* MODAL EMERGÊNCIA */}
+        {showEmergencyModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+            <div className="bg-[#0b1220] border border-red-600 rounded-2xl p-5 w-80 space-y-4">
 
-            <p className="text-sm text-gray-300">
-              Escolha uma ação imediata:
-            </p>
+              <h2 className="text-red-500 font-bold text-lg flex items-center gap-2">
+                <ShieldAlert size={18} />
+                Emergência
+              </h2>
 
-            {/* ERRO */}
-            {alertError && (
-              <div className="bg-red-500/10 border border-red-500 text-red-400 p-3 rounded-lg text-sm">
-                {alertError}
-              </div>
-            )}
+              <p className="text-sm text-gray-400">
+                Escolha uma ação imediata:
+              </p>
 
-            {/* SUCESSO */}
-            {alertSuccess && (
-              <div className="bg-green-500/10 border border-green-500 text-green-400 p-3 rounded-lg text-sm">
-                Alerta enviado com sucesso aos seus contatos.
-              </div>
-            )}
-
-            {/* BOTÕES */}
-            <div className="space-y-2">
-              <button
-                onClick={() => window.location.href = 'tel:190'}
-                className="w-full bg-red-600 py-3 rounded-xl flex items-center justify-center gap-2 font-bold"
+              {/* LIGAR POLÍCIA */}
+              <a
+                href="tel:190"
+                className="w-full flex items-center justify-center gap-2 bg-red-600 py-3 rounded-xl font-bold"
               >
-                <Phone />
+                <Phone size={16} />
                 Ligar 190 (Polícia)
-              </button>
+              </a>
 
+              {/* ENVIAR ALERTA */}
               <button
                 onClick={sendEmergencyAlert}
                 disabled={sendingAlert}
-                className="w-full bg-yellow-400 text-black py-3 rounded-xl font-bold"
+                className="w-full bg-yellow-400 py-3 rounded-xl font-bold text-black disabled:opacity-50"
               >
                 {sendingAlert ? 'Enviando alerta...' : 'Enviar alerta para contatos'}
               </button>
 
+              {/* CANCELAR */}
               <button
-                onClick={() => {
-                  setShowEmergencyModal(false)
-                  setAlertError(null)
-                  setAlertSuccess(false)
-                }}
-                className="w-full bg-gray-700 py-2 rounded-xl flex items-center justify-center gap-2"
+                onClick={() => setShowEmergencyModal(false)}
+                className="w-full flex items-center justify-center gap-2 border border-gray-600 py-2 rounded-xl"
               >
-                <X />
+                <XCircle size={16} />
                 Cancelar
               </button>
-            </div>
 
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* SUCESSO */}
+        {alertSuccess && (
+          <p className="text-green-500 text-center text-sm">
+            Alerta enviado com sucesso 🚨
+          </p>
+        )}
+      </div>
     </div>
   )
 }
