@@ -14,7 +14,6 @@ export default function SignupPage() {
   const router = useRouter()
 
   const [fullName, setFullName] = useState('')
-  const [birthDate, setBirthDate] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -46,7 +45,7 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!fullName || !birthDate || !email || !password || !confirmPassword) {
+    if (!fullName || !email || !password || !confirmPassword) {
       setErrorMessage('Preencha todos os campos.')
       return
     }
@@ -66,10 +65,8 @@ export default function SignupPage() {
       password,
       options: {
         data: {
-          full_name: fullName,
-          birth_date: birthDate,
-          gender: 'female',
-          termos_aceitos: true,
+          nome: fullName,          // usado pelo trigger
+          termos_aceitos: true,    // usado pelo trigger
         },
       },
     })
@@ -80,14 +77,13 @@ export default function SignupPage() {
       return
     }
 
-    // ✅ PERFIL É CRIADO AUTOMATICAMENTE PELO TRIGGER
+    // ✅ Perfil será criado automaticamente pelo trigger
     setSuccessMessage(
       'Conta criada com sucesso. Verifique seu e-mail para confirmar o cadastro antes de entrar.'
     )
 
     setLoading(false)
 
-    // Opcional: redirecionar após alguns segundos
     setTimeout(() => {
       router.replace('/login')
     }, 4000)
@@ -123,18 +119,6 @@ export default function SignupPage() {
             <Input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              disabled={!termsOk}
-              required
-              className="bg-black border-[#D4AF37] text-white"
-            />
-          </div>
-
-          <div>
-            <Label>Data de nascimento</Label>
-            <Input
-              type="date"
-              value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
               disabled={!termsOk}
               required
               className="bg-black border-[#D4AF37] text-white"
