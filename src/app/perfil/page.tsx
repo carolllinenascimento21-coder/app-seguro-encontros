@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 import { User, LogOut, Plus, Trash2, Shield } from 'lucide-react'
 
 type EmergencyContact = {
@@ -13,47 +13,78 @@ type EmergencyContact = {
   telefone: string
 }
 
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 export default function PerfilPage() {
   const router = useRouter()
-  const supabase = createBrowserSupabaseClient()
 
-  const [profile, setProfile] = useState<any>(null)
+  const [profile, setProfile] = useState<any | null>(null)
   const [contacts, setContacts] = useState<EmergencyContact[]>([])
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // ✅ TUDO RODA APENAS NO CLIENTE
   useEffect(() => {
     const load = async () => {
+      // 🔐 Sessão
       const {
-        data: { user }
-      } = await supabase.auth.getUser()
+        data: { session }
+      } = await supabase.auth.getSession()
 
-      if (!user) {
+      if (!session?.user) {
         router.replace('/login')
         return
       }
 
-      const { data: profileData } = await supabase
+      const user = session.user
+
+      // 👤 Busca perfil (sem quebrar)
+      const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
+      // ➕ Cria perfil automaticamente se não existir
+      let finalProfile = profileData
+
+      if (!profileData) {
+        const { data: newProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email,
+            full_name: '',
+            selfie_verified: false,
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Erro ao criar perfil:', insertError)
+          return
+        }
+
+        finalProfile = newProfile
+      }
+
+      // 📞 Contatos
       const { data: contactsData } = await supabase
         .from('emergency_contacts')
         .select('id, nome, telefone')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
-      setProfile(profileData)
+      setProfile(finalProfile)
       setContacts(contactsData || [])
       setLoading(false)
     }
 
     load()
-  }, [router, supabase])
+  }, [router])
 
   const addContact = async () => {
     if (!nome || !telefone) {
@@ -62,13 +93,13 @@ export default function PerfilPage() {
     }
 
     const {
-      data: { user }
-    } = await supabase.auth.getUser()
+      data: { session }
+    } = await supabase.auth.getSession()
 
-    if (!user) return
+    if (!session?.user) return
 
     const { error } = await supabase.from('emergency_contacts').insert({
-      user_id: user.id,
+      user_id: session.user.id,
       nome,
       telefone
     })
@@ -80,7 +111,14 @@ export default function PerfilPage() {
 
     setNome('')
     setTelefone('')
-    location.reload()
+
+    const { data } = await supabase
+      .from('emergency_contacts')
+      .select('id, nome, telefone')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+
+    setContacts(data || [])
   }
 
   const removeContact = async (id: string) => {
@@ -103,11 +141,19 @@ export default function PerfilPage() {
         <div className="border border-[#D4AF37] rounded-xl p-6">
           <div className="text-center mb-4">
             <User className="mx-auto text-[#D4AF37]" size={32} />
-            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">Meu Perfil</h1>
+            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">
+              Meu Perfil
+            </h1>
           </div>
 
-          <p><span className="text-gray-400">Nome:</span> {profile.full_name}</p>
-          <p><span className="text-gray-400">Email:</span> {profile.email}</p>
+          <p>
+            <span className="text-gray-400">Nome:</span>{' '}
+            {profile?.full_name || 'Não informado'}
+          </p>
+          <p>
+            <span className="text-gray-400">Email:</span>{' '}
+            {profile?.email || '—'}
+          </p>
         </div>
 
         {/* CONTATOS */}
@@ -124,12 +170,18 @@ export default function PerfilPage() {
           )}
 
           {contacts.map(c => (
-            <div key={c.id} className="flex justify-between items-center bg-black/40 p-3 rounded-lg">
+            <div
+              key={c.id}
+              className="flex justify-between items-center bg-black/40 p-3 rounded-lg"
+            >
               <div>
                 <p>{c.nome}</p>
                 <p className="text-sm text-gray-400">{c.telefone}</p>
               </div>
-              <button onClick={() => removeContact(c.id)} className="text-red-500">
+              <button
+                onClick={() => removeContact(c.id)}
+                className="text-red-500"
+              >
                 <Trash2 size={18} />
               </button>
             </div>
