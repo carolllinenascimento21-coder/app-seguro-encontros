@@ -1,12 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 import { AlertTriangle, PhoneCall, X } from 'lucide-react'
 
-export default function ModoSeguroPage() {
-  const supabase = createBrowserSupabaseClient()
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
+export default function ModoSeguroPage() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [sendingAlert, setSendingAlert] = useState(false)
@@ -14,6 +17,11 @@ export default function ModoSeguroPage() {
 
   // 📍 Captura localização
   useEffect(() => {
+    if (!navigator.geolocation) {
+      setAlertError('Geolocalização não suportada neste dispositivo.')
+      return
+    }
+
     navigator.geolocation.getCurrentPosition(
       pos => {
         setCoords({
@@ -27,32 +35,31 @@ export default function ModoSeguroPage() {
     )
   }, [])
 
-  // 🚨 ENVIO DO ALERTA (CORRIGIDO)
+  // 🚨 ENVIO DO ALERTA (VERSÃO CORRETA)
   const sendEmergencyAlert = async () => {
     try {
       setSendingAlert(true)
       setAlertError(null)
 
       if (!coords) {
-        setAlertError('Localização indisponível')
+        setAlertError('Localização indisponível.')
         return
       }
 
-      // ✅ PEGAR TOKEN CORRETAMENTE
+      // ✅ Verifica sessão (via cookie)
       const {
         data: { session }
       } = await supabase.auth.getSession()
 
-      if (!session?.access_token) {
-        setAlertError('Usuária não autenticada')
+      if (!session?.user) {
+        setAlertError('Usuária não autenticada. Faça login novamente.')
         return
       }
 
       const res = await fetch('/api/alerta-emergencia', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           latitude: coords.lat,
@@ -63,14 +70,14 @@ export default function ModoSeguroPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        setAlertError(data.error || 'Erro ao enviar alerta')
+        setAlertError(data.error || 'Erro ao enviar alerta.')
         return
       }
 
       alert('🚨 Alerta enviado com sucesso!')
       setShowEmergencyModal(false)
     } catch (err) {
-      setAlertError('Erro inesperado ao enviar alerta')
+      setAlertError('Erro inesperado ao enviar alerta.')
     } finally {
       setSendingAlert(false)
     }
@@ -108,6 +115,7 @@ export default function ModoSeguroPage() {
         {showEmergencyModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
             <div className="bg-[#0b1220] border border-red-600 rounded-2xl p-6 w-full max-w-sm space-y-4">
+              
               <div className="flex items-center gap-2 text-red-500 font-bold">
                 <AlertTriangle />
                 Emergência
@@ -142,6 +150,7 @@ export default function ModoSeguroPage() {
                 <X size={16} />
                 Cancelar
               </button>
+
             </div>
           </div>
         )}
