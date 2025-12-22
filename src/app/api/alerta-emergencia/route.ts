@@ -16,48 +16,50 @@ export async function POST(req: Request) {
   try {
     const { latitude, longitude } = await req.json()
 
-    if (!latitude || !longitude) {
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
       return NextResponse.json(
-        { error: 'Localização não informada' },
+        { error: 'Localização inválida' },
         { status: 400 }
       )
     }
 
     const authHeader = req.headers.get('authorization')
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'Não autenticado' },
+        { error: 'Token não enviado' },
         { status: 401 }
       )
     }
 
     const token = authHeader.replace('Bearer ', '')
 
-    const {
-      data: { user },
-      error: authError
-    } = await supabase.auth.getUser(token)
+    // ✅ VALIDA USUÁRIA PELO TOKEN (ADMIN)
+    const { data: userData, error: userError } =
+      await supabase.auth.getUser(token)
 
-    if (authError || !user) {
+    if (userError || !userData?.user) {
       return NextResponse.json(
-        { error: 'Usuária inválida' },
+        { error: 'Usuária não autenticada' },
         { status: 401 }
       )
     }
 
+    const userId = userData.user.id
+
+    // ⚠️ CONFIRME O NOME REAL DA TABELA
     const { data: contatos, error: contatosError } = await supabase
-      .from('contatos_emergencia')
+      .from('emergency_contacts')
       .select('telefone')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
+      .eq('ativo', true)
 
     if (contatosError || !contatos || contatos.length === 0) {
       return NextResponse.json(
-        { error: 'Nenhum contato de emergência cadastrado' },
+        { error: 'Nenhum contato de emergência ativo' },
         { status: 400 }
       )
     }
 
-    // ✅ TEMPLATE STRING CORRETA
     const mensagem = `🚨 ALERTA DE EMERGÊNCIA 🚨
 Estou em risco e preciso de ajuda.
 
