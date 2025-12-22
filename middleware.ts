@@ -1,71 +1,81 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
-
-const PUBLIC_ROUTES = [
-  '/',
-  '/onboarding',
-  '/onboarding/aceitar-termos',
-  '/login',
-  '/signup',
-  '/auth/callback',
-]
+import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
-  const { pathname } = req.nextUrl
 
-  if (
-    PUBLIC_ROUTES.includes(pathname) ||
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api')
-  ) {
-    return res
-  }
-
-  const supabase = createMiddlewareClient({ req, res })
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => req.cookies.getAll(),
+        setAll: (cookies) => {
+          cookies.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
+  const pathname = req.nextUrl.pathname
+
+  // 🔒 Rotas públicas
+  const publicRoutes = ['/login', '/signup']
+
+  // 🔐 Se não estiver logado
   if (!user) {
-    return redirect(req, '/login')
+    if (!publicRoutes.includes(pathname)) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+    return res
   }
 
+  // 🚫 Se estiver logado, não pode acessar login/signup
+  if (publicRoutes.includes(pathname)) {
+    return NextResponse.redirect(new URL('/home', req.url))
+  }
+
+  // 🔎 Busca status da selfie
   const { data: profile } = await supabase
     .from('profiles')
-    .select('*')
+    .select('selfie_verified')
     .eq('id', user.id)
     .maybeSingle()
 
-  if (!profile) {
-    return redirect(req, '/onboarding')
+  const selfieVerified = profile?.selfie_verified === true
+
+  // 🚨 Bloqueia modo seguro sem selfie
+  if (!selfieVerified && pathname.startsWith('/modo-seguro')) {
+    return NextResponse.redirect(
+      new URL('/verificacao-selfie', req.url)
+    )
   }
 
-  if (!profile.termos_aceitos) {
-    return redirect(req, '/onboarding/aceitar-termos')
-  }
-
-  if (!profile.onboarding_completed) {
-    return redirect(req, '/onboarding')
-  }
-
-  if (!profile.selfie_verified) {
-    return redirect(req, '/verification-pending')
+  // 🚫 Bloqueia acesso à verificação se já verificado
+  if (selfieVerified && pathname.startsWith('/verificacao-selfie')) {
+    return NextResponse.redirect(new URL('/home', req.url))
   }
 
   return res
 }
 
-function redirect(req: NextRequest, path: string) {
-  if (req.nextUrl.pathname === path) return NextResponse.next()
-  const url = req.nextUrl.clone()
-  url.pathname = path
-  url.search = ''
-  return NextResponse.redirect(url)
-}
-
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    /*
+     * Aplica o middleware apenas nessas rotas
+     */
+    '/login',
+    '/signup',
+    '/home',
+    '/perfil',
+    '/modo-seguro',
+    '/verificacao-selfie',
+  ],
 }
