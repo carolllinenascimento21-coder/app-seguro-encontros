@@ -1,168 +1,98 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { AlertTriangle, Check } from 'lucide-react'
+
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
-import { User, LogOut, Plus, Trash2, Shield } from 'lucide-react'
+export default function ModoSeguroPage() {
+  const [latitude, setLatitude] = useState<number | null>(null)
+  const [longitude, setLongitude] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
 
-type EmergencyContact = {
-  id: string
-  nome: string
-  telefone: string
-}
-
-export default function PerfilPage() {
-  const router = useRouter()
-  const supabase = createBrowserSupabaseClient()
-
-  const [profile, setProfile] = useState<any>(null)
-  const [contacts, setContacts] = useState<EmergencyContact[]>([])
-  const [nome, setNome] = useState('')
-  const [telefone, setTelefone] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  // ✅ TUDO RODA APENAS NO CLIENTE
+  // ✅ LOCALIZAÇÃO SOMENTE NO CLIENTE
   useEffect(() => {
-    const load = async () => {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
+    if (!navigator.geolocation) return
 
-      if (!user) {
-        router.replace('/login')
-        return
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setLatitude(pos.coords.latitude)
+        setLongitude(pos.coords.longitude)
+      },
+      err => {
+        console.error('Erro localização', err)
       }
+    )
+  }, [])
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      const { data: contactsData } = await supabase
-        .from('emergency_contacts')
-        .select('id, nome, telefone')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      setProfile(profileData)
-      setContacts(contactsData || [])
-      setLoading(false)
-    }
-
-    load()
-  }, [router, supabase])
-
-  const addContact = async () => {
-    if (!nome || !telefone) {
-      alert('Preencha nome e telefone')
+  // ✅ ALERTA SÓ DISPARA NO CLICK
+  const enviarAlerta = async () => {
+    if (latitude === null || longitude === null) {
+      alert('Localização não disponível')
       return
     }
 
-    const {
-      data: { user }
-    } = await supabase.auth.getUser()
+    setLoading(true)
 
-    if (!user) return
+    const session = localStorage.getItem('sb-access-token')
+    if (!session) {
+      alert('Usuária não autenticada')
+      setLoading(false)
+      return
+    }
 
-    const { error } = await supabase.from('emergency_contacts').insert({
-      user_id: user.id,
-      nome,
-      telefone
+    const res = await fetch('/api/alerta-emergencia', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session}`
+      },
+      body: JSON.stringify({ latitude, longitude })
     })
 
-    if (error) {
-      alert('Erro ao salvar contato')
+    setLoading(false)
+
+    if (!res.ok) {
+      const error = await res.json()
+      alert(error.error || 'Erro ao enviar alerta')
       return
     }
 
-    setNome('')
-    setTelefone('')
-    location.reload()
+    alert('🚨 Alerta enviado com sucesso!')
   }
-
-  const removeContact = async (id: string) => {
-    await supabase.from('emergency_contacts').delete().eq('id', id)
-    setContacts(prev => prev.filter(c => c.id !== id))
-  }
-
-  const logout = async () => {
-    await supabase.auth.signOut()
-    router.replace('/login')
-  }
-
-  if (loading) return null
 
   return (
-    <div className="min-h-screen bg-black px-4 py-10 text-white">
+    <div className="min-h-screen bg-black text-white px-4 py-10">
       <div className="max-w-md mx-auto space-y-6">
 
-        {/* PERFIL */}
-        <div className="border border-[#D4AF37] rounded-xl p-6">
-          <div className="text-center mb-4">
-            <User className="mx-auto text-[#D4AF37]" size={32} />
-            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">Meu Perfil</h1>
-          </div>
+        <div className="border border-green-600 rounded-xl p-6">
+          <h1 className="text-xl font-bold text-green-500 mb-2">
+            Modo Encontro Seguro
+          </h1>
 
-          <p><span className="text-gray-400">Nome:</span> {profile.full_name}</p>
-          <p><span className="text-gray-400">Email:</span> {profile.email}</p>
-        </div>
+          <p className="text-sm text-gray-400">
+            Sua localização será enviada aos contatos de emergência se você estiver em risco.
+          </p>
 
-        {/* CONTATOS */}
-        <div className="border border-green-600 rounded-xl p-6 space-y-4">
-          <div className="flex items-center gap-2 text-green-500 font-semibold">
-            <Shield size={18} />
-            Contatos de Emergência
-          </div>
-
-          {contacts.length === 0 && (
-            <p className="text-sm text-gray-400">
-              Nenhum contato cadastrado.
+          {latitude && longitude && (
+            <p className="text-xs text-gray-500 mt-3">
+              📍 {latitude.toFixed(5)}, {longitude.toFixed(5)}
             </p>
           )}
-
-          {contacts.map(c => (
-            <div key={c.id} className="flex justify-between items-center bg-black/40 p-3 rounded-lg">
-              <div>
-                <p>{c.nome}</p>
-                <p className="text-sm text-gray-400">{c.telefone}</p>
-              </div>
-              <button onClick={() => removeContact(c.id)} className="text-red-500">
-                <Trash2 size={18} />
-              </button>
-            </div>
-          ))}
-
-          <div className="space-y-2">
-            <input
-              placeholder="Nome"
-              value={nome}
-              onChange={e => setNome(e.target.value)}
-              className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
-            />
-            <input
-              placeholder="Telefone (+55...)"
-              value={telefone}
-              onChange={e => setTelefone(e.target.value)}
-              className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
-            />
-            <button
-              onClick={addContact}
-              className="w-full bg-green-600 text-black font-bold py-2 rounded-lg flex items-center justify-center gap-2"
-            >
-              <Plus size={16} />
-              Adicionar contato
-            </button>
-          </div>
         </div>
 
         <button
-          onClick={logout}
-          className="w-full border border-red-600 text-red-500 py-2 rounded-lg hover:bg-red-600 hover:text-white transition"
+          onClick={enviarAlerta}
+          disabled={loading}
+          className="w-full bg-red-600 hover:bg-red-700 transition text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2"
         >
-          <LogOut size={16} /> Sair
+          <AlertTriangle size={20} />
+          {loading ? 'Enviando...' : 'ESTOU EM RISCO'}
+        </button>
+
+        <button className="w-full bg-green-600 text-black font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+          <Check size={18} />
+          Estou bem
         </button>
 
       </div>
