@@ -1,16 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import twilio from 'twilio'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID!,
-  process.env.TWILIO_AUTH_TOKEN!
-)
 
 export async function POST(req: Request) {
   try {
@@ -23,42 +14,58 @@ export async function POST(req: Request) {
       )
     }
 
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Token não enviado' },
-        { status: 401 }
-      )
-    }
+    // ✅ Supabase Server Client (App Router correto)
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll: () => cookies().getAll(),
+          setAll: () => {}
+        }
+      }
+    )
 
-    const token = authHeader.replace('Bearer ', '')
+    // ✅ Usuária autenticada pela sessão
+    const {
+      data: { user },
+      error: authError
+    } = await supabase.auth.getUser()
 
-    // ✅ VALIDA USUÁRIA PELO TOKEN (ADMIN)
-    const { data: userData, error: userError } =
-      await supabase.auth.getUser(token)
-
-    if (userError || !userData?.user) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: 'Usuária não autenticada' },
         { status: 401 }
       )
     }
 
-    const userId = userData.user.id
-
-    // ⚠️ CONFIRME O NOME REAL DA TABELA
+    // ⚠️ Confirme o nome da tabela e colunas
     const { data: contatos, error: contatosError } = await supabase
       .from('emergency_contacts')
       .select('telefone')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .eq('ativo', true)
 
-    if (contatosError || !contatos || contatos.length === 0) {
+    if (contatosError) {
+      console.error('Erro ao buscar contatos:', contatosError)
+      return NextResponse.json(
+        { error: 'Erro ao buscar contatos de emergência' },
+        { status: 500 }
+      )
+    }
+
+    if (!contatos || contatos.length === 0) {
       return NextResponse.json(
         { error: 'Nenhum contato de emergência ativo' },
         { status: 400 }
       )
     }
+
+    // ✅ Twilio Client
+    const twilioClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID!,
+      process.env.TWILIO_AUTH_TOKEN!
+    )
 
     const mensagem = `🚨 ALERTA DE EMERGÊNCIA 🚨
 Estou em risco e preciso de ajuda.
@@ -76,7 +83,7 @@ https://maps.google.com/?q=${latitude},${longitude}`
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Erro alerta emergência:', error)
+    console.error('ERRO ALERTA EMERGÊNCIA:', error)
     return NextResponse.json(
       { error: 'Erro interno ao enviar alerta' },
       { status: 500 }
