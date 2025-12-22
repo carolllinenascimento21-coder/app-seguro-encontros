@@ -20,9 +20,10 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [termsOk, setTermsOk] = useState(false)
 
-  // 🔒 Garante que termos foram aceitos antes do cadastro
+  // 🔒 Garante aceite dos termos
   useEffect(() => {
     const storedAcceptance = localStorage.getItem('confia_termos_aceite')
 
@@ -42,58 +43,55 @@ export default function SignupPage() {
     router.replace('/onboarding/aceitar-termos?next=/signup')
   }, [router])
 
- const handleSignup = async (e: React.FormEvent) => {
-  e.preventDefault()
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-  if (!fullName || !birthDate || !email || !password || !confirmPassword) {
-    setErrorMessage('Preencha todos os campos.')
-    return
-  }
+    if (!fullName || !birthDate || !email || !password || !confirmPassword) {
+      setErrorMessage('Preencha todos os campos.')
+      return
+    }
 
-  if (password !== confirmPassword) {
-    setErrorMessage('As senhas não coincidem.')
-    return
-  }
+    if (password !== confirmPassword) {
+      setErrorMessage('As senhas não coincidem.')
+      return
+    }
 
-  setLoading(true)
-  setErrorMessage('')
+    setLoading(true)
+    setErrorMessage('')
+    setSuccessMessage('')
 
-  // 1️⃣ Cria o usuário
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  })
-
-  if (error || !data.user) {
-    setErrorMessage(error?.message || 'Erro ao criar conta')
-    setLoading(false)
-    return
-  }
-
-  // 2️⃣ Cria o perfil
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .insert({
-      id: data.user.id,
+    // 1️⃣ Cria usuário no Auth
+    const { data, error } = await supabase.auth.signUp({
       email,
-      full_name: fullName,
-      birth_date: birthDate,
-      gender: 'female',
-      selfie_verified: false,
-      termos_aceitos: true,
-      onboarding_completed: false,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          birth_date: birthDate,
+          gender: 'female',
+          termos_aceitos: true,
+        },
+      },
     })
 
-  if (profileError) {
-    setErrorMessage('Conta criada, mas erro ao criar perfil.')
+    if (error || !data.user) {
+      setErrorMessage(error?.message || 'Erro ao criar conta.')
+      setLoading(false)
+      return
+    }
+
+    // ✅ PERFIL É CRIADO AUTOMATICAMENTE PELO TRIGGER
+    setSuccessMessage(
+      'Conta criada com sucesso. Verifique seu e-mail para confirmar o cadastro antes de entrar.'
+    )
+
     setLoading(false)
-    return
+
+    // Opcional: redirecionar após alguns segundos
+    setTimeout(() => {
+      router.replace('/login')
+    }, 4000)
   }
-
-  setLoading(false)
-  router.push('/verification-pending')
-}
-
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black px-4 text-white">
@@ -113,20 +111,26 @@ export default function SignupPage() {
           </div>
         )}
 
+        {successMessage && (
+          <div className="rounded-md border border-green-700 bg-green-950/60 px-4 py-3 text-sm text-green-200">
+            {successMessage}
+          </div>
+        )}
+
         <form onSubmit={handleSignup} className="space-y-5">
           <div>
-            <Label className="text-gray-300">Nome completo</Label>
+            <Label>Nome completo</Label>
             <Input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               disabled={!termsOk}
               required
-              className="bg-black border-[#D4AF37] text-white placeholder:text-gray-500"
+              className="bg-black border-[#D4AF37] text-white"
             />
           </div>
 
           <div>
-            <Label className="text-gray-300">Data de nascimento</Label>
+            <Label>Data de nascimento</Label>
             <Input
               type="date"
               value={birthDate}
@@ -138,19 +142,19 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <Label className="text-gray-300">E-mail</Label>
+            <Label>E-mail</Label>
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={!termsOk}
               required
-              className="bg-black border-[#D4AF37] text-white placeholder:text-gray-500"
+              className="bg-black border-[#D4AF37] text-white"
             />
           </div>
 
           <div>
-            <Label className="text-gray-300">Senha</Label>
+            <Label>Senha</Label>
             <Input
               type="password"
               value={password}
@@ -162,7 +166,7 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <Label className="text-gray-300">Confirmar senha</Label>
+            <Label>Confirmar senha</Label>
             <Input
               type="password"
               value={confirmPassword}
@@ -173,19 +177,10 @@ export default function SignupPage() {
             />
           </div>
 
-          <div>
-            <Label className="text-gray-300">Gênero</Label>
-            <Input
-              value="Mulher"
-              disabled
-              className="bg-black border-[#D4AF37] text-[#D4AF37]"
-            />
-          </div>
-
           <Button
             type="submit"
             disabled={loading || !termsOk}
-            className="w-full rounded-xl bg-[#D4AF37] py-3 font-semibold text-black hover:bg-[#c9a634] disabled:opacity-50"
+            className="w-full rounded-xl bg-[#D4AF37] py-3 font-semibold text-black hover:bg-[#c9a634]"
           >
             {loading ? 'Criando conta...' : 'Cadastrar'}
           </Button>
@@ -193,10 +188,7 @@ export default function SignupPage() {
 
         <p className="text-center text-sm text-gray-400">
           Já tem conta?{' '}
-          <Link
-            href="/login"
-            className="font-semibold text-[#D4AF37] hover:underline"
-          >
+          <Link href="/login" className="text-[#D4AF37] hover:underline">
             Entrar
           </Link>
         </p>
