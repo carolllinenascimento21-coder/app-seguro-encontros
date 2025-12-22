@@ -1,63 +1,67 @@
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import twilio from 'twilio'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID!,
+  process.env.TWILIO_AUTH_TOKEN!
+)
 
 export async function POST(req: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-    }
-
-    const { latitude, longitude, tipo } = await req.json()
+    const { latitude, longitude } = await req.json()
 
     if (!latitude || !longitude) {
-      return NextResponse.json({ error: 'Localização inválida' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Localização não informada' },
+        { status: 400 }
+      )
     }
 
-    // Buscar contatos ativos
-    const { data: contatos, error } = await supabase
+    // 🔐 Identificar usuária logada via cookie (Supabase Auth)
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json(
+        { error: 'Não autenticado' },
+        { status: 401 }
+      )
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    const {
+      data: { user },
+      error: authError
+    } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Usuária inválida' },
+        { status: 401 }
+      )
+    }
+
+    // 📞 Buscar contatos de emergência da usuária
+    const { data: contatos, error: contatosError } = await supabase
       .from('contatos_emergencia')
-      .select('nome, telefone')
+      .select('telefone')
       .eq('user_id', user.id)
-      .eq('ativo', true)
 
-    if (error || !contatos || contatos.length === 0) {
-      return NextResponse.json({ error: 'Nenhum contato ativo encontrado' }, { status: 400 })
+    if (contatosError || !contatos || contatos.length === 0) {
+      return NextResponse.json(
+        { error: 'Nenhum contato de emergência cadastrado' },
+        { status: 400 }
+      )
     }
 
-    // Twilio
-    const client = twilio(
-      process.env.TWILIO_ACCOUNT_SID!,
-      process.env.TWILIO_AUTH_TOKEN!
-    )
+    const mensagem = `🚨 ALERTA DE EMERGÊNCIA 🚨
+Estou em risco e preciso de ajuda.
+Minha localização:
+https://maps.google.com/?q=${latitude},${longitude}`
 
-    const mensagem = `
-🚨 ALERTA DE SEGURANÇA 🚨
-
-Uma pessoa que confia em você acionou o MODO ENCONTRO SEGURO.
-
-📍 Localização:
-https://maps.google.com/?q=${latitude},${longitude}
-
-⚠️ Tipo: ${tipo === 'manual' ? 'Emergência Manual' : 'Tempo Expirado'}
-`
-
-    for (const contato of contatos) {
-      await client.messages.create({
-        from: process.env.TWILIO_PHONE_NUMBER!,
-        to: contato.telefone,
-        body: mensagem
-      })
-    }
-
-    return NextResponse.json({ success: true })
-
-  } catch (err) {
-    console.error('Erro alerta emergência:', err)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
-  }
-}
+    // 📤 En
