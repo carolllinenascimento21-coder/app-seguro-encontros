@@ -1,8 +1,6 @@
 'use client'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
-export const fetchCache = 'force-no-store'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -13,22 +11,23 @@ type EmergencyContact = {
   id: string
   nome: string
   telefone: string
-  ativo: boolean
 }
 
 export default function PerfilPage() {
-  const supabase = createBrowserSupabaseClient()
   const router = useRouter()
+  const supabase = createBrowserSupabaseClient()
 
   const [profile, setProfile] = useState<any>(null)
   const [contacts, setContacts] = useState<EmergencyContact[]>([])
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [loading, setLoading] = useState(true)
 
+  // ✅ TUDO RODA APENAS NO CLIENTE
   useEffect(() => {
-    const loadData = async () => {
+    const load = async () => {
       const {
-        data: { user },
+        data: { user }
       } = await supabase.auth.getUser()
 
       if (!user) {
@@ -44,15 +43,16 @@ export default function PerfilPage() {
 
       const { data: contactsData } = await supabase
         .from('emergency_contacts')
-        .select('*')
-        .eq('user_id', user.id) // 🔒 garante que só veja seus contatos
+        .select('id, nome, telefone')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
       setProfile(profileData)
       setContacts(contactsData || [])
+      setLoading(false)
     }
 
-    loadData()
+    load()
   }, [router, supabase])
 
   const addContact = async () => {
@@ -62,38 +62,25 @@ export default function PerfilPage() {
     }
 
     const {
-      data: { user },
+      data: { user }
     } = await supabase.auth.getUser()
 
-    if (!user) {
-      alert('Usuária não autenticada')
-      return
-    }
+    if (!user) return
 
     const { error } = await supabase.from('emergency_contacts').insert({
-      user_id: user.id, // 🔑 vínculo correto
+      user_id: user.id,
       nome,
-      telefone,
-      ativo: true,
+      telefone
     })
 
     if (error) {
-      console.error(error)
       alert('Erro ao salvar contato')
       return
     }
 
     setNome('')
     setTelefone('')
-
-    // recarrega lista sem reload da página
-    const { data: updatedContacts } = await supabase
-      .from('emergency_contacts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    setContacts(updatedContacts || [])
+    location.reload()
   }
 
   const removeContact = async (id: string) => {
@@ -101,37 +88,30 @@ export default function PerfilPage() {
     setContacts(prev => prev.filter(c => c.id !== id))
   }
 
-  const handleLogout = async () => {
+  const logout = async () => {
     await supabase.auth.signOut()
     router.replace('/login')
   }
 
-  if (!profile) return null
+  if (loading) return null
 
   return (
-    <div className="min-h-screen bg-black px-4 py-8 text-white">
+    <div className="min-h-screen bg-black px-4 py-10 text-white">
       <div className="max-w-md mx-auto space-y-6">
 
         {/* PERFIL */}
-        <div className="border border-[#D4AF37] rounded-2xl p-6 space-y-3">
-          <div className="text-center">
+        <div className="border border-[#D4AF37] rounded-xl p-6">
+          <div className="text-center mb-4">
             <User className="mx-auto text-[#D4AF37]" size={32} />
-            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">
-              Meu Perfil
-            </h1>
+            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">Meu Perfil</h1>
           </div>
 
-          <p>
-            <span className="text-gray-400">Nome:</span>{' '}
-            {profile.full_name}
-          </p>
-          <p>
-            <span className="text-gray-400">E-mail:</span> {profile.email}
-          </p>
+          <p><span className="text-gray-400">Nome:</span> {profile.full_name}</p>
+          <p><span className="text-gray-400">Email:</span> {profile.email}</p>
         </div>
 
-        {/* CONTATOS DE EMERGÊNCIA */}
-        <div className="border border-green-600 rounded-2xl p-6 space-y-4">
+        {/* CONTATOS */}
+        <div className="border border-green-600 rounded-xl p-6 space-y-4">
           <div className="flex items-center gap-2 text-green-500 font-semibold">
             <Shield size={18} />
             Contatos de Emergência
@@ -139,40 +119,31 @@ export default function PerfilPage() {
 
           {contacts.length === 0 && (
             <p className="text-sm text-gray-400">
-              Nenhum contato cadastrado. O Modo Seguro não enviará alertas.
+              Nenhum contato cadastrado.
             </p>
           )}
 
-          {contacts.map(contact => (
-            <div
-              key={contact.id}
-              className="flex justify-between items-center bg-black/40 p-3 rounded-lg"
-            >
+          {contacts.map(c => (
+            <div key={c.id} className="flex justify-between items-center bg-black/40 p-3 rounded-lg">
               <div>
-                <p className="font-medium">{contact.nome}</p>
-                <p className="text-sm text-gray-400">
-                  {contact.telefone}
-                </p>
+                <p>{c.nome}</p>
+                <p className="text-sm text-gray-400">{c.telefone}</p>
               </div>
-              <button
-                onClick={() => removeContact(contact.id)}
-                className="text-red-500 hover:text-red-700"
-              >
+              <button onClick={() => removeContact(c.id)} className="text-red-500">
                 <Trash2 size={18} />
               </button>
             </div>
           ))}
 
-          {/* ADICIONAR CONTATO */}
           <div className="space-y-2">
             <input
-              placeholder="Nome do contato"
+              placeholder="Nome"
               value={nome}
               onChange={e => setNome(e.target.value)}
               className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
             />
             <input
-              placeholder="Telefone (ex: +5531999999999)"
+              placeholder="Telefone (+55...)"
               value={telefone}
               onChange={e => setTelefone(e.target.value)}
               className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
@@ -187,14 +158,13 @@ export default function PerfilPage() {
           </div>
         </div>
 
-        {/* LOGOUT */}
         <button
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 border border-red-600 text-red-500 py-2 rounded-lg hover:bg-red-600 hover:text-white transition"
+          onClick={logout}
+          className="w-full border border-red-600 text-red-500 py-2 rounded-lg hover:bg-red-600 hover:text-white transition"
         >
-          <LogOut size={16} />
-          Sair do app
+          <LogOut size={16} /> Sair
         </button>
+
       </div>
     </div>
   )
