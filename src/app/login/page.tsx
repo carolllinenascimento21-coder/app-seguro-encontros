@@ -16,18 +16,31 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (error) {
-      setError(error.message)
+      const message = error.message.toLowerCase()
+
+      // 📩 EMAIL NÃO CONFIRMADO
+      if (
+        message.includes('email not confirmed') ||
+        message.includes('confirm your email')
+      ) {
+        setError(
+          'Confirme seu e-mail para continuar. Verifique sua caixa de entrada ou spam.'
+        )
+      } else {
+        setError('E-mail ou senha inválidos.')
+      }
+
       setLoading(false)
       return
     }
 
-    // ✅ entrega controle ao middleware (como você já fazia)
+    // ✅ login OK → /home decide (selfie / perfil / etc)
     router.replace('/home')
   }
 
@@ -81,4 +94,3 @@ export default function LoginPage() {
     </div>
   )
 }
-
