@@ -2,54 +2,35 @@
 
 import { useEffect, useState } from 'react'
 import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
-import { ShieldAlert, Phone, XCircle } from 'lucide-react'
-
-type Location = {
-  lat: number
-  lng: number
-}
+import { AlertTriangle, Phone, X } from 'lucide-react'
 
 export default function ModoSeguroPage() {
   const supabase = createBrowserSupabaseClient()
 
-  const [location, setLocation] = useState<Location | null>(null)
+  const [latitude, setLatitude] = useState<number | null>(null)
+  const [longitude, setLongitude] = useState<number | null>(null)
+
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [sendingAlert, setSendingAlert] = useState(false)
   const [alertError, setAlertError] = useState<string | null>(null)
-  const [alertSuccess, setAlertSuccess] = useState(false)
 
-  /* =========================
-     GEOLOCALIZAÇÃO
-  ========================== */
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
-        setLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        })
+        setLatitude(pos.coords.latitude)
+        setLongitude(pos.coords.longitude)
       },
       () => {
         setAlertError('Não foi possível obter localização')
-      },
-      { enableHighAccuracy: true }
+      }
     )
   }, [])
 
-  /* =========================
-     ENVIAR ALERTA
-  ========================== */
-  const sendEmergencyAlert = async () => {
-    if (!location) {
-      setAlertError('Localização não disponível')
-      return
-    }
+  async function enviarAlerta() {
+    setSendingAlert(true)
+    setAlertError(null)
 
     try {
-      setSendingAlert(true)
-      setAlertError(null)
-
-      // 🔑 Token da usuária
       const {
         data: { session },
       } = await supabase.auth.getSession()
@@ -65,8 +46,8 @@ export default function ModoSeguroPage() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          latitude: location.lat,
-          longitude: location.lng,
+          latitude,
+          longitude,
         }),
       })
 
@@ -76,7 +57,7 @@ export default function ModoSeguroPage() {
         throw new Error(data.error || 'Erro ao enviar alerta')
       }
 
-      setAlertSuccess(true)
+      alert('🚨 Alerta enviado com sucesso!')
       setShowEmergencyModal(false)
     } catch (err: any) {
       setAlertError(err.message)
@@ -86,98 +67,54 @@ export default function ModoSeguroPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6">
+    <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <button
+        onClick={() => setShowEmergencyModal(true)}
+        className="bg-red-600 px-6 py-3 rounded-xl font-bold"
+      >
+        🚨 ESTOU EM RISCO
+      </button>
 
-        {/* CARD PRINCIPAL */}
-        <div className="border border-green-600 rounded-2xl p-4">
-          <h1 className="text-green-500 font-bold text-lg flex items-center gap-2">
-            <ShieldAlert size={18} />
-            Modo Encontro Seguro
-          </h1>
-
-          <p className="text-sm text-gray-400 mt-2">
-            Sua localização será enviada aos contatos de emergência se você estiver em risco.
-          </p>
-
-          {location && (
-            <p className="text-xs text-gray-500 mt-2">
-              {location.lat}, {location.lng}
-            </p>
-          )}
-        </div>
-
-        {/* BOTÕES */}
-        <button
-          onClick={() => setShowEmergencyModal(true)}
-          className="w-full bg-red-600 py-3 rounded-xl font-bold"
-        >
-          🚨 ESTOU EM RISCO
-        </button>
-
-        <button
-          className="w-full bg-green-600 py-3 rounded-xl font-bold text-black"
-        >
-          ✓ Estou bem
-        </button>
-
-        {/* ERRO */}
-        {alertError && (
-          <p className="text-red-500 text-sm text-center">{alertError}</p>
-        )}
-
-        {/* MODAL EMERGÊNCIA */}
-        {showEmergencyModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-            <div className="bg-[#0b1220] border border-red-600 rounded-2xl p-5 w-80 space-y-4">
-
-              <h2 className="text-red-500 font-bold text-lg flex items-center gap-2">
-                <ShieldAlert size={18} />
-                Emergência
-              </h2>
-
-              <p className="text-sm text-gray-400">
-                Escolha uma ação imediata:
-              </p>
-
-              {/* LIGAR POLÍCIA */}
-              <a
-                href="tel:190"
-                className="w-full flex items-center justify-center gap-2 bg-red-600 py-3 rounded-xl font-bold"
-              >
-                <Phone size={16} />
-                Ligar 190 (Polícia)
-              </a>
-
-              {/* ENVIAR ALERTA */}
-              <button
-                onClick={sendEmergencyAlert}
-                disabled={sendingAlert}
-                className="w-full bg-yellow-400 py-3 rounded-xl font-bold text-black disabled:opacity-50"
-              >
-                {sendingAlert ? 'Enviando alerta...' : 'Enviar alerta para contatos'}
-              </button>
-
-              {/* CANCELAR */}
-              <button
-                onClick={() => setShowEmergencyModal(false)}
-                className="w-full flex items-center justify-center gap-2 border border-gray-600 py-2 rounded-xl"
-              >
-                <XCircle size={16} />
-                Cancelar
-              </button>
-
+      {showEmergencyModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-gray-900 border border-red-600 rounded-2xl p-6 w-80 space-y-4">
+            <div className="flex items-center gap-2 text-red-500 font-bold">
+              <AlertTriangle />
+              Emergência
             </div>
-          </div>
-        )}
 
-        {/* SUCESSO */}
-        {alertSuccess && (
-          <p className="text-green-500 text-center text-sm">
-            Alerta enviado com sucesso 🚨
-          </p>
-        )}
-      </div>
+            {alertError && (
+              <div className="bg-red-900/40 text-red-400 text-sm p-2 rounded">
+                {alertError}
+              </div>
+            )}
+
+            <a
+              href="tel:190"
+              className="flex items-center justify-center gap-2 bg-red-600 py-3 rounded-xl font-bold"
+            >
+              <Phone size={18} />
+              Ligar 190 (Polícia)
+            </a>
+
+            <button
+              onClick={enviarAlerta}
+              disabled={sendingAlert}
+              className="w-full bg-yellow-400 text-black font-bold py-3 rounded-xl disabled:opacity-50"
+            >
+              {sendingAlert ? 'Enviando alerta...' : 'Enviar alerta para contatos'}
+            </button>
+
+            <button
+              onClick={() => setShowEmergencyModal(false)}
+              className="w-full flex items-center justify-center gap-2 text-gray-400"
+            >
+              <X size={16} />
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
