@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
-import { AlertTriangle, Phone, X } from 'lucide-react'
+import { AlertTriangle, PhoneCall, X } from 'lucide-react'
 
 export default function ModoSeguroPage() {
   const supabase = createBrowserSupabaseClient()
 
-  const [latitude, setLatitude] = useState<number | null>(null)
-  const [longitude, setLongitude] = useState<number | null>(null)
-
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [sendingAlert, setSendingAlert] = useState(false)
   const [alertError, setAlertError] = useState<string | null>(null)
@@ -18,32 +16,36 @@ export default function ModoSeguroPage() {
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
-        setLatitude(pos.coords.latitude)
-        setLongitude(pos.coords.longitude)
+        setCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        })
       },
-      err => {
-        console.error(err)
-        setAlertError('Não foi possível obter localização')
+      () => {
+        setAlertError('Não foi possível obter a localização.')
       }
     )
   }, [])
 
-  // 🚨 Enviar alerta
-  const enviarAlerta = async () => {
-    setSendingAlert(true)
-    setAlertError(null)
-
+  // 🚨 ENVIO DO ALERTA (CORRIGIDO)
+  const sendEmergencyAlert = async () => {
     try {
-      if (latitude === null || longitude === null) {
-        throw new Error('Localização indisponível')
+      setSendingAlert(true)
+      setAlertError(null)
+
+      if (!coords) {
+        setAlertError('Localização indisponível')
+        return
       }
 
+      // ✅ PEGAR TOKEN CORRETAMENTE
       const {
         data: { session }
       } = await supabase.auth.getSession()
 
       if (!session?.access_token) {
-        throw new Error('Usuária não autenticada')
+        setAlertError('Usuária não autenticada')
+        return
       }
 
       const res = await fetch('/api/alerta-emergencia', {
@@ -53,38 +55,43 @@ export default function ModoSeguroPage() {
           Authorization: `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          latitude: Number(latitude),
-          longitude: Number(longitude)
+          latitude: coords.lat,
+          longitude: coords.lng
         })
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || 'Falha ao enviar alerta')
+        setAlertError(data.error || 'Erro ao enviar alerta')
+        return
       }
 
       alert('🚨 Alerta enviado com sucesso!')
       setShowEmergencyModal(false)
-    } catch (err: any) {
-      setAlertError(err.message)
+    } catch (err) {
+      setAlertError('Erro inesperado ao enviar alerta')
     } finally {
       setSendingAlert(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center text-white px-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-4 text-white">
+      <div className="max-w-md w-full space-y-4">
 
         {/* STATUS */}
         <div className="border border-green-600 rounded-xl p-4 text-center">
-          <p className="text-green-500 font-semibold">
-            Modo Encontro Seguro Ativo
+          <h1 className="text-green-500 font-bold text-lg">
+            Modo Encontro Seguro
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">
+            Sua localização será enviada aos contatos se você estiver em risco.
           </p>
-          {latitude && longitude && (
-            <p className="text-sm text-gray-400 mt-2">
-              📍 {latitude.toFixed(5)}, {longitude.toFixed(5)}
+
+          {coords && (
+            <p className="mt-2 text-xs text-gray-500">
+              📍 {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
             </p>
           )}
         </div>
@@ -92,47 +99,45 @@ export default function ModoSeguroPage() {
         {/* BOTÃO RISCO */}
         <button
           onClick={() => setShowEmergencyModal(true)}
-          className="w-full bg-red-600 hover:bg-red-700 transition py-4 rounded-xl font-bold flex items-center justify-center gap-2"
+          className="w-full bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold"
         >
-          <AlertTriangle />
-          ESTOU EM RISCO
+          🚨 ESTOU EM RISCO
         </button>
 
-        {/* MODAL EMERGÊNCIA */}
+        {/* MODAL */}
         {showEmergencyModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-red-600 rounded-xl p-6 w-full max-w-sm space-y-4">
-
+            <div className="bg-[#0b1220] border border-red-600 rounded-2xl p-6 w-full max-w-sm space-y-4">
               <div className="flex items-center gap-2 text-red-500 font-bold">
                 <AlertTriangle />
                 Emergência
               </div>
 
               {alertError && (
-                <div className="bg-red-500/10 border border-red-500 text-red-400 p-2 rounded text-sm">
+                <div className="bg-red-900/40 text-red-300 text-sm p-2 rounded">
                   {alertError}
                 </div>
               )}
 
-              <button
-                onClick={() => window.location.href = 'tel:190'}
-                className="w-full bg-red-600 py-3 rounded-lg font-bold flex items-center justify-center gap-2"
+              <a
+                href="tel:190"
+                className="w-full bg-red-600 text-center py-3 rounded-lg flex items-center justify-center gap-2 font-bold"
               >
-                <Phone />
+                <PhoneCall size={16} />
                 Ligar 190 (Polícia)
-              </button>
+              </a>
 
               <button
                 disabled={sendingAlert}
-                onClick={enviarAlerta}
+                onClick={sendEmergencyAlert}
                 className="w-full bg-yellow-400 text-black py-3 rounded-lg font-bold disabled:opacity-50"
               >
-                {sendingAlert ? 'Enviando alerta...' : 'Enviar alerta para contatos'}
+                {sendingAlert ? 'Enviando...' : 'Enviar alerta para contatos'}
               </button>
 
               <button
                 onClick={() => setShowEmergencyModal(false)}
-                className="w-full border border-gray-600 py-2 rounded-lg flex items-center justify-center gap-1"
+                className="w-full border border-gray-600 py-2 rounded-lg flex items-center justify-center gap-2"
               >
                 <X size={16} />
                 Cancelar
