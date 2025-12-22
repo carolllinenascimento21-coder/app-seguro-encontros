@@ -1,6 +1,8 @@
 'use client'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -25,7 +27,9 @@ export default function PerfilPage() {
 
   useEffect(() => {
     const loadData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
       if (!user) {
         router.replace('/login')
@@ -41,6 +45,7 @@ export default function PerfilPage() {
       const { data: contactsData } = await supabase
         .from('emergency_contacts')
         .select('*')
+        .eq('user_id', user.id) // 🔒 garante que só veja seus contatos
         .order('created_at', { ascending: false })
 
       setProfile(profileData)
@@ -51,20 +56,44 @@ export default function PerfilPage() {
   }, [router, supabase])
 
   const addContact = async () => {
-    if (!nome || !telefone) return alert('Preencha nome e telefone')
+    if (!nome || !telefone) {
+      alert('Preencha nome e telefone')
+      return
+    }
 
-    const { error } = await supabase
-      .from('emergency_contacts')
-      .insert({ nome, telefone })
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      alert('Usuária não autenticada')
+      return
+    }
+
+    const { error } = await supabase.from('emergency_contacts').insert({
+      user_id: user.id, // 🔑 vínculo correto
+      nome,
+      telefone,
+      ativo: true,
+    })
 
     if (error) {
+      console.error(error)
       alert('Erro ao salvar contato')
       return
     }
 
     setNome('')
     setTelefone('')
-    location.reload()
+
+    // recarrega lista sem reload da página
+    const { data: updatedContacts } = await supabase
+      .from('emergency_contacts')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    setContacts(updatedContacts || [])
   }
 
   const removeContact = async (id: string) => {
@@ -87,11 +116,18 @@ export default function PerfilPage() {
         <div className="border border-[#D4AF37] rounded-2xl p-6 space-y-3">
           <div className="text-center">
             <User className="mx-auto text-[#D4AF37]" size={32} />
-            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">Meu Perfil</h1>
+            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">
+              Meu Perfil
+            </h1>
           </div>
 
-          <p><span className="text-gray-400">Nome:</span> {profile.full_name}</p>
-          <p><span className="text-gray-400">E-mail:</span> {profile.email}</p>
+          <p>
+            <span className="text-gray-400">Nome:</span>{' '}
+            {profile.full_name}
+          </p>
+          <p>
+            <span className="text-gray-400">E-mail:</span> {profile.email}
+          </p>
         </div>
 
         {/* CONTATOS DE EMERGÊNCIA */}
@@ -114,7 +150,9 @@ export default function PerfilPage() {
             >
               <div>
                 <p className="font-medium">{contact.nome}</p>
-                <p className="text-sm text-gray-400">{contact.telefone}</p>
+                <p className="text-sm text-gray-400">
+                  {contact.telefone}
+                </p>
               </div>
               <button
                 onClick={() => removeContact(contact.id)}
