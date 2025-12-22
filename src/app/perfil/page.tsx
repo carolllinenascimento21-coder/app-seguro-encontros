@@ -3,36 +3,72 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
-import { User, LogOut } from 'lucide-react'
+import { User, LogOut, Plus, Trash2, Shield } from 'lucide-react'
+
+type EmergencyContact = {
+  id: string
+  nome: string
+  telefone: string
+  ativo: boolean
+}
 
 export default function PerfilPage() {
   const supabase = createBrowserSupabaseClient()
   const router = useRouter()
 
   const [profile, setProfile] = useState<any>(null)
+  const [contacts, setContacts] = useState<EmergencyContact[]>([])
+  const [nome, setNome] = useState('')
+  const [telefone, setTelefone] = useState('')
 
   useEffect(() => {
-    const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+    const loadData = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
         router.replace('/login')
         return
       }
 
-      const { data } = await supabase
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single()
 
-      setProfile(data)
+      const { data: contactsData } = await supabase
+        .from('emergency_contacts')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      setProfile(profileData)
+      setContacts(contactsData || [])
     }
 
-    loadProfile()
+    loadData()
   }, [router, supabase])
+
+  const addContact = async () => {
+    if (!nome || !telefone) return alert('Preencha nome e telefone')
+
+    const { error } = await supabase
+      .from('emergency_contacts')
+      .insert({ nome, telefone })
+
+    if (error) {
+      alert('Erro ao salvar contato')
+      return
+    }
+
+    setNome('')
+    setTelefone('')
+    location.reload()
+  }
+
+  const removeContact = async (id: string) => {
+    await supabase.from('emergency_contacts').delete().eq('id', id)
+    setContacts(prev => prev.filter(c => c.id !== id))
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -42,21 +78,76 @@ export default function PerfilPage() {
   if (!profile) return null
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-4">
-      <div className="w-full max-w-sm border border-[#D4AF37] rounded-2xl p-8 space-y-4 text-white">
-        <div className="text-center space-y-2">
-          <User className="mx-auto text-[#D4AF37]" size={32} />
-          <h1 className="text-xl font-bold text-[#D4AF37]">Meu Perfil</h1>
-        </div>
+    <div className="min-h-screen bg-black px-4 py-8 text-white">
+      <div className="max-w-md mx-auto space-y-6">
 
-        <div className="space-y-2 text-sm">
+        {/* PERFIL */}
+        <div className="border border-[#D4AF37] rounded-2xl p-6 space-y-3">
+          <div className="text-center">
+            <User className="mx-auto text-[#D4AF37]" size={32} />
+            <h1 className="text-xl font-bold text-[#D4AF37] mt-2">Meu Perfil</h1>
+          </div>
+
           <p><span className="text-gray-400">Nome:</span> {profile.full_name}</p>
           <p><span className="text-gray-400">E-mail:</span> {profile.email}</p>
-          <p><span className="text-gray-400">Nascimento:</span> {profile.birth_date || '—'}</p>
-          <p><span className="text-gray-400">Plano:</span> Padrão</p>
-          <p><span className="text-gray-400">Verificação:</span> Em análise</p>
         </div>
 
+        {/* CONTATOS DE EMERGÊNCIA */}
+        <div className="border border-green-600 rounded-2xl p-6 space-y-4">
+          <div className="flex items-center gap-2 text-green-500 font-semibold">
+            <Shield size={18} />
+            Contatos de Emergência
+          </div>
+
+          {contacts.length === 0 && (
+            <p className="text-sm text-gray-400">
+              Nenhum contato cadastrado. O Modo Seguro não enviará alertas.
+            </p>
+          )}
+
+          {contacts.map(contact => (
+            <div
+              key={contact.id}
+              className="flex justify-between items-center bg-black/40 p-3 rounded-lg"
+            >
+              <div>
+                <p className="font-medium">{contact.nome}</p>
+                <p className="text-sm text-gray-400">{contact.telefone}</p>
+              </div>
+              <button
+                onClick={() => removeContact(contact.id)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          ))}
+
+          {/* ADICIONAR CONTATO */}
+          <div className="space-y-2">
+            <input
+              placeholder="Nome do contato"
+              value={nome}
+              onChange={e => setNome(e.target.value)}
+              className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
+            />
+            <input
+              placeholder="Telefone (ex: +5531999999999)"
+              value={telefone}
+              onChange={e => setTelefone(e.target.value)}
+              className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
+            />
+            <button
+              onClick={addContact}
+              className="w-full bg-green-600 text-black font-bold py-2 rounded-lg flex items-center justify-center gap-2"
+            >
+              <Plus size={16} />
+              Adicionar contato
+            </button>
+          </div>
+        </div>
+
+        {/* LOGOUT */}
         <button
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 border border-red-600 text-red-500 py-2 rounded-lg hover:bg-red-600 hover:text-white transition"
