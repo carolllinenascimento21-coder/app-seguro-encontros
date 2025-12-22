@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
-import { AlertTriangle, Phone, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Phone,
+  Shield,
+  MapPin,
+  Check,
+  X,
+} from 'lucide-react'
 
 export default function ModoSeguroPage() {
   const supabase = createBrowserSupabaseClient()
@@ -21,7 +28,7 @@ export default function ModoSeguroPage() {
         setLongitude(pos.coords.longitude)
       },
       () => {
-        setAlertError('Não foi possível obter localização')
+        setAlertError('Permissão de localização negada')
       }
     )
   }, [])
@@ -36,7 +43,7 @@ export default function ModoSeguroPage() {
       } = await supabase.auth.getSession()
 
       if (!session?.access_token) {
-        throw new Error('Usuária não autenticada')
+        throw new Error('Sessão expirada. Faça login novamente.')
       }
 
       const res = await fetch('/api/alerta-emergencia', {
@@ -45,10 +52,7 @@ export default function ModoSeguroPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          latitude,
-          longitude,
-        }),
+        body: JSON.stringify({ latitude, longitude }),
       })
 
       const data = await res.json()
@@ -57,7 +61,7 @@ export default function ModoSeguroPage() {
         throw new Error(data.error || 'Erro ao enviar alerta')
       }
 
-      alert('🚨 Alerta enviado com sucesso!')
+      alert('🚨 Alerta enviado com sucesso')
       setShowEmergencyModal(false)
     } catch (err: any) {
       setAlertError(err.message)
@@ -67,17 +71,48 @@ export default function ModoSeguroPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center">
-      <button
-        onClick={() => setShowEmergencyModal(true)}
-        className="bg-red-600 px-6 py-3 rounded-xl font-bold"
-      >
-        🚨 ESTOU EM RISCO
-      </button>
+    <div className="min-h-screen bg-black text-white px-4 py-10">
+      <div className="max-w-md mx-auto space-y-6">
 
+        {/* HEADER */}
+        <div className="border border-green-600 rounded-2xl p-5 space-y-2">
+          <div className="flex items-center gap-2 text-green-500 font-bold">
+            <Shield />
+            Modo Encontro Seguro
+          </div>
+          <p className="text-sm text-gray-400">
+            Sua localização será enviada aos contatos se você estiver em risco
+          </p>
+        </div>
+
+        {/* LOCALIZAÇÃO */}
+        {latitude && longitude && (
+          <div className="border border-gray-700 rounded-xl p-4 flex items-center gap-2 text-sm">
+            <MapPin className="text-[#D4AF37]" />
+            {latitude.toFixed(5)}, {longitude.toFixed(5)}
+          </div>
+        )}
+
+        {/* BOTÕES */}
+        <button
+          onClick={() => setShowEmergencyModal(true)}
+          className="w-full bg-red-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2"
+        >
+          <AlertTriangle />
+          ESTOU EM RISCO
+        </button>
+
+        <button className="w-full bg-green-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+          <Check />
+          Estou bem
+        </button>
+      </div>
+
+      {/* MODAL EMERGÊNCIA */}
       {showEmergencyModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-gray-900 border border-red-600 rounded-2xl p-6 w-80 space-y-4">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
+          <div className="bg-gray-900 border border-red-600 rounded-2xl p-6 w-full max-w-sm space-y-4">
+
             <div className="flex items-center gap-2 text-red-500 font-bold">
               <AlertTriangle />
               Emergência
@@ -91,7 +126,7 @@ export default function ModoSeguroPage() {
 
             <a
               href="tel:190"
-              className="flex items-center justify-center gap-2 bg-red-600 py-3 rounded-xl font-bold"
+              className="w-full bg-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
             >
               <Phone size={18} />
               Ligar 190 (Polícia)
@@ -100,14 +135,14 @@ export default function ModoSeguroPage() {
             <button
               onClick={enviarAlerta}
               disabled={sendingAlert}
-              className="w-full bg-yellow-400 text-black font-bold py-3 rounded-xl disabled:opacity-50"
+              className="w-full bg-yellow-400 text-black py-3 rounded-xl font-bold disabled:opacity-50"
             >
               {sendingAlert ? 'Enviando alerta...' : 'Enviar alerta para contatos'}
             </button>
 
             <button
               onClick={() => setShowEmergencyModal(false)}
-              className="w-full flex items-center justify-center gap-2 text-gray-400"
+              className="w-full text-gray-400 flex items-center justify-center gap-2"
             >
               <X size={16} />
               Cancelar
