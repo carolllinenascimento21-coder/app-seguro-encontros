@@ -23,7 +23,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // 🔐 Identificar usuária logada via cookie (Supabase Auth)
     const authHeader = req.headers.get('authorization')
     if (!authHeader) {
       return NextResponse.json(
@@ -46,7 +45,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // 📞 Buscar contatos de emergência da usuária
     const { data: contatos, error: contatosError } = await supabase
       .from('contatos_emergencia')
       .select('telefone')
@@ -59,9 +57,27 @@ export async function POST(req: Request) {
       )
     }
 
+    // ✅ TEMPLATE STRING CORRETA
     const mensagem = `🚨 ALERTA DE EMERGÊNCIA 🚨
 Estou em risco e preciso de ajuda.
-Minha localização:
+
+📍 Minha localização:
 https://maps.google.com/?q=${latitude},${longitude}`
 
-    // 📤 En
+    for (const contato of contatos) {
+      await twilioClient.messages.create({
+        body: mensagem,
+        from: process.env.TWILIO_PHONE_NUMBER!,
+        to: contato.telefone
+      })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Erro alerta emergência:', error)
+    return NextResponse.json(
+      { error: 'Erro interno ao enviar alerta' },
+      { status: 500 }
+    )
+  }
+}
