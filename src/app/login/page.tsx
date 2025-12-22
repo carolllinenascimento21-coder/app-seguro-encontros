@@ -2,10 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
+import { supabase } from '@/lib/supabase' // 🔹 único client do app
 
 export default function LoginPage() {
-  const supabase = createBrowserSupabaseClient()
   const router = useRouter()
 
   const [email, setEmail] = useState('')
@@ -28,7 +27,7 @@ export default function LoginPage() {
       return
     }
 
-    // ✅ entrega controle ao middleware
+    // ✅ entrega controle ao middleware (como você já fazia)
     router.replace('/home')
   }
 
@@ -82,3 +81,4 @@ export default function LoginPage() {
     </div>
   )
 }
+
