@@ -1,83 +1,101 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import twilio from 'twilio'
+'use client'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { useEffect, useState } from 'react'
+import { AlertTriangle, Check } from 'lucide-react'
 
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID!,
-  process.env.TWILIO_AUTH_TOKEN!
-)
+export const dynamic = 'force-dynamic'
 
-export async function POST(req: Request) {
-  try {
-    const { latitude, longitude } = await req.json()
+export default function ModoSeguroPage() {
+  const [latitude, setLatitude] = useState<number | null>(null)
+  const [longitude, setLongitude] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
 
-    if (!latitude || !longitude) {
-      return NextResponse.json(
-        { error: 'Localização não informada' },
-        { status: 400 }
-      )
-    }
+  // ✅ LOCALIZAÇÃO SOMENTE NO CLIENTE
+  useEffect(() => {
+    if (!navigator.geolocation) return
 
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Não autenticado' },
-        { status: 401 }
-      )
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-
-    const {
-      data: { user },
-      error: authError
-    } = await supabase.auth.getUser(token)
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Usuária inválida' },
-        { status: 401 }
-      )
-    }
-
-    const { data: contatos, error: contatosError } = await supabase
-      .from('contatos_emergencia')
-      .select('telefone')
-      .eq('user_id', user.id)
-
-    if (contatosError || !contatos || contatos.length === 0) {
-      return NextResponse.json(
-        { error: 'Nenhum contato de emergência cadastrado' },
-        { status: 400 }
-      )
-    }
-
-    // ✅ TEMPLATE STRING CORRETA
-    const mensagem = `🚨 ALERTA DE EMERGÊNCIA 🚨
-Estou em risco e preciso de ajuda.
-
-📍 Minha localização:
-https://maps.google.com/?q=${latitude},${longitude}`
-
-    for (const contato of contatos) {
-      await twilioClient.messages.create({
-        body: mensagem,
-        from: process.env.TWILIO_PHONE_NUMBER!,
-        to: contato.telefone
-      })
-    }
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Erro alerta emergência:', error)
-    return NextResponse.json(
-      { error: 'Erro interno ao enviar alerta' },
-      { status: 500 }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setLatitude(pos.coords.latitude)
+        setLongitude(pos.coords.longitude)
+      },
+      err => {
+        console.error('Erro localização', err)
+      }
     )
+  }, [])
+
+  // ✅ ALERTA SÓ DISPARA NO CLICK
+  const enviarAlerta = async () => {
+    if (latitude === null || longitude === null) {
+      alert('Localização não disponível')
+      return
+    }
+
+    setLoading(true)
+
+    const session = localStorage.getItem('sb-access-token')
+    if (!session) {
+      alert('Usuária não autenticada')
+      setLoading(false)
+      return
+    }
+
+    const res = await fetch('/api/alerta-emergencia', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session}`
+      },
+      body: JSON.stringify({ latitude, longitude })
+    })
+
+    setLoading(false)
+
+    if (!res.ok) {
+      const error = await res.json()
+      alert(error.error || 'Erro ao enviar alerta')
+      return
+    }
+
+    alert('🚨 Alerta enviado com sucesso!')
   }
+
+  return (
+    <div className="min-h-screen bg-black text-white px-4 py-10">
+      <div className="max-w-md mx-auto space-y-6">
+
+        <div className="border border-green-600 rounded-xl p-6">
+          <h1 className="text-xl font-bold text-green-500 mb-2">
+            Modo Encontro Seguro
+          </h1>
+
+          <p className="text-sm text-gray-400">
+            Sua localização será enviada aos contatos de emergência se você estiver em risco.
+          </p>
+
+          {latitude && longitude && (
+            <p className="text-xs text-gray-500 mt-3">
+              📍 {latitude.toFixed(5)}, {longitude.toFixed(5)}
+            </p>
+          )}
+        </div>
+
+        <button
+          onClick={enviarAlerta}
+          disabled={loading}
+          className="w-full bg-red-600 hover:bg-red-700 transition text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2"
+        >
+          <AlertTriangle size={20} />
+          {loading ? 'Enviando...' : 'ESTOU EM RISCO'}
+        </button>
+
+        <button className="w-full bg-green-600 text-black font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+          <Check size={18} />
+          Estou bem
+        </button>
+
+      </div>
+    </div>
+  )
 }
