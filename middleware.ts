@@ -1,32 +1,11 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-
-const PUBLIC_ROUTES = [
-  '/login',
-  '/signup',
-  '/verificacao-selfie',
-  '/onboarding',
-]
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => req.cookies.get(name)?.value,
-        set: (name, value, options) => {
-          res.cookies.set({ name, value, ...options })
-        },
-        remove: (name, options) => {
-          res.cookies.set({ name, value: '', ...options })
-        },
-      },
-    }
-  )
+  const supabase = createMiddlewareClient({ req, res })
 
   const {
     data: { session },
@@ -34,39 +13,37 @@ export async function middleware(req: NextRequest) {
 
   const pathname = req.nextUrl.pathname
 
-  // ✅ Ignora arquivos estáticos, api e assets
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/favicon')
-  ) {
-    return res
-  }
-
   // 🔓 Rotas públicas
-  if (PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
+  const publicRoutes = [
+    '/login',
+    '/signup',
+    '/onboarding',
+    '/onboarding/selfie',
+    '/auth/callback',
+  ]
+
+  if (!session?.user) {
+    if (!publicRoutes.includes(pathname)) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
     return res
   }
 
-  // 🔒 Não logada → login
-  if (!session) {
-    return NextResponse.redirect(new URL('/login', req.url))
-  }
-
-  // 🔐 Logada → checa selfie
+  // 🔎 Busca perfil
   const { data: profile } = await supabase
     .from('profiles')
     .select('selfie_verified')
     .eq('id', session.user.id)
     .single()
 
+  // 🚨 FORÇA SELFIE
   if (
     profile &&
     profile.selfie_verified === false &&
-    !pathname.startsWith('/verificacao-selfie')
+    pathname !== '/onboarding/selfie'
   ) {
     return NextResponse.redirect(
-      new URL('/verificacao-selfie', req.url)
+      new URL('/onboarding/selfie', req.url)
     )
   }
 
@@ -75,10 +52,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-      Aplica middleware SOMENTE em páginas de app,
-      não em assets nem callbacks
-    */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }
