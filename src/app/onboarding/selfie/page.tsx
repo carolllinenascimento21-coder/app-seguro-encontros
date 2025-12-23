@@ -1,46 +1,75 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 
 export default function SelfieOnboardingPage() {
   const router = useRouter()
-  const [file, setFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleUpload = async () => {
-    if (!file) {
-      setError('Envie uma selfie para continuar.')
+  // 🎥 Abre câmera
+  useEffect(() => {
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: 'user' } })
+      .then((stream) => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+        }
+      })
+      .catch(() => {
+        setError('Não foi possível acessar a câmera.')
+      })
+  }, [])
+
+  const handleCapture = async () => {
+    if (!videoRef.current || !canvasRef.current) return
+
+    setLoading(true)
+    setError('')
+
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    ctx?.drawImage(video, 0, 0)
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg')
+    )
+
+    if (!blob) {
+      setError('Falha ao capturar imagem.')
+      setLoading(false)
       return
     }
-
-    setError('')
-    setUploading(true)
 
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser()
 
-    if (userError || !user) {
-      setError('Não foi possível identificar o usuário autenticado.')
-      setUploading(false)
+    if (!user) {
+      setError('Usuário não autenticado.')
+      setLoading(false)
       return
     }
 
-    const fileExt = file.name.split('.').pop()
-    const filePath = `${user.id}/${Date.now()}.${fileExt}`
+    const filePath = `${user.id}/selfie.jpg`
 
     const { error: uploadError } = await supabase.storage
       .from('selfies')
-      .upload(filePath, file, { upsert: true })
+      .upload(filePath, blob, { upsert: true })
 
     if (uploadError) {
-      setError('Falha ao enviar selfie. Tente novamente.')
-      setUploading(false)
+      setError('Erro ao enviar selfie.')
+      setLoading(false)
       return
     }
 
@@ -48,53 +77,41 @@ export default function SelfieOnboardingPage() {
       .from('selfies')
       .getPublicUrl(filePath)
 
-    const { error: profileError } = await supabase
+    await supabase
       .from('profiles')
-      .upsert({
-        id: user.id,
-        email: user.email,
+      .update({
         selfie_url: publicUrl.publicUrl,
         selfie_verified: false,
         onboarding_completed: false,
       })
+      .eq('id', user.id)
 
-    if (profileError) {
-      setError('Não foi possível registrar a selfie. Tente novamente.')
-      setUploading(false)
-      return
-    }
-
-    setUploading(false)
-    router.push('/verification-pending')
+    setLoading(false)
+    router.replace('/verification-pending')
   }
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">Envie sua selfie</h1>
-          <p className="text-muted-foreground">
-            Precisamos validar sua identidade para manter a comunidade segura.
-          </p>
-        </div>
+      <h1 className="text-3xl font-bold mb-4">Envie sua selfie</h1>
 
-        <div className="p-6 border border-[#D4AF37]/30 rounded-2xl bg-white/5 space-y-4">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full text-sm"
-          />
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          <Button
-            onClick={handleUpload}
-            disabled={uploading}
-            className="w-full bg-[#D4AF37] text-black"
-          >
-            {uploading ? 'Enviando...' : 'Enviar selfie'}
-          </Button>
-        </div>
-      </div>
+      {error && <p className="text-red-400 mb-4">{error}</p>}
+
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="rounded-xl border border-[#D4AF37] w-full max-w-sm"
+      />
+
+      <canvas ref={canvasRef} className="hidden" />
+
+      <Button
+        onClick={handleCapture}
+        disabled={loading}
+        className="mt-6 bg-[#D4AF37] text-black w-full max-w-sm"
+      >
+        {loading ? 'Enviando...' : 'Capturar selfie'}
+      </Button>
     </main>
   )
 }
