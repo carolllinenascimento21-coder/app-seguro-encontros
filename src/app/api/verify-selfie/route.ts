@@ -1,85 +1,59 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@supabase/supabase-js'
 
-export async function POST() {
-  try {
-    // ✅ Supabase Server Client (App Router moderno)
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          getAll: () => cookies().getAll(),
-          setAll: () => {}
-        }
-      }
-    )
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // 🔒 backend only
+)
 
-    // ✅ Usuária autenticada via cookie
-    const {
-      data: { user },
-      error: authError
-    } = await supabase.auth.getUser()
+export async function POST(req: Request) {
+  const supabase = createRouteHandlerClient({ cookies })
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Não autenticado' },
-        { status: 401 }
-      )
-    }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-    const filePath = `${user.id}/selfie.jpg`
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Não autenticada' }, { status: 401 })
+  }
 
-    // ✅ Baixa a selfie do bucket privado
-    const { data: file, error: downloadError } = await supabase.storage
-      .from('selfie-verifications')
-      .download(filePath)
+  const { image } = await req.json()
 
-    if (downloadError || !file) {
-      return NextResponse.json(
-        { error: 'Selfie não encontrada. Envie novamente.' },
-        { status: 400 }
-      )
-    }
+  if (!image || typeof image !== 'string') {
+    return NextResponse.json({ error: 'Imagem inválida' }, { status: 400 })
+  }
 
-    // ✅ Validação mínima (Nível 1 – simples)
-    const buffer = Buffer.from(await file.arrayBuffer())
+  const base64 = image.split(',')[1]
+  const buffer = Buffer.from(base64, 'base64')
 
-    if (buffer.byteLength < 10_000) {
-      return NextResponse.json(
-        { error: 'Selfie inválida ou muito pequena.' },
-        { status: 422 }
-      )
-    }
+  const filePath = `${session.user.id}/selfie.jpg`
 
-    // 🔒 Aqui entra IA futuramente (Google Vision, etc.)
-
-    // ✅ Marca perfil como verificado
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        selfie_verified: true,
-        selfie_verified_at: new Date().toISOString()
-      })
-      .eq('id', user.id)
-
-    if (updateError) {
-      return NextResponse.json(
-        { error: 'Falha ao atualizar status de verificação.' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({
-      status: 'verified'
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from('selfie-verifications')
+    .upload(filePath, buffer, {
+      contentType: 'image/jpeg',
+      upsert: true,
     })
 
-  } catch (error) {
-    console.error('Erro verify-selfie:', error)
-    return NextResponse.json(
-      { error: 'Erro interno ao verificar selfie.' },
-      { status: 500 }
-    )
+  if (uploadError) {
+    return NextResponse.json({ error: 'Erro ao salvar selfie' }, { status: 500 })
   }
+
+  // ✅ Marca perfil como verificado
+  const { error: updateError } = await supabaseAdmin
+    .from('profiles')
+    .update({
+      selfie_verified: true,
+      selfie_checked_at: new Date().toISOString(),
+      selfie_url: filePath,
+    })
+    .eq('id', session.user.id)
+
+  if (updateError) {
+    return NextResponse.json({ error: 'Erro ao atualizar perfil' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
 }
