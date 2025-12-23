@@ -12,39 +12,56 @@ export async function middleware(req: NextRequest) {
 
   const pathname = req.nextUrl.pathname
 
-  // Rotas públicas
-  const publicRoutes = [
-    '/login',
-    '/signup',
-    '/onboarding',
-    '/onboarding/selfie',
-    '/auth/callback',
-  ]
-
-  // 🔒 Não logado
-  if (!session?.user) {
-    if (!publicRoutes.includes(pathname)) {
-      return NextResponse.redirect(new URL('/login', req.url))
-    }
-    return res
+  /* ===============================
+     1️⃣ ROTA RAIZ → ONBOARDING
+  =============================== */
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/onboarding', req.url))
   }
 
-  // 🔎 Perfil
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('selfie_verified')
-    .eq('id', session.user.id)
-    .single()
+  /* ===============================
+     2️⃣ ROTAS PÚBLICAS
+  =============================== */
+  const PUBLIC_ROUTES = [
+    '/onboarding',
+    '/login',
+    '/signup',
+  ]
 
-  // 🚨 FORÇA SELFIE
-  if (
-    profile &&
-    profile.selfie_verified === false &&
-    pathname !== '/onboarding/selfie'
-  ) {
-    return NextResponse.redirect(
-      new URL('/onboarding/selfie', req.url)
-    )
+  const isPublicRoute =
+    PUBLIC_ROUTES.includes(pathname) ||
+    pathname.startsWith('/auth')
+
+  /* ===============================
+     3️⃣ SELFIE (EXIGE LOGIN)
+  =============================== */
+  const isSelfieRoute =
+    pathname === '/onboarding/selfie' ||
+    pathname.startsWith('/onboarding/selfie/')
+
+  /* ===============================
+     4️⃣ USUÁRIA NÃO LOGADA
+  =============================== */
+  if (!session?.user) {
+    if (isPublicRoute) {
+      return res
+    }
+
+    // selfie sem login → login
+    if (isSelfieRoute) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+
+    // qualquer outra rota → login
+    return NextResponse.redirect(new URL('/login', req.url))
+  }
+
+  /* ===============================
+     5️⃣ USUÁRIA LOGADA
+  =============================== */
+  // logada tentando acessar login/signup → onboarding
+  if (pathname === '/login' || pathname === '/signup') {
+    return NextResponse.redirect(new URL('/onboarding', req.url))
   }
 
   return res
