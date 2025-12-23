@@ -2,35 +2,48 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 export default function SelfieOnboardingPage() {
   const router = useRouter()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const [loading, setLoading] = useState(false)
+  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
-  // 🎥 Abre câmera
+  // 🎥 ABRE A CÂMERA
   useEffect(() => {
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'user' } })
-      .then((stream) => {
+    const startCamera = async () => {
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+        })
+
+        setStream(mediaStream)
+
         if (videoRef.current) {
-          videoRef.current.srcObject = stream
+          videoRef.current.srcObject = mediaStream
         }
-      })
-      .catch(() => {
+      } catch {
         setError('Não foi possível acessar a câmera.')
-      })
+      }
+    }
+
+    startCamera()
+
+    return () => {
+      stream?.getTracks().forEach(track => track.stop())
+    }
   }, [])
 
-  const handleCapture = async () => {
+  // 📸 CAPTURA + UPLOAD
+  const captureAndUpload = async () => {
     if (!videoRef.current || !canvasRef.current) return
 
-    setLoading(true)
+    setUploading(true)
     setError('')
 
     const video = videoRef.current
@@ -39,79 +52,95 @@ export default function SelfieOnboardingPage() {
 
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
-    ctx?.drawImage(video, 0, 0)
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg')
-    )
+    ctx?.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    if (!blob) {
-      setError('Falha ao capturar imagem.')
-      setLoading(false)
-      return
-    }
+    // 🔑 CONVERTE PARA BLOB
+    canvas.toBlob(async blob => {
+      if (!blob) {
+        setError('Erro ao capturar imagem.')
+        setUploading(false)
+        return
+      }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    if (!user) {
-      setError('Usuário não autenticado.')
-      setLoading(false)
-      return
-    }
+      if (!user) {
+        setError('Usuária não autenticada.')
+        setUploading(false)
+        return
+      }
 
-    const filePath = `${user.id}/selfie.jpg`
-
-    const { error: uploadError } = await supabase.storage
-      .from('selfies')
-      .upload(filePath, blob, { upsert: true })
-
-    if (uploadError) {
-      setError('Erro ao enviar selfie.')
-      setLoading(false)
-      return
-    }
-
-    const { data: publicUrl } = supabase.storage
-      .from('selfies')
-      .getPublicUrl(filePath)
-
-    await supabase
-      .from('profiles')
-      .update({
-        selfie_url: publicUrl.publicUrl,
-        selfie_verified: false,
-        onboarding_completed: false,
+      // 🔑 CONVERTE PARA FILE (OBRIGATÓRIO)
+      const file = new File([blob], 'selfie.jpg', {
+        type: 'image/jpeg',
       })
-      .eq('id', user.id)
 
-    setLoading(false)
-    router.replace('/verification-pending')
+      const filePath = `${user.id}/selfie.jpg`
+
+      const { error: uploadError } = await supabase.storage
+        .from('selfies')
+        .upload(filePath, file, {
+          contentType: 'image/jpeg',
+          upsert: false, // 🚨 ESSENCIAL
+        })
+
+      if (uploadError) {
+        console.error(uploadError)
+        setError('Erro ao enviar selfie.')
+        setUploading(false)
+        return
+      }
+
+      const { data } = supabase.storage
+        .from('selfies')
+        .getPublicUrl(filePath)
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          selfie_url: data.publicUrl,
+          selfie_verified: false,
+        })
+        .eq('id', user.id)
+
+      if (profileError) {
+        setError('Erro ao salvar selfie.')
+        setUploading(false)
+        return
+      }
+
+      setUploading(false)
+      router.replace('/verification-pending')
+    }, 'image/jpeg')
   }
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6">
-      <h1 className="text-3xl font-bold mb-4">Envie sua selfie</h1>
+      <div className="w-full max-w-md space-y-6 text-center">
+        <h1 className="text-3xl font-bold">Envie sua selfie</h1>
 
-      {error && <p className="text-red-400 mb-4">{error}</p>}
+        {error && <p className="text-red-500">{error}</p>}
 
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="rounded-xl border border-[#D4AF37] w-full max-w-sm"
-      />
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className="rounded-xl border border-[#D4AF37]"
+        />
 
-      <canvas ref={canvasRef} className="hidden" />
+        <canvas ref={canvasRef} className="hidden" />
 
-      <Button
-        onClick={handleCapture}
-        disabled={loading}
-        className="mt-6 bg-[#D4AF37] text-black w-full max-w-sm"
-      >
-        {loading ? 'Enviando...' : 'Capturar selfie'}
-      </Button>
+        <Button
+          onClick={captureAndUpload}
+          disabled={uploading}
+          className="w-full bg-[#D4AF37] text-black"
+        >
+          {uploading ? 'Enviando...' : 'Capturar selfie'}
+        </Button>
+      </div>
     </main>
   )
 }
