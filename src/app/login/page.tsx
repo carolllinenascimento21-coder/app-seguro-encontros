@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase' // 🔹 único client do app
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -16,21 +16,19 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (error) {
-      const message = error.message.toLowerCase()
-
-      // 📩 EMAIL NÃO CONFIRMADO
+      // ✅ Tratamento específico para e-mail não confirmado
       if (
-        message.includes('email not confirmed') ||
-        message.includes('confirm your email')
+        error.message.toLowerCase().includes('email') &&
+        error.message.toLowerCase().includes('confirm')
       ) {
         setError(
-          'Confirme seu e-mail para continuar. Verifique sua caixa de entrada ou spam.'
+          'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou spam e clique no link de confirmação.'
         )
       } else {
         setError('E-mail ou senha inválidos.')
@@ -40,7 +38,7 @@ export default function LoginPage() {
       return
     }
 
-    // ✅ login OK → /home decide (selfie / perfil / etc)
+    // ✅ Login ok → controle segue para o middleware
     router.replace('/home')
   }
 
