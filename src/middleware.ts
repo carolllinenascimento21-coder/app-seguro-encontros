@@ -6,60 +6,46 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const supabase = createMiddlewareClient({ req, res })
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const { pathname } = req.nextUrl
 
-  const pathname = req.nextUrl.pathname
-
-  /* ===============================
-     1️⃣ ROTA RAIZ → ONBOARDING
-  =============================== */
+  // 1️⃣ ROTA RAIZ → SEMPRE ONBOARDING
   if (pathname === '/') {
     return NextResponse.redirect(new URL('/onboarding', req.url))
   }
 
-  /* ===============================
-     2️⃣ ROTAS PÚBLICAS
-  =============================== */
-  const PUBLIC_ROUTES = [
-    '/onboarding',
-    '/login',
-    '/signup',
+  // 2️⃣ ROTAS PÚBLICAS (NUNCA REDIRECIONAM PARA LOGIN)
+  const PUBLIC_ROUTES = ['/onboarding', '/login', '/signup']
+  if (PUBLIC_ROUTES.includes(pathname)) {
+    return res
+  }
+
+  // 3️⃣ ROTAS DE FLUXO DE SELFIE (permitidas se logada)
+  const SELFIE_FLOW_ROUTES = [
+    '/onboarding/selfie',
+    '/verification-pending',
+    '/verificacao-selfie',
   ]
 
-  const isPublicRoute =
-    PUBLIC_ROUTES.includes(pathname) ||
-    pathname.startsWith('/auth')
+  // 4️⃣ ROTAS PROTEGIDAS (exigem login)
+  const PROTECTED_ROUTES = ['/perfil', '/avaliar']
 
-  /* ===============================
-     3️⃣ SELFIE (EXIGE LOGIN)
-  =============================== */
-  const isSelfieRoute =
-    pathname === '/onboarding/selfie' ||
-    pathname.startsWith('/onboarding/selfie/')
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-  /* ===============================
-     4️⃣ USUÁRIA NÃO LOGADA
-  =============================== */
-  if (!session?.user) {
-    if (isPublicRoute) {
-      return res
-    }
-
-    // selfie sem login → login
-    if (isSelfieRoute) {
+  // 5️⃣ NÃO LOGADA → só pode ver públicas
+  if (!session) {
+    if (
+      SELFIE_FLOW_ROUTES.some(r => pathname.startsWith(r)) ||
+      PROTECTED_ROUTES.some(r => pathname.startsWith(r))
+    ) {
       return NextResponse.redirect(new URL('/login', req.url))
     }
 
-    // qualquer outra rota → login
-    return NextResponse.redirect(new URL('/login', req.url))
+    return res
   }
 
-  /* ===============================
-     5️⃣ USUÁRIA LOGADA
-  =============================== */
-  // logada tentando acessar login/signup → onboarding
+  // 6️⃣ LOGADA → bloqueia login/signup
   if (pathname === '/login' || pathname === '/signup') {
     return NextResponse.redirect(new URL('/onboarding', req.url))
   }
@@ -68,7 +54,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
