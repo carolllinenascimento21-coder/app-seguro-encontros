@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
+const PUBLIC_ROUTES = [
+  '/login',
+  '/signup',
+  '/verificacao-selfie',
+  '/onboarding',
+]
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
 
@@ -27,42 +34,51 @@ export async function middleware(req: NextRequest) {
 
   const pathname = req.nextUrl.pathname
 
-  // Rotas públicas (não protegidas)
-  const publicRoutes = [
-    '/login',
-    '/signup',
-    '/verificacao-selfie',
-    '/onboarding/aceitar-termos',
-  ]
+  // ✅ Ignora arquivos estáticos, api e assets
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/favicon')
+  ) {
+    return res
+  }
 
-  // 🔒 Usuária não logada
-  if (!session && !publicRoutes.some(p => pathname.startsWith(p))) {
+  // 🔓 Rotas públicas
+  if (PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
+    return res
+  }
+
+  // 🔒 Não logada → login
+  if (!session) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  // 🔐 Usuária logada → checar selfie
-  if (session) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('selfie_verified')
-      .eq('id', session.user.id)
-      .single()
+  // 🔐 Logada → checa selfie
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('selfie_verified')
+    .eq('id', session.user.id)
+    .single()
 
-    // ❌ Selfie NÃO verificada → força rota
-    if (
-      profile &&
-      profile.selfie_verified === false &&
-      !pathname.startsWith('/verificacao-selfie')
-    ) {
-      return NextResponse.redirect(
-        new URL('/verificacao-selfie', req.url)
-      )
-    }
+  if (
+    profile &&
+    profile.selfie_verified === false &&
+    !pathname.startsWith('/verificacao-selfie')
+  ) {
+    return NextResponse.redirect(
+      new URL('/verificacao-selfie', req.url)
+    )
   }
 
   return res
 }
 
 export const config = {
-  matcher: ['/((?!_next|favicon.ico|api).*)'],
+  matcher: [
+    /*
+      Aplica middleware SOMENTE em páginas de app,
+      não em assets nem callbacks
+    */
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+  ],
 }
