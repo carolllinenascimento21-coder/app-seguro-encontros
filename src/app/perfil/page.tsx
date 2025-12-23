@@ -34,12 +34,7 @@ export default function PerfilPage() {
         data: { session }
       } = await supabase.auth.getSession()
 
-      if (!session?.user) {
-        router.replace('/login')
-        return
-      }
-
-      const user = session.user
+       const user = session.user
 
       // 👤 Busca perfil (sem quebrar)
       const { data: profileData, error } = await supabase
