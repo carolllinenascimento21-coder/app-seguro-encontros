@@ -13,38 +13,55 @@ export async function middleware(req: NextRequest) {
 
   const pathname = req.nextUrl.pathname
 
-  // 🔓 Rotas públicas
-  const publicRoutes = [
-    '/login',
-    '/signup',
-    '/onboarding',
-    '/onboarding/selfie',
-    '/auth/callback',
-  ]
+  const PUBLIC_ROUTES = ['/', '/onboarding', '/login', '/signup']
+  const SELFIE_ROUTE = '/onboarding/selfie'
+  const SELFIE_FLOW_ROUTES = ['/verification-pending', '/verificacao-selfie']
+  const isPublicRoute =
+    PUBLIC_ROUTES.includes(pathname) ||
+    pathname.startsWith('/auth')
+  const isSelfieRoute =
+    pathname === SELFIE_ROUTE || pathname.startsWith(`${SELFIE_ROUTE}/`)
+  const isSelfieFlowRoute =
+    isSelfieRoute ||
+    SELFIE_FLOW_ROUTES.some(
+      route => pathname === route || pathname.startsWith(`${route}/`)
+    )
 
   if (!session?.user) {
-    if (!publicRoutes.includes(pathname)) {
+    if (!isPublicRoute || isSelfieRoute) {
       return NextResponse.redirect(new URL('/login', req.url))
     }
     return res
   }
 
-  // 🔎 Busca perfil
   const { data: profile } = await supabase
     .from('profiles')
     .select('selfie_verified')
     .eq('id', session.user.id)
     .single()
 
-  // 🚨 FORÇA SELFIE
-  if (
-    profile &&
-    profile.selfie_verified === false &&
-    pathname !== '/onboarding/selfie'
-  ) {
-    return NextResponse.redirect(
-      new URL('/onboarding/selfie', req.url)
-    )
+  const selfieVerified = profile?.selfie_verified === true
+
+  if (!selfieVerified) {
+    if (isSelfieFlowRoute) {
+      return res
+    }
+
+    if (pathname === '/onboarding') {
+      return NextResponse.redirect(new URL(SELFIE_ROUTE, req.url))
+    }
+
+    if (!isPublicRoute) {
+      return NextResponse.redirect(new URL(SELFIE_ROUTE, req.url))
+    }
+  }
+
+  if (selfieVerified && isSelfieRoute) {
+    return NextResponse.redirect(new URL('/home', req.url))
+  }
+
+  if (selfieVerified && pathname === '/onboarding') {
+    return NextResponse.redirect(new URL('/home', req.url))
   }
 
   return res
