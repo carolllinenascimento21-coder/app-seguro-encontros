@@ -85,7 +85,7 @@ export default function SelfieOnboardingPage() {
 
     // ✅ UPLOAD CORRETO
     const { error: uploadError } = await supabase.storage
-      .from('selfies')
+      .from('selfie-verifications')
       .upload(filePath, blob, {
         contentType: 'image/jpeg',
         upsert: true, // ✅ ESSENCIAL
@@ -99,7 +99,7 @@ export default function SelfieOnboardingPage() {
     }
 
     const { data } = supabase.storage
-      .from('selfies')
+      .from('selfie-verifications')
       .getPublicUrl(filePath)
 
     const { error: profileError } = await supabase

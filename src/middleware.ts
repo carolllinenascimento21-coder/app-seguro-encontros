@@ -13,27 +13,21 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/onboarding', req.url))
   }
 
-  // 2️⃣ ROTAS PÚBLICAS (NUNCA REDIRECIONAM PARA LOGIN)
-  const PUBLIC_ROUTES = ['/onboarding', '/login', '/signup']
-  if (PUBLIC_ROUTES.includes(pathname)) {
-    return res
-  }
-
-  // 3️⃣ ROTAS DE FLUXO DE SELFIE (permitidas se logada)
+  // 2️⃣ ROTAS DE FLUXO DE SELFIE (permitidas se logada)
   const SELFIE_FLOW_ROUTES = [
     '/onboarding/selfie',
     '/verification-pending',
     '/verificacao-selfie',
   ]
 
-  // 4️⃣ ROTAS PROTEGIDAS (exigem login)
+  // 3️⃣ ROTAS PROTEGIDAS (exigem login)
   const PROTECTED_ROUTES = ['/perfil', '/avaliar']
 
   const {
     data: { session },
   } = await supabase.auth.getSession()
 
-  // 5️⃣ NÃO LOGADA → só pode ver públicas
+  // 4️⃣ NÃO LOGADA → só pode ver públicas
   if (!session) {
     if (
       SELFIE_FLOW_ROUTES.some(r => pathname.startsWith(r)) ||
@@ -45,7 +39,7 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
-  // 6️⃣ LOGADA → bloqueia login/signup
+  // 5️⃣ LOGADA → bloqueia login/signup
   if (pathname === '/login' || pathname === '/signup') {
     return NextResponse.redirect(new URL('/onboarding', req.url))
   }
