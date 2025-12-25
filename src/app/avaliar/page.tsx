@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createSupabaseClient } from '@/lib/supabase';
 
-const supabase = createClientComponentClient();
+const supabase = createSupabaseClient();
 
 type CriterioKey =
   | 'comportamento'

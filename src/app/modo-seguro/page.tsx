@@ -1,13 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import { AlertTriangle, PhoneCall, X } from 'lucide-react'
+import { createSupabaseClient } from '@/lib/supabase'
 
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createSupabaseClient()
 
 export default function ModoSeguroPage() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)

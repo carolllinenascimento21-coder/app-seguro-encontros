@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createSupabaseClient } from '@/lib/supabase';
 
-const supabase = createClientComponentClient();
+const supabase = createSupabaseClient();
 
 interface Avaliacao {
   id: string;

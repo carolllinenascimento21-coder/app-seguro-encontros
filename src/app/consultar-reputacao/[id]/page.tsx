@@ -3,10 +3,10 @@
 import { useParams, useRouter } from 'next/navigation';
 import { Star, ArrowLeft, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useEffect, useState } from 'react';
+import { createSupabaseClient } from '@/lib/supabase';
 
-const supabase = createClientComponentClient();
+const supabase = createSupabaseClient();
 
 export default function DetalhesReputacao() {
   const { id } = useParams<{ id: string }>();

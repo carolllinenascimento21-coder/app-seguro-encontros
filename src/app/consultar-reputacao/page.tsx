@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import { Search, MapPin, Star, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
+import { createSupabaseClient } from '@/lib/supabase';
 
-const supabase = createClientComponentClient();
+const supabase = createSupabaseClient();
 
 interface Avaliacao {
   id: string;

@@ -4,8 +4,8 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@supabase/ssr'
 import { User, LogOut, Plus, Trash2, Shield } from 'lucide-react'
+import { createSupabaseClient } from '@/lib/supabase'
 
 type EmergencyContact = {
   id: string
@@ -13,10 +13,7 @@ type EmergencyContact = {
   telefone: string
 }
 
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createSupabaseClient()
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -31,10 +28,18 @@ export default function PerfilPage() {
     const load = async () => {
       // 🔐 Sessão
       const {
-        data: { session }
+        data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession()
 
-       const user = session.user
+      if (sessionError || !session?.user) {
+        console.error(sessionError)
+        router.replace('/login')
+        setLoading(false)
+        return
+      }
+
+      const user = session.user
 
       // 👤 Busca perfil (sem quebrar)
       const { data: profileData, error } = await supabase
