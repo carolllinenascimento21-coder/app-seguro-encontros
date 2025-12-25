@@ -1,11 +1,12 @@
 'use client';
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-const supabase = createClientComponentClient();
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, History, Star, Clock, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
+import { createSupabaseClient } from '@/lib/supabase';
+
+const supabase = createSupabaseClient();
 
 interface HistoricoItem {
   id: string;

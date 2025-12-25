@@ -2,12 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserSupabaseClient } from '@supabase/auth-helpers-nextjs'
 import { Button } from '@/components/ui/button'
 import { MailCheck } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function VerificationPendingPage() {
-  const supabase = createBrowserSupabaseClient()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)

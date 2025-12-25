@@ -72,10 +72,14 @@ export default function SelfieOnboardingPage() {
     }
 
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
 
-    if (!user) {
+    const user = session?.user
+
+    if (sessionError || !user) {
+      console.error(sessionError)
       setError('Usuária não autenticada.')
       setUploading(false)
       return
@@ -93,19 +97,15 @@ export default function SelfieOnboardingPage() {
 
     if (uploadError) {
       console.error(uploadError)
-      setError('Erro ao enviar selfie.')
+      setError(uploadError.message || 'Erro ao enviar selfie.')
       setUploading(false)
       return
     }
 
-    const { data } = supabase.storage
-      .from('selfie-verifications')
-      .getPublicUrl(filePath)
-
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
-        selfie_url: data.publicUrl,
+        selfie_url: filePath,
         selfie_verified: false,
         onboarding_completed: false,
       })

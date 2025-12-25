@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Trash2, Plus } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
+import { createSupabaseClient } from '@/lib/supabase'
 
-const supabase = createClientComponentClient()
+const supabase = createSupabaseClient()
 
 interface Contato {
   id: string
