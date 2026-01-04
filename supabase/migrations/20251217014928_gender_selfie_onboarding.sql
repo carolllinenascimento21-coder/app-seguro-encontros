@@ -40,20 +40,39 @@ $$ language plpgsql stable;
 -- upsert profile using raw_user_meta_data
 create or replace function public.handle_new_user() returns trigger as $$
 begin
-  insert into public.profiles (id, email, nome, gender, selfie_verified, onboarding_completed)
+  insert into public.profiles (
+    id,
+    email,
+    nome,
+    gender,
+    selfie_verified,
+    onboarding_completed,
+    plan,
+    free_queries_used,
+    credits,
+    created_at
+  )
   values
     (new.id,
      coalesce(new.email, ''),
      coalesce((new.raw_user_meta_data->>'nome'), ''),
      normalize_gender_text(new.raw_user_meta_data),
      coalesce((new.raw_user_meta_data->>'selfie_verified')::boolean, false),
-     coalesce((new.raw_user_meta_data->>'onboarding_completed')::boolean, false))
+     coalesce((new.raw_user_meta_data->>'onboarding_completed')::boolean, false),
+     'free',
+     0,
+     0,
+     coalesce(new.created_at, now()))
   on conflict (id) do update
     set email = excluded.email,
         nome = excluded.nome,
         gender = excluded.gender,
         selfie_verified = coalesce(profiles.selfie_verified, excluded.selfie_verified, false),
-        onboarding_completed = coalesce(profiles.onboarding_completed, excluded.onboarding_completed, false);
+        onboarding_completed = coalesce(profiles.onboarding_completed, excluded.onboarding_completed, false),
+        plan = coalesce(profiles.plan, excluded.plan, 'free'),
+        free_queries_used = coalesce(profiles.free_queries_used, excluded.free_queries_used, 0),
+        credits = coalesce(profiles.credits, excluded.credits, 0),
+        created_at = coalesce(profiles.created_at, excluded.created_at, now());
   return new;
 end;
 $$ language plpgsql security definer;

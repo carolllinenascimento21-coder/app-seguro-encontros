@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, MapPin, Star, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
 import { createSupabaseClient } from '@/lib/supabase';
+import { useAccessControl } from '@/hooks/use-access-control';
 
 const supabase = createSupabaseClient();
 
@@ -26,6 +27,7 @@ export default function ConsultarReputacao() {
   const [cidade, setCidade] = useState('');
   const [results, setResults] = useState<Avaliacao[]>([]);
   const [loading, setLoading] = useState(false);
+  const { ensureAccess, consumeQuery, accessInfo, refreshAccess, checking } = useAccessControl();
 
   const media = (a: Avaliacao) =>
     (
@@ -36,6 +38,10 @@ export default function ConsultarReputacao() {
         a.confianca) / 5
     ).toFixed(1);
 
+  useEffect(() => {
+    refreshAccess();
+  }, [refreshAccess]);
+
   const buscar = async () => {
     if (!nome.trim()) {
       alert('Digite um nome para buscar.');
@@ -43,6 +49,12 @@ export default function ConsultarReputacao() {
     }
 
     try {
+      const access = await ensureAccess();
+
+      if (!access.allowed) {
+        return;
+      }
+
       setLoading(true);
 
       let query = supabase
@@ -70,6 +82,9 @@ export default function ConsultarReputacao() {
       if (error) throw error;
 
       setResults(data || []);
+
+      await consumeQuery();
+      await refreshAccess();
     } catch (err) {
       console.error('Erro ao buscar reputação:', err);
       alert('Erro ao buscar reputação.');
@@ -87,6 +102,19 @@ export default function ConsultarReputacao() {
         <p className="text-gray-400 text-sm mb-6">
           Apenas avaliações públicas são exibidas.
         </p>
+        <div className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-4 text-sm text-gray-300 mb-4">
+          {accessInfo.plan !== 'free' ? (
+            <p className="text-green-400 font-semibold">Consultas ilimitadas ativas no seu plano.</p>
+          ) : (
+            <p>
+              Consultas gratuitas restantes:{' '}
+              <span className="text-[#D4AF37] font-semibold">
+                {Math.max(0, 3 - accessInfo.free_queries_used)} de 3
+              </span>
+              {checking && <span className="ml-2 text-xs text-gray-500">(atualizando...)</span>}
+            </p>
+          )}
+        </div>
 
         <div className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800 mb-6">
           <input
