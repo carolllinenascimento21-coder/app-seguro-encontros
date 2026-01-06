@@ -10,7 +10,7 @@ import {
   getSiteUrl,
   subscriptionPriceEnvByPlan,
 } from '@/lib/billing'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 type CheckoutRequest =
   | { mode: 'subscription'; planId: SubscriptionPlanId }
@@ -62,6 +62,15 @@ export async function POST(req: Request) {
   const siteUrl = getSiteUrl()
   const successUrl = `${siteUrl}/planos?status=success`
   const cancelUrl = `${siteUrl}/planos?status=cancel`
+
+  const stripe = getStripeClient()
+
+  if (!stripe) {
+    return NextResponse.json(
+      { error: 'Stripe não configurado. Verifique STRIPE_SECRET_KEY.' },
+      { status: 500 }
+    )
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
