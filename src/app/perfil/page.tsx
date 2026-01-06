@@ -22,10 +22,14 @@ export default function PerfilPage() {
   const [contacts, setContacts] = useState<EmergencyContact[]>([])
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
+      setError(null)
+
       // 🔐 Sessão
       const {
         data: { session },
@@ -41,10 +45,11 @@ export default function PerfilPage() {
 
       const user = session.user
 
-      // 👤 Busca perfil (sem quebrar)
-      const { data: profileData, error } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select(
+          'id, nome, name, full_name, email, telefone, selfie_url, selfie_verified, onboarding_completed'
+        )
         .eq('id', user.id)
         .maybeSingle()
 
@@ -52,13 +57,23 @@ export default function PerfilPage() {
       let finalProfile = profileData
 
       if (!profileData) {
+        const incomingNome =
+          (user.user_metadata as any)?.nome ||
+          (user.user_metadata as any)?.name ||
+          user.email ||
+          ''
+        const incomingTelefone =
+          (user.user_metadata as any)?.telefone || user.phone || ''
+
         const { data: newProfile, error: insertError } = await supabase
           .from('profiles')
           .insert({
             id: user.id,
             email: user.email,
-            full_name: '',
+            nome: incomingNome,
+            telefone: incomingTelefone,
             selfie_verified: false,
+            onboarding_completed: false,
           })
           .select()
           .single()
@@ -69,6 +84,11 @@ export default function PerfilPage() {
         }
 
         finalProfile = newProfile
+      } else if (profileError) {
+        console.error('Erro ao carregar perfil:', profileError)
+        setError('Erro ao carregar perfil.')
+        setLoading(false)
+        return
       }
 
       // 📞 Contatos
@@ -80,6 +100,19 @@ export default function PerfilPage() {
 
       setProfile(finalProfile)
       setContacts(contactsData || [])
+
+      if (finalProfile?.selfie_url) {
+        const { data: signedUrlData, error: selfieError } = await supabase.storage
+          .from('selfie-verifications')
+          .createSignedUrl(finalProfile.selfie_url, 60 * 60)
+
+        if (!selfieError) {
+          setSelfieUrl(signedUrlData?.signedUrl || null)
+        } else {
+          console.error('Erro ao recuperar selfie:', selfieError)
+        }
+      }
+
       setLoading(false)
     }
 
@@ -146,13 +179,31 @@ export default function PerfilPage() {
             </h1>
           </div>
 
+          {error && (
+            <p className="text-red-500 text-sm mb-2 text-center">{error}</p>
+          )}
+
+          {selfieUrl && (
+            <div className="mb-4">
+              <img
+                src={selfieUrl}
+                alt="Selfie enviada"
+                className="mx-auto h-40 w-40 rounded-full border border-[#D4AF37] object-cover"
+              />
+            </div>
+          )}
+
           <p>
             <span className="text-gray-400">Nome:</span>{' '}
-            {profile?.full_name || 'Não informado'}
+            {profile?.nome || profile?.name || profile?.full_name || 'Não informado'}
           </p>
           <p>
             <span className="text-gray-400">Email:</span>{' '}
             {profile?.email || '—'}
+          </p>
+          <p>
+            <span className="text-gray-400">Telefone:</span>{' '}
+            {profile?.telefone || '—'}
           </p>
         </div>
 
