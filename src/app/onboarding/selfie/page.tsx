@@ -52,73 +52,84 @@ export default function SelfieOnboardingPage() {
     setUploading(true)
     setError('')
 
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')!
+    try {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      const ctx = canvas.getContext('2d')
 
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+      if (!ctx) {
+        throw new Error('Não foi possível acessar a câmera.')
+      }
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
 
-    const blob = await new Promise<Blob | null>(resolve =>
-      canvas.toBlob(resolve, 'image/jpeg', 0.9)
-    )
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    if (!blob) {
-      setError('Erro ao capturar imagem.')
+      const blob = await new Promise<Blob | null>(resolve =>
+        canvas.toBlob(resolve, 'image/jpeg', 0.9)
+      )
+
+      if (!blob) {
+        throw new Error('Erro ao capturar imagem.')
+      }
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      const user = session?.user
+
+      if (sessionError || !user) {
+        console.error(sessionError)
+        throw new Error('Usuária não autenticada.')
+      }
+
+      const filePath = `${user.id}/selfie.jpg`
+
+      // ✅ UPLOAD CORRETO
+      const { error: uploadError } = await supabase.storage
+        .from('selfie-verifications')
+        .upload(filePath, blob, {
+          contentType: 'image/jpeg',
+          upsert: true, // ✅ ESSENCIAL
+        })
+
+      if (uploadError) {
+        console.error(uploadError)
+
+        const normalizedMessage = uploadError.message?.toLowerCase() ?? ''
+        const permissionDenied = normalizedMessage.includes('row-level security')
+        const message = permissionDenied
+          ? 'Sem permissão para salvar a selfie. Faça login novamente e tente de novo.'
+          : uploadError.message || 'Erro ao enviar selfie.'
+
+        throw new Error(message)
+      }
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          selfie_url: filePath,
+          selfie_verified: false,
+          onboarding_completed: false,
+        })
+        .eq('id', user.id)
+
+      if (profileError) {
+        console.error(profileError)
+        throw new Error('Erro ao salvar selfie.')
+      }
+
+      router.replace('/verification-pending')
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : 'Erro ao enviar selfie. Tente novamente.'
+      setError(message)
+    } finally {
       setUploading(false)
-      return
     }
-
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession()
-
-    const user = session?.user
-
-    if (sessionError || !user) {
-      console.error(sessionError)
-      setError('Usuária não autenticada.')
-      setUploading(false)
-      return
-    }
-
-    const filePath = `${user.id}/selfie.jpg`
-
-    // ✅ UPLOAD CORRETO
-    const { error: uploadError } = await supabase.storage
-      .from('selfie-verifications')
-      .upload(filePath, blob, {
-        contentType: 'image/jpeg',
-        upsert: true, // ✅ ESSENCIAL
-      })
-
-    if (uploadError) {
-      console.error(uploadError)
-      setError(uploadError.message || 'Erro ao enviar selfie.')
-      setUploading(false)
-      return
-    }
-
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        selfie_url: filePath,
-        selfie_verified: false,
-        onboarding_completed: false,
-      })
-      .eq('id', user.id)
-
-    if (profileError) {
-      setError('Erro ao salvar selfie.')
-      setUploading(false)
-      return
-    }
-
-    setUploading(false)
-    router.replace('/verification-pending')
   }
 
   return (
