@@ -2,7 +2,7 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +15,13 @@ export async function POST(req: Request) {
   if (!signature || !webhookSecret) {
     console.error('Webhook Stripe não configurado')
     return NextResponse.json({ error: 'Webhook não configurado' }, { status: 400 })
+  }
+
+  const stripe = getStripeClient()
+
+  if (!stripe) {
+    console.error('Stripe não configurado para processar webhook')
+    return NextResponse.json({ error: 'Stripe não configurado' }, { status: 500 })
   }
 
   const body = await req.text()
