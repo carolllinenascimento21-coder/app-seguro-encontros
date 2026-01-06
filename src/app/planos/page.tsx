@@ -3,13 +3,48 @@
 import { useState } from 'react'
 import { Eye, Lock, Check, X, Shield, Zap, Crown, Star, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { CreditPackId, SubscriptionPlanId } from '@/lib/billing'
 
 export default function PlanosPage() {
   const router = useRouter()
+  const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null)
 
   const scrollToPlans = () => {
     const plansSection = document.getElementById('planos-section')
     plansSection?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const startCheckout = async (
+    payload:
+      | { mode: 'subscription'; planId: SubscriptionPlanId }
+      | { mode: 'payment'; creditPackId: CreditPackId },
+    key: string
+  ) => {
+    setLoadingCheckout(key)
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (res.status === 401) {
+        router.push('/login')
+        return
+      }
+
+      const data = await res.json()
+      if (data?.url) {
+        window.location.href = data.url
+      } else {
+        alert('Não foi possível iniciar o checkout.')
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar checkout', error)
+      alert('Erro ao iniciar checkout.')
+    } finally {
+      setLoadingCheckout(null)
+    }
   }
 
   return (
@@ -139,14 +174,15 @@ export default function PlanosPage() {
                 </li>
               </ul>
 
-              <a
-                href="https://checkout.keoto.com/f9c8f82f-eb6b-4fdc-ada5-b66627fd87d6"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all duration-300 text-center"
+              <button
+                onClick={() =>
+                  startCheckout({ mode: 'subscription', planId: 'premium_mensal' }, 'premium_mensal')
+                }
+                disabled={loadingCheckout === 'premium_mensal'}
+                className="block w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all duration-300 text-center disabled:opacity-60"
               >
-                Ativar Premium Mensal
-              </a>
+                {loadingCheckout === 'premium_mensal' ? 'Carregando...' : 'Ativar Premium Mensal'}
+              </button>
             </div>
 
             {/* Plano Premium Anual - DESTAQUE */}
@@ -202,14 +238,15 @@ export default function PlanosPage() {
                 </li>
               </ul>
 
-              <a
-                href="https://checkout.keoto.com/8da165cc-f183-4139-8d6b-bc52103a0eea"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full bg-gradient-to-r from-[#FFD700] to-[#D4AF37] text-black font-bold py-4 px-6 rounded-xl hover:shadow-[0_0_30px_rgba(255,215,0,0.7)] transition-all duration-300 transform hover:scale-105 text-center"
+              <button
+                onClick={() =>
+                  startCheckout({ mode: 'subscription', planId: 'premium_anual' }, 'premium_anual')
+                }
+                disabled={loadingCheckout === 'premium_anual'}
+                className="block w-full bg-gradient-to-r from-[#FFD700] to-[#D4AF37] text-black font-bold py-4 px-6 rounded-xl hover:shadow-[0_0_30px_rgba(255,215,0,0.7)] transition-all duration-300 transform hover:scale-105 text-center disabled:opacity-60"
               >
-                Assinar Anual
-              </a>
+                {loadingCheckout === 'premium_anual' ? 'Carregando...' : 'Assinar Anual'}
+              </button>
             </div>
 
             {/* Plano Premium Plus */}
@@ -251,14 +288,15 @@ export default function PlanosPage() {
                 </li>
               </ul>
 
-              <a
-                href="https://checkout.keoto.com/bd3ab94b-c3d1-4c94-b24d-cc9dbcaf951d"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full bg-gradient-to-r from-[#C0C0C0] to-[#A8A8A8] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(192,192,192,0.5)] transition-all duration-300 text-center"
+              <button
+                onClick={() =>
+                  startCheckout({ mode: 'subscription', planId: 'premium_plus' }, 'premium_plus')
+                }
+                disabled={loadingCheckout === 'premium_plus'}
+                className="block w-full bg-gradient-to-r from-[#C0C0C0] to-[#A8A8A8] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(192,192,192,0.5)] transition-all duration-300 text-center disabled:opacity-60"
               >
-                Ativar Premium Plus
-              </a>
+                {loadingCheckout === 'premium_plus' ? 'Carregando...' : 'Ativar Premium Plus'}
+              </button>
             </div>
 
             {/* Créditos Avulsos */}
@@ -273,42 +311,39 @@ export default function PlanosPage() {
               </p>
 
               <div className="space-y-3 mb-6">
-                <a
-                  href="https://checkout.keoto.com/ca8e2dbc-5014-49d7-bf46-9a9fd6275c88"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
+                <button
+                  onClick={() => startCheckout({ mode: 'payment', creditPackId: 'credits_3' }, 'credits_3')}
+                  disabled={loadingCheckout === 'credits_3'}
+                  className="w-full bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all text-left disabled:opacity-60"
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-white font-semibold">3 créditos</span>
                     <span className="text-[#D4AF37] font-bold">R$ 6,90</span>
                   </div>
-                </a>
+                </button>
                 
-                <a
-                  href="https://checkout.keoto.com/122c1b53-5bbd-433c-b1db-420df700525f"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
+                <button
+                  onClick={() => startCheckout({ mode: 'payment', creditPackId: 'credits_10' }, 'credits_10')}
+                  disabled={loadingCheckout === 'credits_10'}
+                  className="w-full bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all text-left disabled:opacity-60"
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-white font-semibold">10 créditos</span>
                     <span className="text-[#D4AF37] font-bold">R$ 14,90</span>
                   </div>
-                </a>
+                </button>
                 
-                <a
-                  href="https://checkout.keoto.com/24994c03-12ba-4653-8bd3-9c749c2da650"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
+                <button
+                  onClick={() => startCheckout({ mode: 'payment', creditPackId: 'credits_25' }, 'credits_25')}
+                  disabled={loadingCheckout === 'credits_25'}
+                  className="w-full bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all text-left disabled:opacity-60"
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-white font-semibold">25 créditos</span>
                     <span className="text-[#D4AF37] font-bold">R$ 27,90</span>
                   </div>
                   <div className="text-xs text-[#FFD700] mt-1">⭐ Melhor custo-benefício</div>
-                </a>
+                </button>
               </div>
 
               <div className="text-center text-sm text-[#C0C0C0] italic">

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, MapPin, Star, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
 import { createSupabaseClient } from '@/lib/supabase';
+import { useAccessControl } from '@/hooks/use-access-control';
 
 const supabase = createSupabaseClient();
 
@@ -26,6 +27,11 @@ export default function ConsultarReputacao() {
   const [cidade, setCidade] = useState('');
   const [results, setResults] = useState<Avaliacao[]>([]);
   const [loading, setLoading] = useState(false);
+  const { checkAccess, consumeQuery, profile } = useAccessControl();
+
+  useEffect(() => {
+    checkAccess({ redirectOnBlock: false });
+  }, [checkAccess]);
 
   const media = (a: Avaliacao) =>
     (
@@ -44,6 +50,10 @@ export default function ConsultarReputacao() {
 
     try {
       setLoading(true);
+      const access = await checkAccess();
+      if (!access.allowed) {
+        return;
+      }
 
       let query = supabase
         .from('avaliacoes')
@@ -70,6 +80,7 @@ export default function ConsultarReputacao() {
       if (error) throw error;
 
       setResults(data || []);
+      await consumeQuery();
     } catch (err) {
       console.error('Erro ao buscar reputação:', err);
       alert('Erro ao buscar reputação.');
@@ -87,6 +98,20 @@ export default function ConsultarReputacao() {
         <p className="text-gray-400 text-sm mb-6">
           Apenas avaliações públicas são exibidas.
         </p>
+
+        {profile?.plan === 'free' && (
+          <div className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-4 mb-4 text-gray-300 text-sm">
+            Consultas gratuitas restantes:{' '}
+            <span className="text-white font-semibold">
+              {Math.max(0, 3 - (profile?.freeQueriesUsed ?? 0))}
+            </span>
+            {profile?.credits && profile.credits > 0 && (
+              <span className="block text-xs text-gray-400">
+                Créditos disponíveis: {profile.credits}
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800 mb-6">
           <input
