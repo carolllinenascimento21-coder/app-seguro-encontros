@@ -5,6 +5,7 @@ import { Star, ArrowLeft, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useEffect, useState } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
+import { useAccessControl } from '@/hooks/use-access-control';
 
 const supabase = createSupabaseClient();
 
@@ -13,10 +14,16 @@ export default function DetalhesReputacao() {
   const router = useRouter();
   const [avaliacao, setAvaliacao] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { ensureAccess, consumeQuery, refreshAccess } = useAccessControl();
 
   useEffect(() => {
     const carregar = async () => {
       try {
+        const access = await ensureAccess();
+        if (!access.allowed) {
+          return;
+        }
+
         const { data, error } = await supabase
           .from('avaliacoes')
           .select('*')
@@ -27,6 +34,8 @@ export default function DetalhesReputacao() {
         if (error) throw error;
 
         setAvaliacao(data);
+        await consumeQuery();
+        await refreshAccess();
       } catch (err) {
         console.error(err);
         setAvaliacao(null);
@@ -36,7 +45,7 @@ export default function DetalhesReputacao() {
     };
 
     carregar();
-  }, [id]);
+  }, [id, ensureAccess, consumeQuery, refreshAccess]);
 
   if (loading) {
     return (
