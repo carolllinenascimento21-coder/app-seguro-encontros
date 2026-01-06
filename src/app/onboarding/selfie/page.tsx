@@ -118,7 +118,7 @@ export default function SelfieOnboardingPage() {
     }
 
     setUploading(false)
-    router.replace('/verification-pending')
+    router.replace('/perfil')
   }
 
   return (

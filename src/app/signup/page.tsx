@@ -15,6 +15,7 @@ export default function SignupPage() {
 
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
+  const [telefone, setTelefone] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -45,7 +46,7 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!nome || !email || !password || !confirmPassword) {
+    if (!nome || !email || !telefone || !password || !confirmPassword) {
       setErrorMessage('Preencha todos os campos.')
       return
     }
@@ -65,8 +66,12 @@ export default function SignupPage() {
       options: {
         data: {
           nome,
+          telefone,
           termos_aceitos: true,
+          onboarding_completed: false,
+          selfie_verified: false,
         },
+        phone: telefone,
       },
     })
 
@@ -128,6 +133,18 @@ export default function SignupPage() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
+              disabled={!termsOk}
+              className="bg-black border-[#D4AF37]"
+              required
+            />
+          </div>
+
+          <div>
+            <Label>Telefone</Label>
+            <Input
+              type="tel"
+              value={telefone}
+              onChange={e => setTelefone(e.target.value)}
               disabled={!termsOk}
               className="bg-black border-[#D4AF37]"
               required
