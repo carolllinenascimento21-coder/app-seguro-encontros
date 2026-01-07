@@ -2,28 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Camera, Save } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { ensureProfileForUser, getProfileErrorInfo } from '@/lib/profile-utils';
 
 type ProfileForm = {
-  name: string;
-  age: number;
-  city: string;
-  state: string;
+  nome: string;
   email: string;
-  profilePhoto: string;
+  telefone: string;
 };
 
 export default function EditarPerfilPage() {
   const router = useRouter();
 
   const [formData, setFormData] = useState<ProfileForm>({
-    name: '',
-    age: 0,
-    city: '',
-    state: '',
+    nome: '',
     email: '',
-    profilePhoto: '',
+    telefone: '',
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -46,59 +41,29 @@ export default function EditarPerfilPage() {
         return;
       }
 
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('name, age, city, state, email, profilePhoto')
-          .eq('id', user.id)
-          .maybeSingle();
+        const { profile, error: profileError } = await ensureProfileForUser(
+          supabase,
+          user
+        );
 
         if (profileError) {
+          const errorInfo = getProfileErrorInfo(profileError);
+          console.error('Erro ao carregar perfil:', {
+            code: errorInfo.code,
+            message: errorInfo.message,
+            error: profileError,
+          });
           throw profileError;
         }
 
         if (!profile) {
-          const { error: insertError } = await supabase.from('profiles').insert({
-            id: user.id,
-            email: user.email ?? '',
-            selfie_verified: false,
-          });
-
-          if (insertError) {
-            throw insertError;
-          }
-
-          const { data: createdProfile, error: createdProfileError } = await supabase
-            .from('profiles')
-            .select('name, age, city, state, email, profilePhoto')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          if (createdProfileError) {
-            throw createdProfileError;
-          }
-
-          if (!createdProfile) {
-            throw new Error('Perfil não encontrado após criação.');
-          }
-
-          setFormData({
-            name: createdProfile?.name ?? '',
-            age: createdProfile?.age ?? 0,
-            city: createdProfile?.city ?? '',
-            state: createdProfile?.state ?? '',
-            email: createdProfile?.email ?? user.email ?? '',
-            profilePhoto: createdProfile?.profilePhoto ?? '',
-          });
-          return;
+          throw new Error('Perfil não encontrado após criação.');
         }
 
         setFormData({
-          name: profile?.name ?? '',
-          age: profile?.age ?? 0,
-          city: profile?.city ?? '',
-          state: profile?.state ?? '',
+          nome: profile?.nome ?? '',
           email: profile?.email ?? user.email ?? '',
-          profilePhoto: profile?.profilePhoto ?? '',
+          telefone: profile?.telefone ?? '',
         });
       } catch (err: any) {
         setError('Erro ao carregar perfil.');
@@ -129,13 +94,9 @@ export default function EditarPerfilPage() {
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
-          name: formData.name,
-          age: formData.age,
-          city: formData.city,
-          state: formData.state,
+          nome: formData.nome,
           email: formData.email,
-          profilePhoto: formData.profilePhoto,
-          updated_at: new Date().toISOString(),
+          telefone: formData.telefone || null,
         })
         .eq('id', user.id);
 
@@ -188,34 +149,8 @@ export default function EditarPerfilPage() {
         <input
           type="text"
           placeholder="Nome"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          className="w-full border p-2 rounded"
-        />
-
-        <input
-          type="number"
-          placeholder="Idade"
-          value={formData.age}
-          onChange={(e) =>
-            setFormData({ ...formData, age: Number(e.target.value) })
-          }
-          className="w-full border p-2 rounded"
-        />
-
-        <input
-          type="text"
-          placeholder="Cidade"
-          value={formData.city}
-          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-          className="w-full border p-2 rounded"
-        />
-
-        <input
-          type="text"
-          placeholder="Estado"
-          value={formData.state}
-          onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+          value={formData.nome}
+          onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
           className="w-full border p-2 rounded"
         />
 
@@ -229,11 +164,9 @@ export default function EditarPerfilPage() {
 
         <input
           type="text"
-          placeholder="URL da foto de perfil"
-          value={formData.profilePhoto}
-          onChange={(e) =>
-            setFormData({ ...formData, profilePhoto: e.target.value })
-          }
+          placeholder="Telefone"
+          value={formData.telefone}
+          onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
           className="w-full border p-2 rounded"
         />
       </div>

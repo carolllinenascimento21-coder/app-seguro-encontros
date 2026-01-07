@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, LogOut, Plus, Trash2, Shield } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase'
-import { ensureProfileForUser } from '@/lib/profile-utils'
+import { ensureProfileForUser, getProfileErrorInfo } from '@/lib/profile-utils'
 
 type EmergencyContact = {
   id: string
@@ -52,7 +52,12 @@ export default function PerfilPage() {
         await ensureProfileForUser(supabase, user)
 
       if (profileError) {
-        console.error('Erro ao carregar perfil:', profileError)
+        const errorInfo = getProfileErrorInfo(profileError)
+        console.error('Erro ao carregar perfil:', {
+          code: errorInfo.code,
+          message: errorInfo.message,
+          error: profileError,
+        })
         setError('Erro ao carregar perfil.')
         setLoading(false)
         return

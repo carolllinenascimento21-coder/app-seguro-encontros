@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
-import { ensureProfileForUser } from '@/lib/profile-utils'
+import { ensureProfileForUser, getProfileErrorInfo } from '@/lib/profile-utils'
 
 export default function SelfieOnboardingPage() {
   const router = useRouter()
@@ -93,7 +93,12 @@ export default function SelfieOnboardingPage() {
     )
 
     if (profileEnsureError) {
-      console.error(profileEnsureError)
+      const errorInfo = getProfileErrorInfo(profileEnsureError)
+      console.error('Erro ao garantir perfil para selfie:', {
+        code: errorInfo.code,
+        message: errorInfo.message,
+        error: profileEnsureError,
+      })
       setError('Erro ao preparar perfil para selfie.')
       setUploading(false)
       return

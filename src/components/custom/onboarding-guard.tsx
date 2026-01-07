@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
-import { ensureProfileForUser } from '@/lib/profile-utils'
+import {
+  ensureProfileForUser,
+  getProfileErrorInfo,
+  type ProfileErrorType,
+} from '@/lib/profile-utils'
 
 type GuardStatus = 'checking' | 'ready' | 'error'
 
@@ -19,6 +23,18 @@ const SELFIE_FLOW_ROUTES = [
 ]
 
 const supabase = createSupabaseClient()
+
+const resolveErrorMessage = (errorType?: ProfileErrorType) => {
+  if (errorType === 'schema') {
+    return 'Erro técnico ao carregar seu perfil. Tente novamente em instantes.'
+  }
+
+  if (errorType === 'permission') {
+    return 'Não foi possível acessar seu perfil. Faça login novamente ou tente mais tarde.'
+  }
+
+  return 'Não foi possível carregar seus dados agora. Verifique sua conexão e tente novamente.'
+}
 
 export default function OnboardingGuard({
   children,
@@ -46,7 +62,7 @@ export default function OnboardingGuard({
       console.error('Erro ao carregar sessão:', sessionError)
       setState({
         status: 'error',
-        errorMessage: 'Erro ao carregar perfil.',
+        errorMessage: resolveErrorMessage(),
       })
       return
     }
@@ -56,22 +72,29 @@ export default function OnboardingGuard({
       return
     }
 
-    const { profile, error: profileError } = await ensureProfileForUser(
+    const { profile, error: profileError, errorType } = await ensureProfileForUser(
       supabase,
       session.user
     )
 
     if (profileError || !profile) {
-      console.error('Erro ao carregar perfil:', profileError)
+      const errorInfo = getProfileErrorInfo(profileError)
+      console.error('Erro ao carregar perfil:', {
+        code: errorInfo.code,
+        message: errorInfo.message,
+        error: profileError,
+      })
       setState({
         status: 'error',
-        errorMessage: 'Erro ao carregar perfil.',
+        errorMessage: resolveErrorMessage(errorType),
       })
       return
     }
 
     const needsOnboarding =
-      profile.onboarding_completed === false || profile.selfie_url === null
+      profile.onboarding_completed === false ||
+      profile.onboarding_completed === null ||
+      profile.selfie_url === null
 
     if (needsOnboarding && !isSelfieFlowRoute) {
       router.replace('/onboarding/selfie')
@@ -93,7 +116,7 @@ export default function OnboardingGuard({
       console.error('Erro ao validar onboarding:', error)
       setState({
         status: 'error',
-        errorMessage: 'Erro ao carregar perfil.',
+        errorMessage: resolveErrorMessage(),
       })
     })
 
@@ -121,8 +144,8 @@ export default function OnboardingGuard({
             Erro ao carregar perfil
           </h1>
           <p className="text-sm text-gray-400">
-            Não foi possível carregar seus dados agora. Verifique sua conexão e
-            tente novamente.
+            {state.errorMessage ??
+              'Não foi possível carregar seus dados agora. Verifique sua conexão e tente novamente.'}
           </p>
           <button
             type="button"
