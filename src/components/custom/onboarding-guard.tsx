@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
-import {
-  ensureProfileForUser,
-  getProfileErrorInfo,
-  type ProfileErrorType,
-} from '@/lib/profile-utils'
+import { ensureProfileForUser, type ProfileErrorType } from '@/lib/profile-utils'
 
 type GuardStatus = 'checking' | 'ready' | 'error'
 
@@ -59,7 +55,11 @@ export default function OnboardingGuard({
     } = await supabase.auth.getSession()
 
     if (sessionError) {
-      console.error('Erro ao carregar sessão:', sessionError)
+      console.error('Erro ao carregar sessão:', {
+        message: sessionError.message,
+        status: sessionError.status,
+        error: sessionError,
+      })
       setState({
         status: 'error',
         errorMessage: resolveErrorMessage(),
@@ -72,16 +72,18 @@ export default function OnboardingGuard({
       return
     }
 
-    const { profile, error: profileError, errorType } = await ensureProfileForUser(
-      supabase,
-      session.user
-    )
+    const {
+      profile,
+      error: profileError,
+      errorType,
+      errorInfo,
+    } = await ensureProfileForUser(supabase, session.user)
 
     if (profileError || !profile) {
-      const errorInfo = getProfileErrorInfo(profileError)
       console.error('Erro ao carregar perfil:', {
-        code: errorInfo.code,
-        message: errorInfo.message,
+        status: errorInfo?.status,
+        code: errorInfo?.code,
+        message: errorInfo?.message,
         error: profileError,
       })
       setState({
@@ -92,9 +94,9 @@ export default function OnboardingGuard({
     }
 
     const needsOnboarding =
-      profile.onboarding_completed === false ||
-      profile.onboarding_completed === null ||
-      profile.selfie_url === null
+      (profile.onboarding_completed === false ||
+        profile.onboarding_completed === null) &&
+      (profile.selfie_verified === false || profile.selfie_verified === null)
 
     if (needsOnboarding && !isSelfieFlowRoute) {
       router.replace('/onboarding/selfie')
@@ -113,7 +115,10 @@ export default function OnboardingGuard({
 
     runCheck().catch(error => {
       if (!isMounted) return
-      console.error('Erro ao validar onboarding:', error)
+      console.error('Erro ao validar onboarding:', {
+        message: error instanceof Error ? error.message : String(error),
+        error,
+      })
       setState({
         status: 'error',
         errorMessage: resolveErrorMessage(),
@@ -153,6 +158,23 @@ export default function OnboardingGuard({
             className="w-full rounded-xl bg-[#D4AF37] py-3 font-semibold text-black transition hover:bg-[#c9a634]"
           >
             Tentar novamente
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const { error } = await supabase.auth.signOut()
+              if (error) {
+                console.error('Erro ao sair:', {
+                  message: error.message,
+                  status: error.status,
+                  error,
+                })
+              }
+              router.replace('/')
+            }}
+            className="w-full rounded-xl border border-[#D4AF37] py-3 font-semibold text-[#D4AF37] transition hover:bg-[#d4af37]/10"
+          >
+            Sair
           </button>
         </div>
       </div>

@@ -47,7 +47,7 @@ export async function middleware(req: NextRequest) {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, onboarding_completed, selfie_url')
+    .select('id, onboarding_completed, selfie_verified')
     .eq('id', session.user.id)
     .maybeSingle()
 
@@ -56,9 +56,9 @@ export async function middleware(req: NextRequest) {
   }
 
   const needsOnboarding =
-    profile.onboarding_completed === false ||
-    profile.onboarding_completed === null ||
-    profile.selfie_url === null
+    (profile.onboarding_completed === false ||
+      profile.onboarding_completed === null) &&
+    (profile.selfie_verified === false || profile.selfie_verified === null)
 
   if (needsOnboarding && !isSelfieFlowRoute) {
     return NextResponse.redirect(new URL('/onboarding/selfie', req.url))
