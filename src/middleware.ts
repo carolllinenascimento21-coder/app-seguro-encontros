@@ -4,7 +4,8 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
-  const supabase = createMiddlewareClient({ req, res })
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   const { pathname } = req.nextUrl
 
@@ -14,6 +15,12 @@ export async function middleware(req: NextRequest) {
     '/verification-pending',
     '/verificacao-selfie',
   ]
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return res
+  }
+
+  const supabase = createMiddlewareClient({ req, res })
 
   const {
     data: { session },
@@ -55,12 +62,16 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
-  const needsOnboarding =
-    (profile.onboarding_completed === false ||
-      profile.onboarding_completed === null) &&
-    (profile.selfie_verified === false || profile.selfie_verified === null)
+  const needsOnboarding = profile.onboarding_completed !== true
+  const needsSelfie = profile.selfie_verified !== true
+  const isOnboardingRoute =
+    pathname === '/onboarding' || pathname.startsWith('/onboarding/')
 
-  if (needsOnboarding && !isSelfieFlowRoute) {
+  if (needsOnboarding && !isOnboardingRoute) {
+    return NextResponse.redirect(new URL('/onboarding', req.url))
+  }
+
+  if (!needsOnboarding && needsSelfie && !isSelfieFlowRoute) {
     return NextResponse.redirect(new URL('/onboarding/selfie', req.url))
   }
 

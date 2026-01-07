@@ -41,7 +41,8 @@ const resolveProfileDefaults = (user: User) => {
 }
 
 const baseProfileFields =
-  'id, nome, email, selfie_url, onboarding_completed, selfie_verified, is_active, deleted_at'
+  'id, nome, email, selfie_url, onboarding_completed, selfie_verified'
+const optionalProfileFields = ['telefone', 'is_active', 'deleted_at'] as const
 
 const getErrorInfo = (error: unknown): ProfileErrorInfo => {
   if (!error || typeof error !== 'object') return {}
@@ -87,7 +88,7 @@ const resolveErrorType = (error: unknown): ProfileErrorType => {
   return 'unknown'
 }
 
-const isMissingColumnError = (error: unknown, column: string) => {
+export const isMissingColumnError = (error: unknown, column: string) => {
   if (!error || typeof error !== 'object') return false
 
   const maybeError = error as { code?: string; message?: string; details?: string }
@@ -96,18 +97,34 @@ const isMissingColumnError = (error: unknown, column: string) => {
   return maybeError.code === '42703' || message.includes(`column "${column}"`)
 }
 
+const extractMissingColumnName = (error: unknown) => {
+  if (!error || typeof error !== 'object') return null
+
+  const maybeError = error as { message?: string; details?: string }
+  const message = `${maybeError.message ?? ''} ${maybeError.details ?? ''}`
+  const quotedMatch = message.match(/column "([^"]+)"/i)
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1]
+  }
+
+  const unquotedMatch = message.match(/column ([\w.]+)/i)
+  const rawColumn = unquotedMatch?.[1]
+  if (!rawColumn) return null
+
+  return rawColumn.split('.').pop() ?? null
+}
+
+const buildProfileSelect = (optionalFields: readonly string[]) =>
+  [baseProfileFields, ...optionalFields].filter(Boolean).join(', ')
+
 const fetchProfileById = async (
   supabase: SupabaseClient,
   userId: string,
-  includeTelefone: boolean
+  optionalFields: readonly string[]
 ) => {
-  const selectFields = includeTelefone
-    ? `${baseProfileFields}, telefone`
-    : baseProfileFields
-
   return supabase
     .from('profiles')
-    .select(selectFields)
+    .select(buildProfileSelect(optionalFields))
     .eq('id', userId)
     .maybeSingle()
 }
@@ -119,18 +136,17 @@ export async function ensureProfileForUser(
   user: User
 ): Promise<EnsureProfileResult> {
   // ✅ Garante perfil existente e com dados mínimos sem assumir telefone obrigatório.
-  let supportsTelefone = true
+  let availableOptionalFields = [...optionalProfileFields]
 
-  const { data: profile, error: profileError } = await fetchProfileById(
+  let { data: profile, error: profileError } = await fetchProfileById(
     supabase,
     user.id,
-    supportsTelefone
+    availableOptionalFields
   )
 
-  if (profileError) {
-    if (isMissingColumnError(profileError, 'telefone')) {
-      supportsTelefone = false
-    } else {
+  while (profileError) {
+    const missingColumn = extractMissingColumnName(profileError)
+    if (!missingColumn || !availableOptionalFields.includes(missingColumn as any)) {
       return {
         profile: null,
         error: profileError,
@@ -138,20 +154,19 @@ export async function ensureProfileForUser(
         errorInfo: getErrorInfo(profileError),
       }
     }
+
+    availableOptionalFields = availableOptionalFields.filter(
+      column => column !== missingColumn
+    )
+    ;({ data: profile, error: profileError } = await fetchProfileById(
+      supabase,
+      user.id,
+      availableOptionalFields
+    ))
   }
 
-  const { data: fallbackProfile, error: fallbackError } = supportsTelefone
-    ? { data: profile, error: profileError }
-    : await fetchProfileById(supabase, user.id, false)
-
-  if (fallbackError) {
-    return {
-      profile: null,
-      error: fallbackError,
-      errorType: resolveErrorType(fallbackError),
-      errorInfo: getErrorInfo(fallbackError),
-    }
-  }
+  const fallbackProfile = profile
+  const supportsTelefone = availableOptionalFields.includes('telefone')
 
   if (fallbackProfile?.is_active === false) {
     return { profile: fallbackProfile, error: null }
@@ -186,7 +201,7 @@ export async function ensureProfileForUser(
     }
 
     const { data: createdProfile, error: createdProfileError } =
-      await fetchProfileById(supabase, user.id, supportsTelefone)
+      await fetchProfileById(supabase, user.id, availableOptionalFields)
 
     return {
       profile: createdProfile ?? null,
