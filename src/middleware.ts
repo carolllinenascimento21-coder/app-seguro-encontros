@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { ensureProfileForUser } from '@/lib/profile-utils'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
@@ -41,12 +42,14 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
-  // 5️⃣ LOGADA → checa selfie no perfil
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('selfie_verified')
-    .eq('id', session.user.id)
-    .single()
+  // 5️⃣ LOGADA → garante perfil e checa selfie no perfil
+  const { profile, error: profileError } = await ensureProfileForUser(
+    supabase,
+    session.user
+  )
+  if (profileError) {
+    console.error('Erro ao garantir perfil no middleware', profileError)
+  }
 
   const selfieVerified = Boolean(profile?.selfie_verified)
 
