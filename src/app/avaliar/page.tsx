@@ -3,9 +3,6 @@
 import { useState } from 'react';
 import { Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createSupabaseClient } from '@/lib/supabase';
-
-const supabase = createSupabaseClient();
 
 type CriterioKey =
   | 'comportamento'
@@ -75,31 +72,19 @@ export default function AvaliarPage() {
     setLoading(true);
 
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        router.push('/login');
-        return;
-      }
-
       if (!form.nome || form.comportamento === 0) {
         setErro('Preencha o nome e ao menos a avaliação de comportamento.');
         return;
       }
 
-      /**
-       * 🚨 INSERT PURO
-       * - sem select
-       * - sem vínculo manual
-       * - sem tocar em avaliacoes_autoras
-       */
-      const { error } = await supabase
-        .from('avaliacoes')
-        .insert({
+      const res = await fetch('/api/avaliacoes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           nome: form.nome,
-          cidade: form.cidade || null,
-          contato: form.contato || null,
-          relato: form.relato || null,
+          cidade: form.cidade,
+          contato: form.contato,
+          relato: form.relato,
           flags: form.flags,
           anonimo: form.anonimo,
           comportamento: form.comportamento,
@@ -107,9 +92,23 @@ export default function AvaliarPage() {
           respeito: form.respeito,
           carater: form.carater,
           confianca: form.confianca,
-        });
+        }),
+      });
 
-      if (error) throw error;
+      if (res.status === 401) {
+        router.push('/login');
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const payload = await res.json();
+      if (payload?.success === false && payload?.reason === 'PAYWALL') {
+        router.push('/planos');
+        return;
+      }
 
       router.push('/minhas-avaliacoes');
 
