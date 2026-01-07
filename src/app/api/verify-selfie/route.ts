@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // 🔒 backend only
-)
 
 export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
@@ -30,7 +24,7 @@ export async function POST(req: Request) {
 
   const filePath = `${session.user.id}/selfie.jpg`
 
-  const { error: uploadError } = await supabaseAdmin.storage
+  const { error: uploadError } = await supabase.storage
     .from('selfie-verifications')
     .upload(filePath, buffer, {
       contentType: 'image/jpeg',
@@ -42,7 +36,7 @@ export async function POST(req: Request) {
   }
 
   // ✅ Marca perfil como verificado
-  const { error: updateError } = await supabaseAdmin
+  const { error: updateError } = await supabase
     .from('profiles')
     .update({
       selfie_verified: true,
