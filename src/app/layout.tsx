@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import TermosGuard from '@/components/custom/termos-guard'
+import OnboardingGuard from '@/components/custom/onboarding-guard'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -14,8 +14,8 @@ export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR">
       <body className={inter.className}>
-          {children}
-          </body>
+        <OnboardingGuard>{children}</OnboardingGuard>
+      </body>
     </html>
   )
 }
