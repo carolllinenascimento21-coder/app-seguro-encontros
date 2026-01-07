@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import { ensureProfileForUser } from '@/lib/profile-utils'
 
 export default function SelfieOnboardingPage() {
   const router = useRouter()
@@ -81,6 +82,19 @@ export default function SelfieOnboardingPage() {
     if (sessionError || !user) {
       console.error(sessionError)
       setError('Usuária não autenticada.')
+      setUploading(false)
+      return
+    }
+
+    // ✅ Garante perfil base antes de atualizar selfie (telefone pode ser nulo)
+    const { error: profileEnsureError } = await ensureProfileForUser(
+      supabase,
+      user
+    )
+
+    if (profileEnsureError) {
+      console.error(profileEnsureError)
+      setError('Erro ao preparar perfil para selfie.')
       setUploading(false)
       return
     }
