@@ -8,6 +8,8 @@ type ProfileRecord = {
   selfie_url: string | null
   onboarding_completed: boolean | null
   selfie_verified: boolean | null
+  is_active?: boolean | null
+  deleted_at?: string | null
 }
 
 type EnsureProfileResult = {
@@ -36,13 +38,17 @@ export async function ensureProfileForUser(
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select(
-      'id, nome, email, telefone, selfie_url, onboarding_completed, selfie_verified'
+      'id, nome, email, telefone, selfie_url, onboarding_completed, selfie_verified, is_active, deleted_at'
     )
     .eq('id', user.id)
     .maybeSingle()
 
   if (profileError) {
     return { profile: null, error: profileError }
+  }
+
+  if (profile?.is_active === false) {
+    return { profile, error: null }
   }
 
   const defaults = resolveProfileDefaults(user)

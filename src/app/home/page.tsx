@@ -126,19 +126,23 @@ export default function HomePage() {
               <p className="text-gray-400">Nenhum perfil encontrado</p>
             </div>
           ) : (
-            searchResults.map((perfil) => (
-              <Link
-                key={perfil.id}
-                href={`/profile/${perfil.id}`}
-                className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-1">
-                      {perfil.nome}
-                    </h3>
-                    <p className="text-sm text-gray-400">{perfil.cidade}</p>
-                  </div>
+            searchResults.map((perfil) => {
+              const isRemoved = perfil.is_active === false;
+              return (
+                <Link
+                  key={perfil.id}
+                  href={`/profile/${perfil.id}`}
+                  className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white mb-1">
+                        {isRemoved ? 'Usuário removido' : perfil.nome}
+                      </h3>
+                      {!isRemoved && (
+                        <p className="text-sm text-gray-400">{perfil.cidade}</p>
+                      )}
+                    </div>
                   <div
                     className={`px-3 py-1 rounded-full text-xs font-semibold border ${getReputacaoColor(
                       perfil.nivelReputacao
@@ -163,16 +167,17 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {perfil.alertas.length > 0 && (
-                  <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                    <span className="text-xs text-red-400">
-                      {perfil.alertas.length} alerta(s) ativo(s)
-                    </span>
-                  </div>
-                )}
-              </Link>
-            ))
+                  {perfil.alertas.length > 0 && (
+                    <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                      <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                      <span className="text-xs text-red-400">
+                        {perfil.alertas.length} alerta(s) ativo(s)
+                      </span>
+                    </div>
+                  )}
+                </Link>
+              );
+            })
           )}
         </div>
       </div>

@@ -31,6 +31,7 @@ export interface PerfilMasculino {
   idade?: number;
   cidade?: string;
   foto?: string;
+  is_active?: boolean;
   nivelReputacao: NivelReputacao;
   notaGeral: number; // 0-5
   totalAvaliacoes: number;

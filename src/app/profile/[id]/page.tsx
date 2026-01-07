@@ -10,6 +10,7 @@ import { NivelReputacao } from '@/lib/types';
 export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const perfil = perfisMock.find((p) => p.id === id);
+  const isRemoved = perfil?.is_active === false;
 
   if (!perfil) {
     return (
@@ -82,8 +83,10 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
         <div className="bg-gradient-to-br from-white/10 to-white/5 border border-[#D4AF37]/30 rounded-2xl p-6 mb-6">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-white mb-2">{perfil.nome}</h1>
-              {perfil.idade && (
+              <h1 className="text-2xl font-bold text-white mb-2">
+                {isRemoved ? 'Usuário removido' : perfil.nome}
+              </h1>
+              {!isRemoved && perfil.idade && (
                 <p className="text-gray-400 text-sm">{perfil.idade} anos</p>
               )}
             </div>
@@ -96,18 +99,24 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
             </div>
           </div>
 
-          {perfil.telefone && (
+          {!isRemoved && perfil.telefone && (
             <div className="flex items-center gap-2 text-gray-300 mb-2">
               <Phone className="w-4 h-4" />
               <span className="text-sm">{perfil.telefone}</span>
             </div>
           )}
 
-          {perfil.cidade && (
+          {!isRemoved && perfil.cidade && (
             <div className="flex items-center gap-2 text-gray-300 mb-2">
               <MapPin className="w-4 h-4" />
               <span className="text-sm">{perfil.cidade}</span>
             </div>
+          )}
+
+          {isRemoved && (
+            <p className="text-sm text-gray-400">
+              Este perfil foi removido e teve seus dados pessoais anonimizados.
+            </p>
           )}
 
           <div className="flex items-center gap-2 text-gray-400">
