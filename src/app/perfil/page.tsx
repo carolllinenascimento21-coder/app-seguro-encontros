@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, LogOut, Plus, Trash2, Shield } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase'
+import { ensureProfileForUser } from '@/lib/profile-utils'
 
 type EmergencyContact = {
   id: string
@@ -45,51 +46,18 @@ export default function PerfilPage() {
 
       const user = session.user
 
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select(
-          'id, nome, name, full_name, email, telefone, selfie_url, selfie_verified, onboarding_completed'
-        )
-        .eq('id', user.id)
-        .maybeSingle()
+      // ✅ Garante perfil existente e campos mínimos (sem exigir telefone)
+      const { profile: ensuredProfile, error: profileError } =
+        await ensureProfileForUser(supabase, user)
 
-      // ➕ Cria perfil automaticamente se não existir
-      let finalProfile = profileData
-
-      if (!profileData) {
-        const incomingNome =
-          (user.user_metadata as any)?.nome ||
-          (user.user_metadata as any)?.name ||
-          user.email ||
-          ''
-        const incomingTelefone =
-          (user.user_metadata as any)?.telefone || user.phone || ''
-
-        const { data: newProfile, error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email,
-            nome: incomingNome,
-            telefone: incomingTelefone,
-            selfie_verified: false,
-            onboarding_completed: false,
-          })
-          .select()
-          .single()
-
-        if (insertError) {
-          console.error('Erro ao criar perfil:', insertError)
-          return
-        }
-
-        finalProfile = newProfile
-      } else if (profileError) {
+      if (profileError) {
         console.error('Erro ao carregar perfil:', profileError)
         setError('Erro ao carregar perfil.')
         setLoading(false)
         return
       }
+
+      const finalProfile = ensuredProfile
 
       // 📞 Contatos
       const { data: contactsData } = await supabase

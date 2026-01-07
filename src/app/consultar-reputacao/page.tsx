@@ -6,6 +6,7 @@ import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
 import { createSupabaseClient } from '@/lib/supabase';
 import { useAccessControl } from '@/hooks/use-access-control';
+import { ensureProfileForUser } from '@/lib/profile-utils';
 
 const supabase = createSupabaseClient();
 
@@ -30,7 +31,27 @@ export default function ConsultarReputacao() {
   const { checkAccess, consumeQuery, profile } = useAccessControl();
 
   useEffect(() => {
-    checkAccess({ redirectOnBlock: false });
+    const prepare = async () => {
+      // ✅ Garante perfil existente para contas antigas antes de consultar reputação.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { error: profileError } = await ensureProfileForUser(
+          supabase,
+          user
+        );
+
+        if (profileError) {
+          console.error('Erro ao garantir perfil na reputação:', profileError);
+        }
+      }
+
+      checkAccess({ redirectOnBlock: false });
+    };
+
+    prepare();
   }, [checkAccess]);
 
   const media = (a: Avaliacao) =>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { ensureProfileForUser } from '@/lib/profile-utils'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -36,6 +37,18 @@ export default function LoginPage() {
 
       setLoading(false)
       return
+    }
+
+    // ✅ Login ok → garante perfil completo antes do fluxo de navegação
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const { error: profileError } = await ensureProfileForUser(supabase, user)
+      if (profileError) {
+        console.error('Erro ao garantir perfil no login:', profileError)
+      }
     }
 
     // ✅ Login ok → controle segue para o middleware
