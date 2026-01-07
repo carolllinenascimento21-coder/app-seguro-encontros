@@ -4,10 +4,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { Star, ArrowLeft, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useEffect, useState } from 'react';
-import { createSupabaseClient } from '@/lib/supabase';
-
-const supabase = createSupabaseClient();
-
 export default function DetalhesReputacao() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -17,16 +13,26 @@ export default function DetalhesReputacao() {
   useEffect(() => {
     const carregar = async () => {
       try {
-        const { data, error } = await supabase
-          .from('avaliacoes')
-          .select('*')
-          .eq('id', id)
-          .eq('publica', true)
-          .single();
+        const res = await fetch(`/api/reputation/${id}`);
 
-        if (error) throw error;
+        if (res.status === 401) {
+          router.push('/login');
+          return;
+        }
 
-        setAvaliacao(data);
+        if (!res.ok) {
+          console.error('Erro ao carregar avaliação', await res.text());
+          setAvaliacao(null);
+          return;
+        }
+
+        const payload = await res.json();
+        if (payload.allowed === false) {
+          router.push('/planos');
+          return;
+        }
+
+        setAvaliacao(payload.data ?? null);
       } catch (err) {
         console.error(err);
         setAvaliacao(null);
@@ -36,7 +42,7 @@ export default function DetalhesReputacao() {
     };
 
     carregar();
-  }, [id]);
+  }, [id, router]);
 
   if (loading) {
     return (

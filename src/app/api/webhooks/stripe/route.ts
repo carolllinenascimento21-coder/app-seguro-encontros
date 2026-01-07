@@ -46,6 +46,7 @@ export async function POST(req: Request) {
 
     if (session.mode === 'subscription') {
       const plan = session.metadata?.plan ?? 'free'
+      const externalReference = session.subscription?.toString() ?? session.id
       const { error } = await supabaseAdmin
         .from('profiles')
         .update({ plan, free_queries_used: 0 })
@@ -54,12 +55,32 @@ export async function POST(req: Request) {
       if (error) {
         console.error('Erro ao atualizar plano após assinatura', error)
       }
+
+      const { error: transactionError } = await supabaseAdmin
+        .from('credit_transactions')
+        .upsert(
+          {
+            user_id: userId,
+            type: 'subscription_start',
+            amount: 0,
+            external_reference: externalReference,
+          },
+          { onConflict: 'external_reference' }
+        )
+
+      if (transactionError) {
+        console.error('Erro ao registrar transação de assinatura', transactionError)
+      }
     } else if (session.mode === 'payment') {
       const credits = Number(session.metadata?.credits ?? 0)
+      const externalReference =
+        session.payment_intent?.toString() ?? session.id
       if (Number.isFinite(credits) && credits > 0) {
-        const { error } = await supabaseAdmin.rpc('add_profile_credits', {
+        const { error } = await supabaseAdmin.rpc('add_profile_credits_with_transaction', {
           user_uuid: userId,
           credit_delta: credits,
+          external_ref: externalReference,
+          transaction_type: 'credit_purchase',
         })
 
         if (error) {

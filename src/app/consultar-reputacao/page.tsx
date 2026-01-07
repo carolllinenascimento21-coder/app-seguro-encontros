@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { Search, MapPin, Star, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
-import { createSupabaseClient } from '@/lib/supabase';
 import { useAccessControl } from '@/hooks/use-access-control';
 import { ensureProfileForUser } from '@/lib/profile-utils';
+import { createSupabaseClient } from '@/lib/supabase';
 
 const supabase = createSupabaseClient();
 
@@ -28,7 +28,7 @@ export default function ConsultarReputacao() {
   const [cidade, setCidade] = useState('');
   const [results, setResults] = useState<Avaliacao[]>([]);
   const [loading, setLoading] = useState(false);
-  const { checkAccess, consumeQuery, profile } = useAccessControl();
+  const { checkAccess, profile } = useAccessControl();
 
   useEffect(() => {
     const prepare = async () => {
@@ -76,32 +76,31 @@ export default function ConsultarReputacao() {
         return;
       }
 
-      let query = supabase
-        .from('avaliacoes')
-        .select(`
-          id,
-          nome,
-          cidade,
-          comportamento,
-          seguranca_emocional,
-          respeito,
-          carater,
-          confianca,
-          flags
-        `)
-        .eq('publica', true)
-        .ilike('nome', `%${nome}%`);
+      const res = await fetch('/api/reputation/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, cidade }),
+      });
 
-      if (cidade.trim()) {
-        query = query.ilike('cidade', `%${cidade}%`);
+      if (res.status === 401) {
+        router.push('/login');
+        return;
       }
 
-      const { data, error } = await query;
+      if (!res.ok) {
+        console.error('Erro ao buscar reputação', await res.text());
+        alert('Erro ao buscar reputação.');
+        return;
+      }
 
-      if (error) throw error;
+      const payload = await res.json();
+      if (payload.allowed === false) {
+        router.push('/planos');
+        return;
+      }
 
-      setResults(data || []);
-      await consumeQuery();
+      setResults(payload.results || []);
+      await checkAccess({ redirectOnBlock: false });
     } catch (err) {
       console.error('Erro ao buscar reputação:', err);
       alert('Erro ao buscar reputação.');
