@@ -4,7 +4,7 @@ type ProfileRecord = {
   id: string
   nome: string | null
   email: string | null
-  telefone: string | null
+  telefone?: string | null
   selfie_url: string | null
   onboarding_completed: boolean | null
   selfie_verified: boolean | null
@@ -30,70 +30,127 @@ const resolveProfileDefaults = (user: User) => {
   }
 }
 
+const baseProfileFields =
+  'id, nome, email, selfie_url, onboarding_completed, selfie_verified, is_active, deleted_at'
+
+const isMissingColumnError = (error: unknown, column: string) => {
+  if (!error || typeof error !== 'object') return false
+
+  const maybeError = error as { code?: string; message?: string; details?: string }
+  const message = `${maybeError.message ?? ''} ${maybeError.details ?? ''}`
+
+  return maybeError.code === '42703' || message.includes(`column "${column}"`)
+}
+
+const fetchProfileById = async (
+  supabase: SupabaseClient,
+  userId: string,
+  includeTelefone: boolean
+) => {
+  const selectFields = includeTelefone
+    ? `${baseProfileFields}, telefone`
+    : baseProfileFields
+
+  return supabase
+    .from('profiles')
+    .select(selectFields)
+    .eq('id', userId)
+    .maybeSingle()
+}
+
 export async function ensureProfileForUser(
   supabase: SupabaseClient,
   user: User
 ): Promise<EnsureProfileResult> {
   // ✅ Garante perfil existente e com dados mínimos sem assumir telefone obrigatório.
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select(
-      'id, nome, email, telefone, selfie_url, onboarding_completed, selfie_verified, is_active, deleted_at'
-    )
-    .eq('id', user.id)
-    .maybeSingle()
+  let supportsTelefone = true
+
+  const { data: profile, error: profileError } = await fetchProfileById(
+    supabase,
+    user.id,
+    supportsTelefone
+  )
 
   if (profileError) {
-    return { profile: null, error: profileError }
+    if (isMissingColumnError(profileError, 'telefone')) {
+      supportsTelefone = false
+    } else {
+      return { profile: null, error: profileError }
+    }
   }
 
-  if (profile?.is_active === false) {
-    return { profile, error: null }
+  const { data: fallbackProfile, error: fallbackError } = supportsTelefone
+    ? { data: profile, error: profileError }
+    : await fetchProfileById(supabase, user.id, false)
+
+  if (fallbackError) {
+    return { profile: null, error: fallbackError }
+  }
+
+  if (fallbackProfile?.is_active === false) {
+    return { profile: fallbackProfile, error: null }
   }
 
   const defaults = resolveProfileDefaults(user)
 
-  if (!profile) {
-    const { data: createdProfile, error: insertError } = await supabase
-      .from('profiles')
-      .insert({
-        id: user.id,
-        nome: defaults.nome,
-        email: defaults.email,
-        telefone: defaults.telefone || null,
-        selfie_verified: false,
-        onboarding_completed: false,
-      })
-      .select()
-      .single()
+  if (!fallbackProfile) {
+    const insertPayload: Partial<ProfileRecord> = {
+      id: user.id,
+      nome: defaults.nome,
+      email: defaults.email,
+      selfie_verified: false,
+      onboarding_completed: false,
+    }
 
-    return { profile: createdProfile ?? null, error: insertError ?? null }
+    if (supportsTelefone) {
+      insertPayload.telefone = defaults.telefone || null
+    }
+
+    const { error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(insertPayload, { onConflict: 'id' })
+
+    if (upsertError) {
+      return { profile: null, error: upsertError }
+    }
+
+    const { data: createdProfile, error: createdProfileError } =
+      await fetchProfileById(supabase, user.id, supportsTelefone)
+
+    return {
+      profile: createdProfile ?? null,
+      error: createdProfileError ?? null,
+    }
   }
 
   const updates: Partial<ProfileRecord> = {}
 
-  if (isBlank(profile.nome) && !isBlank(defaults.nome)) {
+  if (isBlank(fallbackProfile.nome) && !isBlank(defaults.nome)) {
     updates.nome = defaults.nome
   }
 
-  if (isBlank(profile.email) && !isBlank(defaults.email)) {
+  if (isBlank(fallbackProfile.email) && !isBlank(defaults.email)) {
     updates.email = defaults.email
   }
 
-  if (isBlank(profile.telefone) && !isBlank(defaults.telefone)) {
+  if (
+    supportsTelefone &&
+    isBlank(fallbackProfile.telefone) &&
+    !isBlank(defaults.telefone)
+  ) {
     updates.telefone = defaults.telefone
   }
 
-  if (profile.onboarding_completed === null) {
+  if (fallbackProfile.onboarding_completed === null) {
     updates.onboarding_completed = false
   }
 
-  if (profile.selfie_verified === null) {
+  if (fallbackProfile.selfie_verified === null) {
     updates.selfie_verified = false
   }
 
   if (Object.keys(updates).length === 0) {
-    return { profile, error: null }
+    return { profile: fallbackProfile, error: null }
   }
 
   const { data: updatedProfile, error: updateError } = await supabase
@@ -103,5 +160,8 @@ export async function ensureProfileForUser(
     .select()
     .single()
 
-  return { profile: updatedProfile ?? profile, error: updateError ?? null }
+  return {
+    profile: updatedProfile ?? fallbackProfile,
+    error: updateError ?? null,
+  }
 }
