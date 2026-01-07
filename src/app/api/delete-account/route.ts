@@ -72,14 +72,9 @@ export async function POST() {
   const { error: updateError } = await supabaseAdmin
     .from('profiles')
     .update({
-      name: null,
       nome: null,
       email: null,
       telefone: null,
-      age: null,
-      city: null,
-      state: null,
-      profilePhoto: null,
       gender: 'female',
       selfie_url: null,
       is_active: false,
