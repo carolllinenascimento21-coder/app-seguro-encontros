@@ -137,6 +137,7 @@ export const perfisMock: PerfilMasculino[] = [
     telefone: '(85) 96543-2109',
     idade: 40,
     cidade: 'Fortaleza, CE',
+    is_active: false,
     nivelReputacao: 'atencao',
     notaGeral: 2.8,
     totalAvaliacoes: 6,

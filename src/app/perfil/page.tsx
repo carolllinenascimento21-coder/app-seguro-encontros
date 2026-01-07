@@ -26,6 +26,7 @@ export default function PerfilPage() {
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -132,6 +133,38 @@ export default function PerfilPage() {
     router.replace('/login')
   }
 
+  const deleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Tem certeza que deseja apagar sua conta? Seus dados pessoais serão anonimizados.'
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeleting(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/delete-account', {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error || 'Erro ao apagar conta.')
+      }
+
+      await supabase.auth.signOut()
+      router.replace('/login')
+    } catch (err) {
+      console.error('Erro ao apagar conta:', err)
+      setError('Erro ao apagar conta. Tente novamente.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) return null
 
   return (
@@ -234,6 +267,14 @@ export default function PerfilPage() {
           className="w-full border border-red-600 text-red-500 py-2 rounded-lg hover:bg-red-600 hover:text-white transition"
         >
           <LogOut size={16} /> Sair
+        </button>
+
+        <button
+          onClick={deleteAccount}
+          disabled={deleting}
+          className="w-full border border-yellow-500 text-yellow-400 py-2 rounded-lg hover:bg-yellow-500 hover:text-black transition disabled:opacity-60"
+        >
+          {deleting ? 'Apagando conta...' : 'Apagar conta'}
         </button>
 
       </div>
