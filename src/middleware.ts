@@ -9,6 +9,11 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   const PUBLIC_ROUTES = ['/', '/onboarding', '/login', '/signup']
+  const SELFIE_FLOW_ROUTES = [
+    '/onboarding/selfie',
+    '/verification-pending',
+    '/verificacao-selfie',
+  ]
 
   const {
     data: { session },
@@ -30,6 +35,33 @@ export async function middleware(req: NextRequest) {
   // 5️⃣ LOGADA → bloqueia login/signup
   if (pathname === '/login' || pathname === '/signup') {
     return NextResponse.redirect(new URL('/home', req.url))
+  }
+
+  if (pathname.startsWith('/api')) {
+    return res
+  }
+
+  const isSelfieFlowRoute = SELFIE_FLOW_ROUTES.some(route =>
+    pathname.startsWith(route)
+  )
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, onboarding_completed, selfie_url')
+    .eq('id', session.user.id)
+    .maybeSingle()
+
+  if (profileError || !profile) {
+    return res
+  }
+
+  const needsOnboarding =
+    profile.onboarding_completed === false ||
+    profile.onboarding_completed === null ||
+    profile.selfie_url === null
+
+  if (needsOnboarding && !isSelfieFlowRoute) {
+    return NextResponse.redirect(new URL('/onboarding/selfie', req.url))
   }
 
   return res
