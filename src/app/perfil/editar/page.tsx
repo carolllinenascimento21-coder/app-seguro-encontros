@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ensureProfileForUser, getProfileErrorInfo } from '@/lib/profile-utils';
+import {
+  ensureProfileForUser,
+  getProfileErrorInfo,
+  isMissingColumnError,
+} from '@/lib/profile-utils';
 
 type ProfileForm = {
   nome: string;
@@ -90,15 +94,28 @@ export default function EditarPerfilPage() {
         throw new Error('Usuário não autenticado');
       }
 
-      // Atualiza tabela profiles
-      const { error: updateError } = await supabase
+      const basePayload = {
+        nome: formData.nome,
+        email: formData.email,
+      };
+
+      // Atualiza tabela profiles com fallback quando coluna opcional não existir
+      let { error: updateError } = await supabase
         .from('profiles')
         .update({
-          nome: formData.nome,
-          email: formData.email,
+          ...basePayload,
           telefone: formData.telefone || null,
         })
         .eq('id', user.id);
+
+      if (updateError && isMissingColumnError(updateError, 'telefone')) {
+        const { error: fallbackError } = await supabase
+          .from('profiles')
+          .update(basePayload)
+          .eq('id', user.id);
+
+        updateError = fallbackError ?? null;
+      }
 
       if (updateError) {
         throw updateError;

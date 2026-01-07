@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isMissingColumnError } from '@/lib/profile-utils'
 
 const safeDeleteContacts = async (tableName: string, userId: string) => {
   const { error } = await supabaseAdmin
@@ -69,20 +70,44 @@ export async function POST() {
     )
   }
 
-  const { error: updateError } = await supabaseAdmin
+  const basePayload = {
+    nome: null,
+    email: null,
+    gender: 'female',
+    selfie_url: null,
+    deleted_at: new Date().toISOString(),
+    selfie_verified: false,
+    onboarding_completed: false,
+  }
+
+  const optionalFields = new Set(['telefone', 'is_active'])
+  const buildPayload = () => ({
+    ...basePayload,
+    ...(optionalFields.has('telefone') ? { telefone: null } : {}),
+    ...(optionalFields.has('is_active') ? { is_active: false } : {}),
+  })
+
+  let { error: updateError } = await supabaseAdmin
     .from('profiles')
-    .update({
-      nome: null,
-      email: null,
-      telefone: null,
-      gender: 'female',
-      selfie_url: null,
-      is_active: false,
-      deleted_at: new Date().toISOString(),
-      selfie_verified: false,
-      onboarding_completed: false,
-    })
+    .update(buildPayload())
     .eq('id', userId)
+
+  while (updateError) {
+    if (isMissingColumnError(updateError, 'telefone')) {
+      optionalFields.delete('telefone')
+    } else if (isMissingColumnError(updateError, 'is_active')) {
+      optionalFields.delete('is_active')
+    } else {
+      break
+    }
+
+    const { error: retryError } = await supabaseAdmin
+      .from('profiles')
+      .update(buildPayload())
+      .eq('id', userId)
+
+    updateError = retryError ?? null
+  }
 
   if (updateError) {
     return NextResponse.json(
