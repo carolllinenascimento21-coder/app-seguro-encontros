@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       const externalReference = session.subscription?.toString() ?? session.id
       const { error } = await supabaseAdmin
         .from('profiles')
-        .update({ plan, free_queries_used: 0 })
+        .update({ plan, free_queries_used: 0, plan_expires_at: null })
         .eq('id', userId)
 
       if (error) {
