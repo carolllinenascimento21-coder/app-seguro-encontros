@@ -87,7 +87,7 @@ export default function EditarAvaliacao() {
         .from('avaliacoes')
         .select('*')
         .eq('id', avaliacaoId)
-        .eq('autor_id', user.id) // Garantir que só edita próprias avaliações
+        .eq('user_id', user.id) // Garantir que só edita próprias avaliações
         .single();
 
       if (error) throw error;
@@ -181,7 +181,7 @@ export default function EditarAvaliacao() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', avaliacaoId)
-        .eq('autor_id', user.id);
+        .eq('user_id', user.id);
 
       if (error) throw error;
 

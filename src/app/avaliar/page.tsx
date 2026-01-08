@@ -100,8 +100,14 @@ export default function AvaliarPage() {
         return;
       }
 
+      if (res.status === 403) {
+        router.push('/planos');
+        return;
+      }
+
       if (!res.ok) {
-        throw new Error(await res.text());
+        const message = await res.text();
+        throw new Error(message || 'Erro ao enviar avaliação.');
       }
 
       const payload = await res.json();
@@ -121,8 +127,9 @@ export default function AvaliarPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto">
-      <h1 className="text-xl font-bold text-white mb-4">Nova Avaliação</h1>
+    <div className="min-h-screen bg-black">
+      <div className="px-4 py-8 max-w-md mx-auto">
+        <h1 className="text-xl font-bold text-white mb-4">Nova Avaliação</h1>
 
       {erro && <p className="text-red-500 mb-3">{erro}</p>}
 
@@ -201,13 +208,14 @@ export default function AvaliarPage() {
         Avaliação anônima (recomendado)
       </label>
 
-      <button
-        onClick={enviar}
-        disabled={loading}
-        className="w-full bg-[#D4AF37] text-black py-3 rounded font-bold disabled:opacity-60"
-      >
-        {loading ? 'Enviando...' : 'Enviar avaliação'}
-      </button>
+        <button
+          onClick={enviar}
+          disabled={loading}
+          className="w-full bg-[#D4AF37] text-black py-3 rounded font-bold disabled:opacity-60"
+        >
+          {loading ? 'Enviando...' : 'Enviar avaliação'}
+        </button>
+      </div>
     </div>
   );
 }

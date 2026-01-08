@@ -69,19 +69,40 @@ export async function POST(req: Request) {
   if (consumeError) {
     const message = consumeError.message ?? ''
     if (message.includes('PAYWALL')) {
-      return NextResponse.json({ success: false, reason: 'PAYWALL' }, { status: 200 })
+      return NextResponse.json(
+        { error: 'Sem créditos suficientes para enviar avaliação.' },
+        { status: 403 }
+      )
     }
-    console.error('Erro ao consumir crédito para avaliação', consumeError)
-    return NextResponse.json({ error: 'Erro ao validar créditos' }, { status: 500 })
+    if (message.includes('PROFILE_NOT_FOUND')) {
+      return NextResponse.json(
+        { error: 'Perfil não encontrado para validação de créditos.' },
+        { status: 400 }
+      )
+    }
+    console.error('Erro ao consumir crédito para avaliação', {
+      message: consumeError.message,
+      code: consumeError.code,
+      details: consumeError.details,
+    })
+    return NextResponse.json(
+      { error: 'Erro ao validar créditos' },
+      { status: 500 }
+    )
   }
 
+  const isAnonymous = body.anonimo ?? true
+
   const { error } = await supabase.from('avaliacoes').insert({
+    user_id: user.id,
     nome,
     cidade: body.cidade?.trim() || null,
     contato: body.contato?.trim() || null,
     relato: body.relato?.trim() || null,
     flags: body.flags ?? [],
-    anonimo: body.anonimo ?? true,
+    anonimo: isAnonymous,
+    is_anonymous: isAnonymous,
+    publica: !isAnonymous,
     comportamento,
     seguranca_emocional: body.seguranca_emocional ?? 0,
     respeito: body.respeito ?? 0,
@@ -90,8 +111,15 @@ export async function POST(req: Request) {
   })
 
   if (error) {
-    console.error('Erro ao inserir avaliação', error)
-    return NextResponse.json({ error: 'Erro ao enviar avaliação' }, { status: 500 })
+    console.error('Erro ao inserir avaliação', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+    })
+    return NextResponse.json(
+      { error: 'Erro ao enviar avaliação' },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({ success: true })

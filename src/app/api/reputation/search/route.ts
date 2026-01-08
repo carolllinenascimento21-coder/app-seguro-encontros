@@ -70,6 +70,7 @@ export async function POST(req: Request) {
     .select(
       'id, nome, cidade, comportamento, seguranca_emocional, respeito, carater, confianca, flags'
     )
+    .eq('is_anonymous', false)
     .eq('publica', true)
     .ilike('nome', `%${nome}%`)
 

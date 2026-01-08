@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
 import { ensureProfileForUser, type ProfileErrorType } from '@/lib/profile-utils'
+import { isAuthSessionMissingError } from '@/lib/auth-session'
 
 type GuardStatus = 'checking' | 'ready' | 'error'
 
@@ -63,7 +64,9 @@ export default function OnboardingGuard({
       error: sessionError,
     } = await supabase.auth.getSession()
 
-    if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+    const isSessionMissing = isAuthSessionMissingError(sessionError)
+
+    if (sessionError && !isSessionMissing) {
       console.error('Erro ao carregar sessão:', {
         message: sessionError.message,
         status: sessionError.status,
@@ -76,7 +79,7 @@ export default function OnboardingGuard({
       return
     }
 
-    if (!session) {
+    if (!session || isSessionMissing) {
       const isPublicRoute = publicRoutes.some(
         r => pathname === r || pathname.startsWith(`${r}/`)
       )
@@ -95,7 +98,7 @@ export default function OnboardingGuard({
       error: userError,
     } = await supabase.auth.getUser()
 
-    if (userError?.code === 'AuthSessionMissingError') {
+    if (isAuthSessionMissingError(userError)) {
       setState({ status: 'ready' })
       return
     }

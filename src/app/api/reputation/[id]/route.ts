@@ -70,11 +70,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     }
   }
 
+  const visibilityFilter = `and(is_anonymous.eq.false,publica.eq.true),user_id.eq.${user.id}`
+
   const { data, error } = await supabaseAdmin
     .from('avaliacoes')
     .select('*')
     .eq('id', avaliacaoId)
-    .eq('publica', true)
+    .or(visibilityFilter)
     .single()
 
   if (error) {
