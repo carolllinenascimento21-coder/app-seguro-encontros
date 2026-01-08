@@ -2,7 +2,6 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 type AvaliacaoRequest = {
   nome?: string
@@ -61,36 +60,6 @@ export async function POST(req: Request) {
     )
   }
 
-  const { error: consumeError } = await supabaseAdmin.rpc('consume_credit_for_action', {
-    user_uuid: user.id,
-    action: 'criar_avaliacao',
-  })
-
-  if (consumeError) {
-    const message = consumeError.message ?? ''
-    if (message.includes('PAYWALL')) {
-      return NextResponse.json(
-        { error: 'Sem créditos suficientes para enviar avaliação.' },
-        { status: 403 }
-      )
-    }
-    if (message.includes('PROFILE_NOT_FOUND')) {
-      return NextResponse.json(
-        { error: 'Perfil não encontrado para validação de créditos.' },
-        { status: 400 }
-      )
-    }
-    console.error('Erro ao consumir crédito para avaliação', {
-      message: consumeError.message,
-      code: consumeError.code,
-      details: consumeError.details,
-    })
-    return NextResponse.json(
-      { error: 'Erro ao validar créditos' },
-      { status: 500 }
-    )
-  }
-
   const isAnonymous = body.anonimo ?? true
 
   const { error } = await supabase.from('avaliacoes').insert({
@@ -111,6 +80,13 @@ export async function POST(req: Request) {
   })
 
   if (error) {
+    const message = error.message ?? ''
+    if (error.code === '42501' || message.includes('row-level security')) {
+      return NextResponse.json(
+        { error: 'Sem créditos ou plano ativo para enviar avaliação.' },
+        { status: 403 }
+      )
+    }
     console.error('Erro ao inserir avaliação', {
       message: error.message,
       code: error.code,

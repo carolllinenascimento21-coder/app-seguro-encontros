@@ -77,6 +77,28 @@ export default function AvaliarPage() {
         return;
       }
 
+      const entitlementsRes = await fetch('/api/me/entitlements');
+
+      if (entitlementsRes.status === 401) {
+        router.push('/login');
+        return;
+      }
+
+      if (!entitlementsRes.ok) {
+        const message = await entitlementsRes.text();
+        throw new Error(message || 'Erro ao validar permissões.');
+      }
+
+      const entitlements = await entitlementsRes.json();
+      if (!entitlements?.can_submit_avaliacao) {
+        router.push(
+          entitlements?.motivo_bloqueio === 'sem_creditos'
+            ? '/planos?cta=creditos'
+            : '/planos?cta=plano'
+        );
+        return;
+      }
+
       const res = await fetch('/api/avaliacoes/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
