@@ -35,6 +35,21 @@ export default function OnboardingGuard({
   const router = useRouter()
   const [state, setState] = useState<GuardState>({ status: 'checking' })
 
+  const publicRoutes = useMemo(
+    () => [
+      '/',
+      '/onboarding',
+      '/login',
+      '/signup',
+      '/register',
+      '/planos',
+      '/plans',
+      '/verification-pending',
+      '/auth/callback',
+    ],
+    []
+  )
+
   const isOnboardingRoute = useMemo(
     () => pathname === '/onboarding' || pathname.startsWith('/onboarding/'),
     [pathname]
@@ -44,9 +59,46 @@ export default function OnboardingGuard({
     setState({ status: 'checking' })
 
     const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+
+    if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+      console.error('Erro ao carregar sessão:', {
+        message: sessionError.message,
+        status: sessionError.status,
+        error: sessionError,
+      })
+      setState({
+        status: 'error',
+        errorMessage: resolveErrorMessage(),
+      })
+      return
+    }
+
+    if (!session) {
+      const isPublicRoute = publicRoutes.some(
+        r => pathname === r || pathname.startsWith(`${r}/`)
+      )
+
+      if (!isPublicRoute) {
+        router.replace('/onboarding')
+        return
+      }
+
+      setState({ status: 'ready' })
+      return
+    }
+
+    const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
+
+    if (userError?.code === 'AuthSessionMissingError') {
+      setState({ status: 'ready' })
+      return
+    }
 
     if (userError) {
       console.error('Erro ao carregar usuário:', {
@@ -80,10 +132,7 @@ export default function OnboardingGuard({
         message: errorInfo?.message,
         error: profileError,
       })
-      setState({
-        status: 'error',
-        errorMessage: resolveErrorMessage(errorType),
-      })
+      setState({ status: 'ready' })
       return
     }
 
@@ -112,7 +161,7 @@ export default function OnboardingGuard({
     }
 
     setState({ status: 'ready' })
-  }, [isOnboardingRoute, pathname, router])
+  }, [isOnboardingRoute, pathname, publicRoutes, router])
 
   useEffect(() => {
     let isMounted = true

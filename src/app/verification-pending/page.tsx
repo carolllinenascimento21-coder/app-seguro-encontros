@@ -18,11 +18,28 @@ export default function VerificationPendingPage() {
     setMessage(null)
 
     const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+
+    if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+      setError('Não foi possível reenviar o e-mail de confirmação.')
+      setLoading(false)
+      return
+    }
+
+    if (!session) {
+      setError('Não foi possível reenviar o e-mail de confirmação.')
+      setLoading(false)
+      return
+    }
+
+    const {
       data: { user },
       error,
     } = await supabase.auth.getUser()
 
-    if (error || !user?.email) {
+    if (error?.code === 'AuthSessionMissingError' || error || !user?.email) {
       setError('Não foi possível reenviar o e-mail de confirmação.')
       setLoading(false)
       return

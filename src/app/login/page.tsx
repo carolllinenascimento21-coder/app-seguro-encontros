@@ -41,13 +41,29 @@ export default function LoginPage() {
 
     // ✅ Login ok → garante perfil completo antes do fluxo de navegação
     const {
-      data: { user }
-    } = await supabase.auth.getUser()
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
 
-    if (user) {
-      const { error: profileError } = await ensureProfileForUser(supabase, user)
-      if (profileError) {
-        console.error('Erro ao garantir perfil no login:', profileError)
+    if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+      console.error('Erro ao carregar sessão no login:', sessionError)
+    }
+
+    if (session) {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError?.code === 'AuthSessionMissingError') {
+        return
+      }
+
+      if (user) {
+        const { error: profileError } = await ensureProfileForUser(supabase, user)
+        if (profileError) {
+          console.error('Erro ao garantir perfil no login:', profileError)
+        }
       }
     }
 

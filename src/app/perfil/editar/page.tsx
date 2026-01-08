@@ -35,11 +35,26 @@ export default function EditarPerfilPage() {
       setError(null);
       try {
         const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+          throw sessionError;
+        }
+
+        if (!session) {
+          setError('Usuário não autenticado');
+          setIsLoading(false);
+          return;
+        }
+
+        const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (userError?.code === 'AuthSessionMissingError' || userError || !user) {
         setError('Usuário não autenticado');
         setIsLoading(false);
         return;
@@ -86,11 +101,24 @@ export default function EditarPerfilPage() {
 
     try {
       const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+        throw sessionError;
+      }
+
+      if (!session) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (userError?.code === 'AuthSessionMissingError' || userError || !user) {
         throw new Error('Usuário não autenticado');
       }
 

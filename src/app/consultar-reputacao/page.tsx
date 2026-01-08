@@ -32,10 +32,31 @@ export default function ConsultarReputacao() {
 
   useEffect(() => {
     const prepare = async () => {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+        console.error('Erro ao carregar sessão:', sessionError);
+        return;
+      }
+
+      if (!session) {
+        checkAccess({ redirectOnBlock: false });
+        return;
+      }
+
       // ✅ Garante perfil existente para contas antigas antes de consultar reputação.
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
+
+      if (userError?.code === 'AuthSessionMissingError') {
+        checkAccess({ redirectOnBlock: false });
+        return;
+      }
 
       if (user) {
         const { error: profileError } = await ensureProfileForUser(

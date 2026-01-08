@@ -28,10 +28,26 @@ export function useAccessControl() {
       setChecking(true)
       try {
         const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession()
+
+        if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+          console.error('Erro ao carregar sessão:', sessionError)
+          return { allowed: false as const, profile: null }
+        }
+
+        if (!session) {
+          router.push('/login')
+          return { allowed: false as const, profile: null }
+        }
+
+        const {
           data: { user },
+          error: userError,
         } = await supabase.auth.getUser()
 
-        if (!user) {
+        if (userError?.code === 'AuthSessionMissingError' || !user) {
           router.push('/login')
           return { allowed: false as const, profile: null }
         }
@@ -72,10 +88,26 @@ export function useAccessControl() {
   const consumeQuery = useCallback(async () => {
     try {
       const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+        console.error('Erro ao carregar sessão:', sessionError)
+        return { success: false as const }
+      }
+
+      if (!session) {
+        router.push('/login')
+        return { success: false as const }
+      }
+
+      const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser()
 
-      if (!user) {
+      if (userError?.code === 'AuthSessionMissingError' || !user) {
         router.push('/login')
         return { success: false as const }
       }

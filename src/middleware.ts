@@ -29,20 +29,28 @@ export async function middleware(req: NextRequest) {
   const supabase = createMiddlewareClient({ req, res })
 
   const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession()
+
+  const isAuthSessionMissing =
+    sessionError?.code === 'AuthSessionMissingError'
+
+  if (!session || isAuthSessionMissing) {
+    return res
+  }
+
+  if (sessionError) {
+    console.error('Erro ao carregar sessão no middleware:', sessionError)
+    return res
+  }
+
+  const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser()
 
-  // 4️⃣ NÃO LOGADA → só pode ver públicas
-  if (!user || userError) {
-    const isPublicRoute = PUBLIC_ROUTES.some(
-      r => pathname === r || pathname.startsWith(`${r}/`)
-    )
-
-    if (!isPublicRoute) {
-      return NextResponse.redirect(new URL('/onboarding', req.url))
-    }
-
+  if (userError?.code === 'AuthSessionMissingError' || !user) {
     return res
   }
 
