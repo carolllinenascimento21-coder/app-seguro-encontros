@@ -12,12 +12,6 @@ type GuardState = {
   errorMessage?: string | null
 }
 
-const SELFIE_FLOW_ROUTES = [
-  '/onboarding/selfie',
-  '/verification-pending',
-  '/verificacao-selfie',
-]
-
 const supabase = createSupabaseClient()
 
 const resolveErrorMessage = (errorType?: ProfileErrorType) => {
@@ -41,8 +35,8 @@ export default function OnboardingGuard({
   const router = useRouter()
   const [state, setState] = useState<GuardState>({ status: 'checking' })
 
-  const isSelfieFlowRoute = useMemo(
-    () => SELFIE_FLOW_ROUTES.some(route => pathname.startsWith(route)),
+  const isOnboardingRoute = useMemo(
+    () => pathname === '/onboarding' || pathname.startsWith('/onboarding/'),
     [pathname]
   )
 
@@ -94,17 +88,16 @@ export default function OnboardingGuard({
     }
 
     const needsOnboarding =
-      (profile.onboarding_completed === false ||
-        profile.onboarding_completed === null) &&
-      (profile.selfie_verified === false || profile.selfie_verified === null)
+      profile.onboarding_completed === false ||
+      profile.onboarding_completed === null
 
-    if (needsOnboarding && !isSelfieFlowRoute) {
-      router.replace('/onboarding/selfie')
+    if (needsOnboarding && !isOnboardingRoute) {
+      router.replace('/onboarding')
       return
     }
 
     setState({ status: 'ready' })
-  }, [isSelfieFlowRoute, router])
+  }, [isOnboardingRoute, router])
 
   useEffect(() => {
     let isMounted = true

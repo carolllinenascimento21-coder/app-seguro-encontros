@@ -10,11 +10,6 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   const PUBLIC_ROUTES = ['/', '/onboarding', '/login', '/signup']
-  const SELFIE_FLOW_ROUTES = [
-    '/onboarding/selfie',
-    '/verification-pending',
-    '/verificacao-selfie',
-  ]
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return res
@@ -48,13 +43,9 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
-  const isSelfieFlowRoute = SELFIE_FLOW_ROUTES.some(route =>
-    pathname.startsWith(route)
-  )
-
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, onboarding_completed, selfie_verified')
+    .select('*')
     .eq('id', session.user.id)
     .maybeSingle()
 
@@ -63,16 +54,11 @@ export async function middleware(req: NextRequest) {
   }
 
   const needsOnboarding = profile.onboarding_completed !== true
-  const needsSelfie = profile.selfie_verified !== true
   const isOnboardingRoute =
     pathname === '/onboarding' || pathname.startsWith('/onboarding/')
 
   if (needsOnboarding && !isOnboardingRoute) {
     return NextResponse.redirect(new URL('/onboarding', req.url))
-  }
-
-  if (!needsOnboarding && needsSelfie && !isSelfieFlowRoute) {
-    return NextResponse.redirect(new URL('/onboarding/selfie', req.url))
   }
 
   return res
