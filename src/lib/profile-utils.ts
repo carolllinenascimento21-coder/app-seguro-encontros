@@ -123,6 +123,17 @@ const extractMissingColumnName = (error: unknown) => {
 const buildProfileSelect = (fields: readonly string[]) =>
   fields.filter(Boolean).join(', ')
 
+const removeMissingColumnFromPayload = (
+  payload: Record<string, unknown>,
+  missingColumn: string | null
+) => {
+  if (!missingColumn) return payload
+  if (!(missingColumn in payload)) return payload
+
+  const { [missingColumn]: _removed, ...rest } = payload
+  return rest
+}
+
 const fetchProfileById = async (
   supabase: SupabaseClient,
   userId: string,
@@ -214,9 +225,34 @@ export async function ensureProfileForUser(
       insertPayload.telefone = defaults.telefone || null
     }
 
-    const { error: upsertError } = await supabase
-      .from('profiles')
-      .upsert(insertPayload, { onConflict: 'id' })
+    let upsertPayload = insertPayload
+    let upsertError: unknown | null = null
+
+    while (true) {
+      ;({ error: upsertError } = await supabase
+        .from('profiles')
+        .upsert(upsertPayload, { onConflict: 'id' }))
+
+      if (!upsertError) {
+        break
+      }
+
+      const missingColumn = extractMissingColumnName(upsertError)
+      if (!missingColumn) {
+        break
+      }
+
+      const nextPayload = removeMissingColumnFromPayload(
+        upsertPayload as Record<string, unknown>,
+        missingColumn
+      )
+
+      if (Object.keys(nextPayload).length === Object.keys(upsertPayload).length) {
+        break
+      }
+
+      upsertPayload = nextPayload
+    }
 
     if (upsertError) {
       return {
@@ -270,12 +306,38 @@ export async function ensureProfileForUser(
     return { profile: fallbackProfile, error: null }
   }
 
-  const { data: updatedProfile, error: updateError } = await supabase
-    .from('profiles')
-    .update(updates)
-    .eq('id', user.id)
-    .select()
-    .single()
+  let updatePayload = updates
+  let updatedProfile: ProfileRecord | null = null
+  let updateError: unknown | null = null
+
+  while (true) {
+    ;({ data: updatedProfile, error: updateError } = await supabase
+      .from('profiles')
+      .update(updatePayload)
+      .eq('id', user.id)
+      .select(buildProfileSelect(availableFields))
+      .maybeSingle())
+
+    if (!updateError) {
+      break
+    }
+
+    const missingColumn = extractMissingColumnName(updateError)
+    if (!missingColumn) {
+      break
+    }
+
+    const nextPayload = removeMissingColumnFromPayload(
+      updatePayload as Record<string, unknown>,
+      missingColumn
+    )
+
+    if (Object.keys(nextPayload).length === Object.keys(updatePayload).length) {
+      break
+    }
+
+    updatePayload = nextPayload
+  }
 
   return {
     profile: updatedProfile ?? fallbackProfile,

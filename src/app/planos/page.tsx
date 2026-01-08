@@ -1,13 +1,130 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Eye, Lock, Check, X, Shield, Zap, Crown, Star, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { CreditPackId, SubscriptionPlanId } from '@/lib/billing'
 
+type PlanRecord = {
+  id: string
+  name?: string | null
+  description?: string | null
+  price?: number | null
+  priceFormatted?: string | null
+  currency?: string | null
+  interval?: string | null
+  type?: string | null
+  credits?: number | null
+  lookupKeys?: string[]
+}
+
+const formatPrice = (
+  price: number | null | undefined,
+  formatted: string | null | undefined,
+  currency: string | null | undefined
+) => {
+  if (formatted) return formatted
+  if (price == null || Number.isNaN(price)) return null
+
+  const normalized =
+    Number.isInteger(price) && price >= 100 ? price / 100 : price
+
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: currency ?? 'BRL',
+    minimumFractionDigits: 2,
+  }).format(normalized)
+}
+
 export default function PlanosPage() {
   const router = useRouter()
   const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null)
+  const [plans, setPlans] = useState<PlanRecord[]>([])
+  const [plansError, setPlansError] = useState<string | null>(null)
+  const [plansLoading, setPlansLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadPlans = async () => {
+      try {
+        const res = await fetch('/api/plans')
+        if (!res.ok) {
+          throw new Error(await res.text())
+        }
+
+        const payload = await res.json()
+        if (isMounted) {
+          setPlans(payload?.plans ?? [])
+          setPlansError(payload?.error ?? null)
+        }
+      } catch (error) {
+        if (!isMounted) return
+        setPlans([])
+        setPlansError(
+          error instanceof Error ? error.message : 'Erro ao carregar planos.'
+        )
+      } finally {
+        if (isMounted) {
+          setPlansLoading(false)
+        }
+      }
+    }
+
+    loadPlans()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const resolvePlan = useMemo(
+    () => (key: string) =>
+      plans.find(plan => {
+        const keys = [plan.id, ...(plan.lookupKeys ?? [])].filter(Boolean)
+        return keys.some(value => value === key)
+      }),
+    [plans]
+  )
+
+  const premiumMensal = resolvePlan('premium_mensal')
+  const premiumAnual = resolvePlan('premium_anual')
+  const premiumPlus = resolvePlan('premium_plus')
+  const credits3 = resolvePlan('credits_3')
+  const credits10 = resolvePlan('credits_10')
+  const credits25 = resolvePlan('credits_25')
+
+  const premiumMensalPrice = formatPrice(
+    premiumMensal?.price,
+    premiumMensal?.priceFormatted,
+    premiumMensal?.currency
+  )
+  const premiumAnualPrice = formatPrice(
+    premiumAnual?.price,
+    premiumAnual?.priceFormatted,
+    premiumAnual?.currency
+  )
+  const premiumPlusPrice = formatPrice(
+    premiumPlus?.price,
+    premiumPlus?.priceFormatted,
+    premiumPlus?.currency
+  )
+
+  const credits3Price = formatPrice(
+    credits3?.price,
+    credits3?.priceFormatted,
+    credits3?.currency
+  )
+  const credits10Price = formatPrice(
+    credits10?.price,
+    credits10?.priceFormatted,
+    credits10?.currency
+  )
+  const credits25Price = formatPrice(
+    credits25?.price,
+    credits25?.priceFormatted,
+    credits25?.currency
+  )
 
   const scrollToPlans = () => {
     const plansSection = document.getElementById('planos-section')
@@ -128,6 +245,13 @@ export default function PlanosPage() {
           <p className="text-center text-[#C0C0C0] mb-12 text-lg">
             Acesso completo à verdade. Proteção que você merece.
           </p>
+          {(plansLoading || plansError) && (
+            <div className="text-center text-sm text-[#C0C0C0] mb-8">
+              {plansLoading
+                ? 'Carregando planos disponíveis...'
+                : 'Não foi possível carregar os planos agora.'}
+            </div>
+          )}
 
           {/* Grid de Planos */}
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
@@ -139,8 +263,12 @@ export default function PlanosPage() {
               </div>
               
               <div className="mb-6">
-                <p className="text-4xl font-bold text-white">R$ 9,90</p>
-                <p className="text-[#C0C0C0]">/mês</p>
+                <p className="text-4xl font-bold text-white">
+                  {premiumMensalPrice ?? 'R$ 9,90'}
+                </p>
+                <p className="text-[#C0C0C0]">
+                  /{premiumMensal?.interval ?? 'mês'}
+                </p>
               </div>
 
               <ul className="space-y-3 mb-6">
@@ -201,8 +329,12 @@ export default function PlanosPage() {
               </div>
               
               <div className="mb-6">
-                <p className="text-4xl font-bold text-white">R$ 79,90</p>
-                <p className="text-[#FFD700] font-semibold">/ano</p>
+                <p className="text-4xl font-bold text-white">
+                  {premiumAnualPrice ?? 'R$ 79,90'}
+                </p>
+                <p className="text-[#FFD700] font-semibold">
+                  /{premiumAnual?.interval ?? 'ano'}
+                </p>
                 <p className="text-sm text-[#D4AF37] mt-1">Equivalente a R$ 6,60 por mês</p>
                 <p className="text-xs text-[#C0C0C0] mt-1">💰 Economia anual de 33%</p>
               </div>
@@ -257,8 +389,12 @@ export default function PlanosPage() {
               </div>
               
               <div className="mb-6">
-                <p className="text-4xl font-bold text-white">R$ 19,90</p>
-                <p className="text-[#C0C0C0]">/mês</p>
+                <p className="text-4xl font-bold text-white">
+                  {premiumPlusPrice ?? 'R$ 19,90'}
+                </p>
+                <p className="text-[#C0C0C0]">
+                  /{premiumPlus?.interval ?? 'mês'}
+                </p>
               </div>
 
               <ul className="space-y-3 mb-6">
@@ -317,8 +453,12 @@ export default function PlanosPage() {
                   className="w-full bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all text-left disabled:opacity-60"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="text-white font-semibold">3 créditos</span>
-                    <span className="text-[#D4AF37] font-bold">R$ 6,90</span>
+                    <span className="text-white font-semibold">
+                      {credits3?.credits ?? 3} créditos
+                    </span>
+                    <span className="text-[#D4AF37] font-bold">
+                      {credits3Price ?? 'R$ 6,90'}
+                    </span>
                   </div>
                 </button>
                 
@@ -328,8 +468,12 @@ export default function PlanosPage() {
                   className="w-full bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all text-left disabled:opacity-60"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="text-white font-semibold">10 créditos</span>
-                    <span className="text-[#D4AF37] font-bold">R$ 14,90</span>
+                    <span className="text-white font-semibold">
+                      {credits10?.credits ?? 10} créditos
+                    </span>
+                    <span className="text-[#D4AF37] font-bold">
+                      {credits10Price ?? 'R$ 14,90'}
+                    </span>
                   </div>
                 </button>
                 
@@ -339,8 +483,12 @@ export default function PlanosPage() {
                   className="w-full bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all text-left disabled:opacity-60"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="text-white font-semibold">25 créditos</span>
-                    <span className="text-[#D4AF37] font-bold">R$ 27,90</span>
+                    <span className="text-white font-semibold">
+                      {credits25?.credits ?? 25} créditos
+                    </span>
+                    <span className="text-[#D4AF37] font-bold">
+                      {credits25Price ?? 'R$ 27,90'}
+                    </span>
                   </div>
                   <div className="text-xs text-[#FFD700] mt-1">⭐ Melhor custo-benefício</div>
                 </button>
