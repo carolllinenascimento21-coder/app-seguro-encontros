@@ -39,8 +39,28 @@ export default function MinhasAvaliacoes() {
     try {
       setLoading(true);
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+        console.error('Erro ao carregar sessão:', sessionError);
+        router.push('/login');
+        return;
+      }
+
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError?.code === 'AuthSessionMissingError' || !user) {
         router.push('/login');
         return;
       }

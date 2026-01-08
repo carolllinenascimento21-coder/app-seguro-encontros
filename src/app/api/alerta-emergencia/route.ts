@@ -26,13 +26,32 @@ export async function POST(req: Request) {
       }
     )
 
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession()
+
+    if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+      return NextResponse.json(
+        { error: 'Erro ao carregar sessão' },
+        { status: 401 }
+      )
+    }
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Usuária não autenticada' },
+        { status: 401 }
+      )
+    }
+
     // ✅ Usuária autenticada pela sessão
     const {
       data: { user },
       error: authError
     } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    if (authError?.code === 'AuthSessionMissingError' || authError || !user) {
       return NextResponse.json(
         { error: 'Usuária não autenticada' },
         { status: 401 }

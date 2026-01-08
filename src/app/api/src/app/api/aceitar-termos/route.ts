@@ -6,11 +6,30 @@ export async function POST() {
   const supabase = createRouteHandlerClient({ cookies })
 
   const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession()
+
+  if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+    return NextResponse.json(
+      { error: 'Erro ao carregar sessão' },
+      { status: 401 }
+    )
+  }
+
+  if (!session) {
+    return NextResponse.json(
+      { error: 'Usuário não autenticado' },
+      { status: 401 }
+    )
+  }
+
+  const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser()
 
-  if (authError || !user) {
+  if (authError?.code === 'AuthSessionMissingError' || authError || !user) {
     return NextResponse.json(
       { error: 'Usuário não autenticado' },
       { status: 401 }
