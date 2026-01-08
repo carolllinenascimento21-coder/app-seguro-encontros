@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ensureProfileForUser } from '@/lib/profile-utils'
+import { isAuthSessionMissingError } from '@/lib/auth-session'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -45,7 +46,7 @@ export default function LoginPage() {
       error: sessionError,
     } = await supabase.auth.getSession()
 
-    if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
+    if (sessionError && !isAuthSessionMissingError(sessionError)) {
       console.error('Erro ao carregar sessão no login:', sessionError)
     }
 
@@ -55,14 +56,22 @@ export default function LoginPage() {
         error: userError,
       } = await supabase.auth.getUser()
 
-      if (userError?.code === 'AuthSessionMissingError') {
+      if (isAuthSessionMissingError(userError)) {
         return
       }
 
       if (user) {
-        const { error: profileError } = await ensureProfileForUser(supabase, user)
+        const { profile, error: profileError } = await ensureProfileForUser(
+          supabase,
+          user
+        )
         if (profileError) {
           console.error('Erro ao garantir perfil no login:', profileError)
+        }
+
+        if (profile?.onboarding_completed === false || profile?.onboarding_completed === null) {
+          router.replace('/onboarding/selfie')
+          return
         }
       }
     }

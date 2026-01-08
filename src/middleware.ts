@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { ensureProfileForUser } from '@/lib/profile-utils'
+import { isAuthSessionMissingError } from '@/lib/auth-session'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
@@ -33,15 +34,22 @@ export async function middleware(req: NextRequest) {
     error: sessionError,
   } = await supabase.auth.getSession()
 
-  const isAuthSessionMissing =
-    sessionError?.code === 'AuthSessionMissingError'
+  const isAuthSessionMissing = isAuthSessionMissingError(sessionError)
 
-  if (!session || isAuthSessionMissing) {
+  if (sessionError && !isAuthSessionMissing) {
+    console.error('Erro ao carregar sessão no middleware:', sessionError)
     return res
   }
 
-  if (sessionError) {
-    console.error('Erro ao carregar sessão no middleware:', sessionError)
+  if (!session || isAuthSessionMissing) {
+    const isPublicRoute = PUBLIC_ROUTES.some(
+      route => pathname === route || pathname.startsWith(`${route}/`)
+    )
+
+    if (!isPublicRoute && !pathname.startsWith('/api')) {
+      return NextResponse.redirect(new URL('/onboarding', req.url))
+    }
+
     return res
   }
 
@@ -50,7 +58,7 @@ export async function middleware(req: NextRequest) {
     error: userError,
   } = await supabase.auth.getUser()
 
-  if (userError?.code === 'AuthSessionMissingError' || !user) {
+  if (isAuthSessionMissingError(userError) || !user) {
     return res
   }
 

@@ -1,9 +1,9 @@
 "use client"
 
-import { createPagesBrowserClient } from '@supabase/auth-helpers-nextjs'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 export function createSupabaseClient() {
-  return createPagesBrowserClient()
+  return createClientComponentClient()
 }
 
 export const supabase = createSupabaseClient()
