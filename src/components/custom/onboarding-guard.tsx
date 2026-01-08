@@ -44,15 +44,15 @@ export default function OnboardingGuard({
     setState({ status: 'checking' })
 
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession()
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
 
-    if (sessionError) {
-      console.error('Erro ao carregar sessão:', {
-        message: sessionError.message,
-        status: sessionError.status,
-        error: sessionError,
+    if (userError) {
+      console.error('Erro ao carregar usuário:', {
+        message: userError.message,
+        status: userError.status,
+        error: userError,
       })
       setState({
         status: 'error',
@@ -61,7 +61,7 @@ export default function OnboardingGuard({
       return
     }
 
-    if (!session?.user) {
+    if (!user) {
       setState({ status: 'ready' })
       return
     }
@@ -71,7 +71,7 @@ export default function OnboardingGuard({
       error: profileError,
       errorType,
       errorInfo,
-    } = await ensureProfileForUser(supabase, session.user)
+    } = await ensureProfileForUser(supabase, user)
 
     if (profileError || !profile) {
       console.error('Erro ao carregar perfil:', {
@@ -91,13 +91,28 @@ export default function OnboardingGuard({
       profile.onboarding_completed === false ||
       profile.onboarding_completed === null
 
-    if (needsOnboarding && !isOnboardingRoute) {
-      router.replace('/onboarding')
+    if (needsOnboarding) {
+      if (!isOnboardingRoute) {
+        router.replace('/onboarding/selfie')
+        return
+      }
+
+      if (pathname === '/onboarding') {
+        router.replace('/onboarding/selfie')
+        return
+      }
+    } else if (
+      isOnboardingRoute ||
+      pathname === '/login' ||
+      pathname === '/signup' ||
+      pathname === '/register'
+    ) {
+      router.replace('/home')
       return
     }
 
     setState({ status: 'ready' })
-  }, [isOnboardingRoute, router])
+  }, [isOnboardingRoute, pathname, router])
 
   useEffect(() => {
     let isMounted = true

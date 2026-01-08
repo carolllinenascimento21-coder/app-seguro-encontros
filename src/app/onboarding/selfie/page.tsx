@@ -126,7 +126,7 @@ export default function SelfieOnboardingPage() {
       .update({
         selfie_url: filePath,
         selfie_verified: false,
-        onboarding_completed: false,
+        onboarding_completed: true,
       })
       .eq('id', user.id)
 
