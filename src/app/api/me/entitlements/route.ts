@@ -3,16 +3,6 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
 import { FREE_PLAN } from '@/lib/billing'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
-
-const isPlanActive = (
-  plan: string | null | undefined,
-  planExpiresAt: string | null | undefined
-) => {
-  if (!plan || plan === FREE_PLAN) return false
-  if (!planExpiresAt) return true
-  return new Date(planExpiresAt).getTime() > Date.now()
-}
 
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies })
@@ -39,22 +29,20 @@ export async function GET() {
     return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .select('plan, credits, plan_expires_at')
-    .eq('id', user.id)
-    .single()
+  const { data, error } = await supabase.rpc('get_avaliacao_entitlements')
 
-  if (error || !data) {
+  const entitlements = Array.isArray(data) ? data[0] : data
+
+  if (error || !entitlements) {
     console.error('Erro ao carregar entitlements', error)
     return NextResponse.json({ error: 'Erro ao validar permissões' }, { status: 500 })
   }
 
-  const plan = data.plan ?? FREE_PLAN
-  const credits = data.credits ?? 0
-  const planExpiresAt = data.plan_expires_at
-  const hasActivePlan = isPlanActive(plan, planExpiresAt)
-  const canSubmit = hasActivePlan || credits > 0
+  const plan = entitlements.plan ?? FREE_PLAN
+  const credits = entitlements.credits ?? 0
+  const planExpiresAt = entitlements.plan_expires_at
+  const hasActivePlan = entitlements.has_active_plan ?? false
+  const canSubmit = entitlements.can_submit ?? false
 
   let motivoBloqueio: 'sem_plano' | 'sem_creditos' | null = null
   if (!canSubmit) {
