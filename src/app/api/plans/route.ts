@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import { getMissingSupabaseEnvDetails } from '@/lib/env'
 
 type RawPlan = Record<string, any>
 
@@ -55,6 +56,25 @@ const normalizePlan = (plan: RawPlan): NormalizedPlan => {
 }
 
 export async function GET() {
+  let supabaseAdmin
+  try {
+    supabaseAdmin = getSupabaseAdminClient()
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
+    }
+    throw error
+  }
+
+  if (!supabaseAdmin) {
+    return NextResponse.json(
+      { error: 'Supabase admin não configurado', plans: [] },
+      { status: 503 }
+    )
+  }
+
   const { data, error } = await supabaseAdmin.from('plans').select('*')
 
   if (error) {

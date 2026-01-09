@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
 import { getStripeClient } from '@/lib/stripe'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import { getMissingSupabaseEnvDetails } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,26 @@ export async function POST(req: Request) {
   }
 
   if (event.type === 'checkout.session.completed') {
+    let supabaseAdmin
+
+    try {
+      supabaseAdmin = getSupabaseAdminClient()
+    } catch (error) {
+      const envError = getMissingSupabaseEnvDetails(error)
+      if (envError) {
+        console.error(envError.message)
+        return NextResponse.json({ error: envError.message }, { status: envError.status })
+      }
+      throw error
+    }
+
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Supabase admin não configurado' },
+        { status: 503 }
+      )
+    }
+
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.metadata?.user_id
 

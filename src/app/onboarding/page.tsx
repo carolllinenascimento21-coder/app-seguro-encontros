@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Crown } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -29,6 +29,14 @@ export default function OnboardingPage() {
   // ✅ GOOGLE OAUTH CORRIGIDO
   const handleGoogleLogin = async () => {
     if (!validatePreconditions()) return
+
+    const supabase = createSupabaseClient()
+
+    if (!supabase) {
+      console.error('Supabase client não inicializado no onboarding.')
+      alert('Serviço indisponível no momento. Tente novamente mais tarde.')
+      return
+    }
 
     await supabase.auth.signInWithOAuth({
       provider: 'google',

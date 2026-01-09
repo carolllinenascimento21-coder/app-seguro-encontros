@@ -3,11 +3,22 @@ import type { NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { ensureProfileForUser } from '@/lib/profile-utils'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
+import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  let supabaseEnv
+
+  try {
+    supabaseEnv = getSupabasePublicEnv('middleware')
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return new NextResponse(envError.message, { status: envError.status })
+    }
+    throw error
+  }
 
   const { pathname } = req.nextUrl
 
@@ -23,7 +34,7 @@ export async function middleware(req: NextRequest) {
     '/auth/callback',
   ]
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseEnv) {
     return res
   }
 

@@ -43,6 +43,11 @@ export default function HistoricoAvaliacao() {
   const loadHistorico = async () => {
     try {
       setLoading(true);
+      if (!supabase) {
+        console.error('Supabase client não inicializado no histórico de avaliações.');
+        setLoading(false);
+        return;
+      }
 
       const {
         data: { session },

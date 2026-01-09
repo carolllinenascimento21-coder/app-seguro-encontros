@@ -38,6 +38,12 @@ export default function ModoSeguroPage() {
       setSendingAlert(true)
       setAlertError(null)
 
+      if (!supabase) {
+        console.error('Supabase client não inicializado no modo seguro.')
+        setAlertError('Serviço indisponível no momento.')
+        return
+      }
+
       if (!coords) {
         setAlertError('Localização indisponível.')
         return

@@ -56,6 +56,11 @@ export default function EditarAvaliacao() {
   const loadAvaliacao = async () => {
     try {
       setLoading(true);
+      if (!supabase) {
+        console.error('Supabase client não inicializado na edição de avaliações.');
+        setLoading(false);
+        return;
+      }
 
       const {
         data: { session },
@@ -137,6 +142,10 @@ export default function EditarAvaliacao() {
     
     try {
       setSaving(true);
+      if (!supabase) {
+        console.error('Supabase client não inicializado na edição de avaliações.');
+        return;
+      }
 
       const {
         data: { session },

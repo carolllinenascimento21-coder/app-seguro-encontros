@@ -31,6 +31,12 @@ export default function PerfilPage() {
   useEffect(() => {
     const load = async () => {
       setError(null)
+      if (!supabase) {
+        console.error('Supabase client não inicializado no perfil.')
+        setError('Serviço indisponível no momento.')
+        setLoading(false)
+        return
+      }
 
       // 🔐 Sessão
       const {
@@ -98,6 +104,11 @@ export default function PerfilPage() {
       alert('Preencha nome e telefone')
       return
     }
+    if (!supabase) {
+      console.error('Supabase client não inicializado no perfil.')
+      setError('Serviço indisponível no momento.')
+      return
+    }
 
     const {
       data: { session }
@@ -129,11 +140,23 @@ export default function PerfilPage() {
   }
 
   const removeContact = async (id: string) => {
+    if (!supabase) {
+      console.error('Supabase client não inicializado no perfil.')
+      setError('Serviço indisponível no momento.')
+      return
+    }
+
     await supabase.from('emergency_contacts').delete().eq('id', id)
     setContacts(prev => prev.filter(c => c.id !== id))
   }
 
   const logout = async () => {
+    if (!supabase) {
+      console.error('Supabase client não inicializado no perfil.')
+      setError('Serviço indisponível no momento.')
+      return
+    }
+
     await supabase.auth.signOut()
     router.replace('/login')
   }
@@ -151,6 +174,12 @@ export default function PerfilPage() {
     setError(null)
 
     try {
+      if (!supabase) {
+        console.error('Supabase client não inicializado no perfil.')
+        setError('Serviço indisponível no momento.')
+        return
+      }
+
       const response = await fetch('/api/delete-account', {
         method: 'POST',
       })

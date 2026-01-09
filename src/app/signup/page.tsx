@@ -61,6 +61,13 @@ export default function SignupPage() {
     setErrorMessage('')
     setSuccessMessage('')
 
+    if (!supabase) {
+      console.error('Supabase client não inicializado no signup.')
+      setErrorMessage('Serviço indisponível no momento.')
+      setLoading(false)
+      return
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,

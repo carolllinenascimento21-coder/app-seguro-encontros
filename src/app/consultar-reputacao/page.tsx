@@ -33,6 +33,11 @@ export default function ConsultarReputacao() {
 
   useEffect(() => {
     const prepare = async () => {
+      if (!supabase) {
+        console.error('Supabase client não inicializado no frontend.');
+        return;
+      }
+
       const {
         data: { session },
         error: sessionError,

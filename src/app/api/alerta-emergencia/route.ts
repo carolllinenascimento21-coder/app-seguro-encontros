@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import twilio from 'twilio'
+import { getMissingSupabaseEnvDetails, getSupabaseServiceEnv } from '@/lib/env'
 
 export async function POST(req: Request) {
   try {
@@ -14,17 +15,32 @@ export async function POST(req: Request) {
       )
     }
 
-    // ✅ Supabase Server Client (App Router correto)
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          getAll: () => cookies().getAll(),
-          setAll: () => {}
-        }
+    let supabaseEnv
+    try {
+      supabaseEnv = getSupabaseServiceEnv('api/alerta-emergencia')
+    } catch (error) {
+      const envError = getMissingSupabaseEnvDetails(error)
+      if (envError) {
+        console.error(envError.message)
+        return NextResponse.json({ error: envError.message }, { status: envError.status })
       }
-    )
+      throw error
+    }
+
+    if (!supabaseEnv) {
+      return NextResponse.json(
+        { error: 'Supabase admin não configurado' },
+        { status: 503 }
+      )
+    }
+
+    // ✅ Supabase Server Client (App Router correto)
+    const supabase = createServerClient(supabaseEnv.url, supabaseEnv.serviceRoleKey, {
+      cookies: {
+        getAll: () => cookies().getAll(),
+        setAll: () => {},
+      },
+    })
 
     const {
       data: { session },
@@ -81,10 +97,19 @@ export async function POST(req: Request) {
     }
 
     // ✅ Twilio Client
-    const twilioClient = twilio(
-      process.env.TWILIO_ACCOUNT_SID!,
-      process.env.TWILIO_AUTH_TOKEN!
-    )
+    const twilioAccount = process.env.TWILIO_ACCOUNT_SID
+    const twilioToken = process.env.TWILIO_AUTH_TOKEN
+    const twilioPhone = process.env.TWILIO_PHONE_NUMBER
+
+    if (!twilioAccount || !twilioToken || !twilioPhone) {
+      console.error('Twilio não configurado para envio de alertas')
+      return NextResponse.json(
+        { error: 'Serviço de alerta indisponível' },
+        { status: 503 }
+      )
+    }
+
+    const twilioClient = twilio(twilioAccount, twilioToken)
 
     const mensagem = `🚨 ALERTA DE EMERGÊNCIA 🚨
 Estou em risco e preciso de ajuda.
@@ -95,7 +120,7 @@ https://maps.google.com/?q=${latitude},${longitude}`
     for (const contato of contatos) {
       await twilioClient.messages.create({
         body: mensagem,
-        from: process.env.TWILIO_PHONE_NUMBER!,
+        from: twilioPhone,
         to: contato.telefone
       })
     }

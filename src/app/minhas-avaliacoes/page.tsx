@@ -39,6 +39,11 @@ export default function MinhasAvaliacoes() {
   const carregarAvaliacoes = async () => {
     try {
       setLoading(true);
+      if (!supabase) {
+        console.error('Supabase client não inicializado nas avaliações.');
+        setLoading(false);
+        return;
+      }
 
       const {
         data: { session },
@@ -121,6 +126,11 @@ export default function MinhasAvaliacoes() {
     if (!avaliacaoToDelete) return;
 
     try {
+      if (!supabase) {
+        console.error('Supabase client não inicializado nas avaliações.');
+        return;
+      }
+
       const { error } = await supabase
         .from('avaliacoes')
         .delete()

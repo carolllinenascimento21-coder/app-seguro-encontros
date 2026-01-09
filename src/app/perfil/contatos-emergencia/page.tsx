@@ -20,6 +20,11 @@ export default function ContatosEmergencia() {
   const [telefone, setTelefone] = useState('')
 
   const carregar = async () => {
+    if (!supabase) {
+      console.error('Supabase client não inicializado nos contatos de emergência.')
+      return
+    }
+
     const { data } = await supabase
       .from('contatos_emergencia')
       .select('*')
@@ -34,6 +39,10 @@ export default function ContatosEmergencia() {
 
   const adicionar = async () => {
     if (!nome || !telefone) return
+    if (!supabase) {
+      console.error('Supabase client não inicializado nos contatos de emergência.')
+      return
+    }
 
     await supabase.from('contatos_emergencia').insert({
       nome,
@@ -46,6 +55,11 @@ export default function ContatosEmergencia() {
   }
 
   const remover = async (id: string) => {
+    if (!supabase) {
+      console.error('Supabase client não inicializado nos contatos de emergência.')
+      return
+    }
+
     await supabase.from('contatos_emergencia').delete().eq('id', id)
     carregar()
   }
