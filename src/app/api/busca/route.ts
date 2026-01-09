@@ -4,12 +4,9 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-type ReputationSearchRequest = {
-  nome?: string
-  cidade?: string
-}
+const DEFAULT_LIMIT = 20
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
 
   const {
@@ -34,16 +31,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
   }
 
-  let body: ReputationSearchRequest
-  try {
-    body = await req.json()
-  } catch (error) {
-    console.error('Erro ao ler payload de reputação', error)
-    return NextResponse.json({ error: 'Payload inválido' }, { status: 400 })
-  }
+  const { searchParams } = new URL(req.url)
+  const nome = searchParams.get('q')?.trim() ?? ''
+  const cidade = searchParams.get('cidade')?.trim() ?? ''
+  const limitParam = Number(searchParams.get('limit'))
+  const offsetParam = Number(searchParams.get('offset'))
 
-  const nome = body.nome?.trim() ?? ''
-  const cidade = body.cidade?.trim() ?? ''
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : DEFAULT_LIMIT
+  const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? offsetParam : 0
 
   if (!nome && !cidade) {
     return NextResponse.json(
@@ -84,7 +79,7 @@ export async function POST(req: Request) {
     query = query.ilike('cidade', `%${cidade}%`)
   }
 
-  const { data, error } = await query
+  const { data, error } = await query.range(offset, offset + limit - 1)
 
   if (error) {
     console.error('Erro ao buscar reputação', error)

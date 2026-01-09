@@ -13,7 +13,8 @@ interface Avaliacao {
   nome: string | null;
   cidade: string | null;
   contato: string | null;
-  flags: string[];
+  flags_positive: string[];
+  flags_negative: string[];
   relato: string | null;
   comportamento: number;
   seguranca_emocional: number;
@@ -79,7 +80,8 @@ export default function MinhasAvaliacoes() {
             nome,
             cidade,
             contato,
-            flags,
+            flags_positive,
+            flags_negative,
             relato,
             comportamento,
             seguranca_emocional,

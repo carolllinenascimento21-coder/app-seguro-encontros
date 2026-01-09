@@ -1,6 +1,7 @@
 'use client'
 
 import { Heart, AlertTriangle, XCircle, Flag, CheckCircle, Clock } from 'lucide-react'
+import { getNegativeFlagLabel, getPositiveFlagLabel } from '@/lib/flags'
 
 type RatingType = 'positive' | 'neutral' | 'negative'
 
@@ -8,12 +9,22 @@ interface ReportCardProps {
   id: string
   content: string
   rating: RatingType
-  flags: string[]
+  flags?: string[]
+  flagsPositive?: string[]
+  flagsNegative?: string[]
   timestamp: string
   status: 'pending' | 'approved' | 'flagged'
 }
 
-export default function ReportCard({ content, rating, flags, timestamp, status }: ReportCardProps) {
+export default function ReportCard({
+  content,
+  rating,
+  flags,
+  flagsPositive,
+  flagsNegative,
+  timestamp,
+  status,
+}: ReportCardProps) {
   // Componente de ícone de avaliação
   const RatingIcon = ({ type }: { type: RatingType }) => {
     switch(type) {
@@ -81,6 +92,9 @@ export default function ReportCard({ content, rating, flags, timestamp, status }
     }
   }
 
+  const positiveFlags = flagsPositive ?? []
+  const negativeFlags = flagsNegative ?? (flags ?? [])
+
   return (
     <div className="bg-[#1A1A1A] rounded-3xl shadow-xl p-6 border-l-8 border-[#D4AF37] hover:shadow-2xl transition-all duration-300 hover:scale-[1.01]">
       {/* Header */}
@@ -108,17 +122,34 @@ export default function ReportCard({ content, rating, flags, timestamp, status }
       </p>
 
       {/* Flags */}
-      {flags.length > 0 && (
-        <div className="flex flex-wrap gap-2 pt-4 border-t border-[#D4AF37]/30">
-          {flags.map((flag, idx) => (
-            <span
-              key={idx}
-              className="flex items-center gap-1 text-xs bg-[#D4AF37]/20 text-[#EFD9A7] px-3 py-1 rounded-full font-semibold border border-[#D4AF37]"
-            >
-              <Flag className="w-3 h-3" />
-              {flag.replace('_', ' ')}
-            </span>
-          ))}
+      {(positiveFlags.length > 0 || negativeFlags.length > 0) && (
+        <div className="pt-4 border-t border-[#D4AF37]/30 space-y-3">
+          {positiveFlags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {positiveFlags.map((flag, idx) => (
+                <span
+                  key={`positive-${idx}`}
+                  className="flex items-center gap-1 text-xs bg-green-500/20 text-green-200 px-3 py-1 rounded-full font-semibold border border-green-500/40"
+                >
+                  <Flag className="w-3 h-3" />
+                  {getPositiveFlagLabel(flag)}
+                </span>
+              ))}
+            </div>
+          )}
+          {negativeFlags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {negativeFlags.map((flag, idx) => (
+                <span
+                  key={`negative-${idx}`}
+                  className="flex items-center gap-1 text-xs bg-red-500/20 text-red-200 px-3 py-1 rounded-full font-semibold border border-red-500/40"
+                >
+                  <Flag className="w-3 h-3" />
+                  {getNegativeFlagLabel(flag)}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

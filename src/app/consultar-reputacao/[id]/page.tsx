@@ -1,9 +1,10 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { Star, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Star, ArrowLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useEffect, useState } from 'react';
+import { getNegativeFlagLabel, getPositiveFlagLabel } from '@/lib/flags';
 export default function DetalhesReputacao() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -107,19 +108,38 @@ export default function DetalhesReputacao() {
           </p>
         </div>
 
-        {avaliacao.flags?.length > 0 && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+        {avaliacao.flags_negative?.length > 0 && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-4">
             <div className="flex gap-2 text-red-400 font-bold mb-2">
               <AlertTriangle className="w-5 h-5" />
-              Alertas
+              Pontos de atenção (Red Flags)
             </div>
             <div className="flex flex-wrap gap-2">
-              {avaliacao.flags.map((f: string, i: number) => (
+              {avaliacao.flags_negative.map((f: string, i: number) => (
                 <span
                   key={i}
                   className="bg-red-500/20 text-red-300 px-3 py-1 rounded-full text-xs"
                 >
-                  {f}
+                  {getNegativeFlagLabel(f)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {avaliacao.flags_positive?.length > 0 && (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+            <div className="flex gap-2 text-green-400 font-bold mb-2">
+              <CheckCircle2 className="w-5 h-5" />
+              Pontos positivos (Green Flags)
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {avaliacao.flags_positive.map((f: string, i: number) => (
+                <span
+                  key={i}
+                  className="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-xs"
+                >
+                  {getPositiveFlagLabel(f)}
                 </span>
               ))}
             </div>

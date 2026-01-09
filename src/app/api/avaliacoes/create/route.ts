@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
+import { normalizeNegativeFlags, normalizePositiveFlags } from '@/lib/flags'
 
 type AvaliacaoRequest = {
   nome?: string
@@ -10,6 +11,8 @@ type AvaliacaoRequest = {
   relato?: string
   anonimo?: boolean
   flags?: string[]
+  flags_positive?: string[]
+  flags_negative?: string[]
   comportamento?: number
   seguranca_emocional?: number
   respeito?: number
@@ -61,13 +64,20 @@ export async function POST(req: Request) {
   }
 
   const isAnonymous = body.anonimo ?? true
+  const normalizedPositiveFlags = normalizePositiveFlags(body.flags_positive ?? [])
+  const negativeInput = [
+    ...(body.flags_negative ?? []),
+    ...(body.flags ?? []),
+  ]
+  const normalizedNegativeFlags = normalizeNegativeFlags(negativeInput)
 
   const { data, error } = await supabase.rpc('submit_avaliacao', {
     nome,
     cidade: body.cidade?.trim() || null,
     contato: body.contato?.trim() || null,
     relato: body.relato?.trim() || null,
-    flags: body.flags ?? [],
+    flags_positive: normalizedPositiveFlags,
+    flags_negative: normalizedNegativeFlags,
     anonimo: isAnonymous,
     comportamento,
     seguranca_emocional: body.seguranca_emocional ?? 0,
