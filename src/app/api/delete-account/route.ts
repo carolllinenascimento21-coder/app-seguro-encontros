@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { isMissingColumnError } from '@/lib/profile-utils'
+import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
-const safeDeleteContacts = async (tableName: string, userId: string) => {
+const safeDeleteContacts = async (
+  supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
+  tableName: string,
+  userId: string
+) => {
+  if (!supabaseAdmin) {
+    throw new Error('Supabase admin não configurado')
+  }
+
   const { error } = await supabaseAdmin
     .from(tableName)
     .delete()
@@ -16,6 +25,44 @@ const safeDeleteContacts = async (tableName: string, userId: string) => {
 }
 
 export async function POST() {
+  let supabaseEnv
+  try {
+    supabaseEnv = getSupabasePublicEnv('api/delete-account')
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
+    }
+    throw error
+  }
+
+  if (!supabaseEnv) {
+    return NextResponse.json(
+      { error: 'Supabase público não configurado' },
+      { status: 503 }
+    )
+  }
+
+  let supabaseAdmin
+  try {
+    supabaseAdmin = getSupabaseAdminClient()
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
+    }
+    throw error
+  }
+
+  if (!supabaseAdmin) {
+    return NextResponse.json(
+      { error: 'Supabase admin não configurado' },
+      { status: 503 }
+    )
+  }
+
   const supabase = createRouteHandlerClient({ cookies })
   const {
     data: { session },
@@ -59,8 +106,8 @@ export async function POST() {
 
   try {
     await Promise.all([
-      safeDeleteContacts('emergency_contacts', userId),
-      safeDeleteContacts('contatos_emergencia', userId),
+      safeDeleteContacts(supabaseAdmin, 'emergency_contacts', userId),
+      safeDeleteContacts(supabaseAdmin, 'contatos_emergencia', userId),
     ])
   } catch (error) {
     console.error('Failed to remove contacts', error)

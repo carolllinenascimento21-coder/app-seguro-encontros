@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { createSupabaseClient } from '@/lib/supabase';
 import {
   ensureProfileForUser,
   getProfileErrorInfo,
@@ -18,6 +18,7 @@ type ProfileForm = {
 
 export default function EditarPerfilPage() {
   const router = useRouter();
+  const supabase = createSupabaseClient();
 
   const [formData, setFormData] = useState<ProfileForm>({
     nome: '',
@@ -34,6 +35,13 @@ export default function EditarPerfilPage() {
     const loadProfile = async () => {
       setError(null);
       try {
+        if (!supabase) {
+          console.error('Supabase client não inicializado no perfil.');
+          setError('Serviço indisponível no momento.');
+          setIsLoading(false);
+          return;
+        }
+
         const {
           data: { session },
           error: sessionError,
@@ -100,6 +108,13 @@ export default function EditarPerfilPage() {
     setError(null);
 
     try {
+      if (!supabase) {
+        console.error('Supabase client não inicializado no perfil.');
+        setError('Serviço indisponível no momento.');
+        setIsSaving(false);
+        return;
+      }
+
       const {
         data: { session },
         error: sessionError,

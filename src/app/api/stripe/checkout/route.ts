@@ -11,6 +11,7 @@ import {
   subscriptionPriceEnvByPlan,
 } from '@/lib/billing'
 import { getStripeClient } from '@/lib/stripe'
+import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 type CheckoutRequest =
   | { mode: 'subscription'; planId: SubscriptionPlanId }
@@ -24,6 +25,25 @@ function getPriceId(mode: CheckoutRequest['mode'], id: string) {
 }
 
 export async function POST(req: Request) {
+  let supabaseEnv
+  try {
+    supabaseEnv = getSupabasePublicEnv('api/stripe/checkout')
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
+    }
+    throw error
+  }
+
+  if (!supabaseEnv) {
+    return NextResponse.json(
+      { error: 'Supabase público não configurado' },
+      { status: 503 }
+    )
+  }
+
   const supabase = createRouteHandlerClient({ cookies })
   const {
     data: { session },

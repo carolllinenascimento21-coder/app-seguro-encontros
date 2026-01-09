@@ -1,15 +1,23 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseServiceEnv } from '@/lib/env'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+let supabaseAdminClient: SupabaseClient | null = null
 
-if (!supabaseUrl || !serviceRoleKey) {
-  throw new Error('Missing Supabase environment variables for service role client')
+export const getSupabaseAdminClient = () => {
+  const env = getSupabaseServiceEnv('supabase-admin')
+
+  if (!env) {
+    return null
+  }
+
+  if (!supabaseAdminClient) {
+    supabaseAdminClient = createClient(env.url, env.serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  }
+
+  return supabaseAdminClient
 }
-
-export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-})

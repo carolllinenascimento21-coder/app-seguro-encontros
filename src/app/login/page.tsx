@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase'
 import { ensureProfileForUser } from '@/lib/profile-utils'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
 
@@ -17,6 +17,15 @@ export default function LoginPage() {
   const handleLogin = async () => {
     setLoading(true)
     setError(null)
+
+    const supabase = createSupabaseClient()
+
+    if (!supabase) {
+      console.error('Supabase client não inicializado no login.')
+      setError('Serviço indisponível no momento. Tente novamente mais tarde.')
+      setLoading(false)
+      return
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email,

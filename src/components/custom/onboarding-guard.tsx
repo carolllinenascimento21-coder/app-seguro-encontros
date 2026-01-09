@@ -59,6 +59,15 @@ export default function OnboardingGuard({
   const checkProfile = useCallback(async () => {
     setState({ status: 'checking' })
 
+    if (!supabase) {
+      console.error('Supabase client não inicializado no onboarding guard.')
+      setState({
+        status: 'error',
+        errorMessage: 'Serviço indisponível no momento.',
+      })
+      return
+    }
+
     const {
       data: { session },
       error: sessionError,

@@ -27,6 +27,11 @@ export function useAccessControl() {
     async (options: CheckOptions = { redirectOnBlock: true }) => {
       setChecking(true)
       try {
+        if (!supabase) {
+          console.error('Supabase client não inicializado no controle de acesso.')
+          return { allowed: false as const, profile: null }
+        }
+
         const {
           data: { session },
           error: sessionError,
@@ -87,6 +92,11 @@ export function useAccessControl() {
 
   const consumeQuery = useCallback(async () => {
     try {
+      if (!supabase) {
+        console.error('Supabase client não inicializado no consumo de consultas.')
+        return { success: false as const }
+      }
+
       const {
         data: { session },
         error: sessionError,

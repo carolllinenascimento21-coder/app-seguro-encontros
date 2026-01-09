@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
 import { normalizeNegativeFlags, normalizePositiveFlags } from '@/lib/flags'
+import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 type AvaliacaoRequest = {
   nome?: string
@@ -21,6 +22,25 @@ type AvaliacaoRequest = {
 }
 
 export async function POST(req: Request) {
+  let supabaseEnv
+  try {
+    supabaseEnv = getSupabasePublicEnv('api/avaliacoes/create')
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
+    }
+    throw error
+  }
+
+  if (!supabaseEnv) {
+    return NextResponse.json(
+      { error: 'Supabase público não configurado' },
+      { status: 503 }
+    )
+  }
+
   const supabase = createRouteHandlerClient({ cookies })
 
   const {

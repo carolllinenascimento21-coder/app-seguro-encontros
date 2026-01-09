@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { ensureProfileForUser, getProfileErrorInfo } from '@/lib/profile-utils'
 
@@ -52,6 +52,15 @@ export default function SelfieOnboardingPage() {
 
     setUploading(true)
     setError('')
+
+    const supabase = createSupabaseClient()
+
+    if (!supabase) {
+      console.error('Supabase client não inicializado no onboarding selfie.')
+      setError('Serviço indisponível no momento.')
+      setUploading(false)
+      return
+    }
 
     const video = videoRef.current
     const canvas = canvasRef.current

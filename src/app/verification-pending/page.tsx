@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { MailCheck } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase'
 
 export default function VerificationPendingPage() {
   const router = useRouter()
@@ -16,6 +16,15 @@ export default function VerificationPendingPage() {
     setLoading(true)
     setError(null)
     setMessage(null)
+
+    const supabase = createSupabaseClient()
+
+    if (!supabase) {
+      console.error('Supabase client não inicializado na confirmação de e-mail.')
+      setError('Serviço indisponível no momento.')
+      setLoading(false)
+      return
+    }
 
     const {
       data: { session },

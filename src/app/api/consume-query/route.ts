@@ -2,9 +2,48 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 export async function POST(req: Request) {
+  let supabaseEnv
+  try {
+    supabaseEnv = getSupabasePublicEnv('api/consume-query')
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
+    }
+    throw error
+  }
+
+  if (!supabaseEnv) {
+    return NextResponse.json(
+      { error: 'Supabase público não configurado' },
+      { status: 503 }
+    )
+  }
+
+  let supabaseAdmin
+  try {
+    supabaseAdmin = getSupabaseAdminClient()
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
+    }
+    throw error
+  }
+
+  if (!supabaseAdmin) {
+    return NextResponse.json(
+      { error: 'Supabase admin não configurado' },
+      { status: 503 }
+    )
+  }
+
   const supabase = createRouteHandlerClient({ cookies })
 
   const {
