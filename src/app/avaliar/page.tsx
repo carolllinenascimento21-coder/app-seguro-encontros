@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags';
 
 type CriterioKey =
   | 'comportamento'
@@ -19,24 +20,12 @@ const criterios: { key: CriterioKey; label: string }[] = [
   { key: 'confianca', label: 'Confiança' },
 ];
 
-const redFlagsList = [
-  'Mentiras constantes',
-  'Manipulação emocional',
-  'Desrespeito',
-  'Agressividade',
-  'Falta de respeito',
-  'Imaturidade emocional',
-  'Traição',
-  'Golpe amoroso',
-  'Stalking',
-  'Comportamento abusivo',
-  'Liso',
-];
-
 export default function AvaliarPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [selectedPositiveFlags, setSelectedPositiveFlags] = useState<string[]>([]);
+  const [selectedNegativeFlags, setSelectedNegativeFlags] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     nome: '',
@@ -44,7 +33,6 @@ export default function AvaliarPage() {
     contato: '',
     relato: '',
     anonimo: true,
-    flags: [] as string[],
     comportamento: 0,
     seguranca_emocional: 0,
     respeito: 0,
@@ -56,13 +44,15 @@ export default function AvaliarPage() {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
-  const toggleFlag = (flag: string) => {
-    setForm(prev => ({
-      ...prev,
-      flags: prev.flags.includes(flag)
-        ? prev.flags.filter(f => f !== flag)
-        : [...prev.flags, flag],
-    }));
+  const toggleFlag = (
+    flag: string,
+    setter: Dispatch<SetStateAction<string[]>>
+  ) => {
+    setter(prev =>
+      prev.includes(flag)
+        ? prev.filter(f => f !== flag)
+        : [...prev, flag]
+    );
   };
 
   const enviar = async () => {
@@ -85,7 +75,8 @@ export default function AvaliarPage() {
           cidade: form.cidade,
           contato: form.contato,
           relato: form.relato,
-          flags: form.flags,
+          flags_positive: selectedPositiveFlags,
+          flags_negative: selectedNegativeFlags,
           anonimo: form.anonimo,
           comportamento: form.comportamento,
           seguranca_emocional: form.seguranca_emocional,
@@ -173,23 +164,42 @@ export default function AvaliarPage() {
         </div>
       ))}
 
-      <p className="text-gray-300 mb-2 mt-4">Red Flags</p>
+      <div className="mt-6">
+        <p className="text-gray-300 mb-2">Pontos positivos (Green Flags)</p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {GREEN_FLAGS.map(flag => (
+            <button
+              key={flag.slug}
+              type="button"
+              onClick={() => toggleFlag(flag.slug, setSelectedPositiveFlags)}
+              className={`px-3 py-1 rounded-full text-xs ${
+                selectedPositiveFlags.includes(flag.slug)
+                  ? 'bg-green-500 text-white'
+                  : 'bg-gray-700 text-gray-300'
+              }`}
+            >
+              {flag.label}
+            </button>
+          ))}
+        </div>
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        {redFlagsList.map(f => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => toggleFlag(f)}
-            className={`px-3 py-1 rounded-full text-xs ${
-              form.flags.includes(f)
-                ? 'bg-red-500 text-white'
-                : 'bg-gray-700 text-gray-300'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+        <p className="text-gray-300 mb-2">Pontos de atenção (Red Flags)</p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {RED_FLAGS.map(flag => (
+            <button
+              key={flag.slug}
+              type="button"
+              onClick={() => toggleFlag(flag.slug, setSelectedNegativeFlags)}
+              className={`px-3 py-1 rounded-full text-xs ${
+                selectedNegativeFlags.includes(flag.slug)
+                  ? 'bg-red-500 text-white'
+                  : 'bg-gray-700 text-gray-300'
+              }`}
+            >
+              {flag.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <textarea

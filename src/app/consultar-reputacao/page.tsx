@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search, MapPin, Star, AlertTriangle } from 'lucide-react';
+import { Search, MapPin, Star, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
 import { useAccessControl } from '@/hooks/use-access-control';
@@ -19,7 +19,8 @@ interface Avaliacao {
   respeito: number;
   carater: number;
   confianca: number;
-  flags: string[];
+  flags_positive: string[];
+  flags_negative: string[];
 }
 
 export default function ConsultarReputacao() {
@@ -85,8 +86,8 @@ export default function ConsultarReputacao() {
     ).toFixed(1);
 
   const buscar = async () => {
-    if (!nome.trim()) {
-      alert('Digite um nome para buscar.');
+    if (!nome.trim() && !cidade.trim()) {
+      alert('Digite um nome ou cidade para buscar.');
       return;
     }
 
@@ -97,11 +98,15 @@ export default function ConsultarReputacao() {
         return;
       }
 
-      const res = await fetch('/api/reputation/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, cidade }),
-      });
+      const params = new URLSearchParams();
+      if (nome.trim()) {
+        params.set('q', nome.trim());
+      }
+      if (cidade.trim()) {
+        params.set('cidade', cidade.trim());
+      }
+
+      const res = await fetch(`/api/busca?${params.toString()}`);
 
       if (res.status === 401) {
         router.push('/login');
@@ -158,7 +163,7 @@ export default function ConsultarReputacao() {
           <input
             value={nome}
             onChange={e => setNome(e.target.value)}
-            placeholder="Nome completo"
+            placeholder="Nome (opcional)"
             className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white mb-3"
           />
 
@@ -207,10 +212,17 @@ export default function ConsultarReputacao() {
                 </div>
               </div>
 
-              {r.flags?.length > 0 && (
+              {r.flags_negative?.length > 0 && (
                 <div className="flex items-center gap-2 text-red-400 text-xs mt-2">
                   <AlertTriangle className="w-4 h-4" />
                   Possui alertas
+                </div>
+              )}
+
+              {r.flags_negative?.length === 0 && r.flags_positive?.length > 0 && (
+                <div className="flex items-center gap-2 text-green-400 text-xs mt-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Pontos positivos destacados
                 </div>
               )}
             </div>
