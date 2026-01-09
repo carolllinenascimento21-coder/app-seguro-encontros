@@ -62,16 +62,13 @@ export async function POST(req: Request) {
 
   const isAnonymous = body.anonimo ?? true
 
-  const { error } = await supabase.from('avaliacoes').insert({
-    user_id: user.id,
+  const { data, error } = await supabase.rpc('submit_avaliacao', {
     nome,
     cidade: body.cidade?.trim() || null,
     contato: body.contato?.trim() || null,
     relato: body.relato?.trim() || null,
     flags: body.flags ?? [],
     anonimo: isAnonymous,
-    is_anonymous: isAnonymous,
-    publica: !isAnonymous,
     comportamento,
     seguranca_emocional: body.seguranca_emocional ?? 0,
     respeito: body.respeito ?? 0,
@@ -81,11 +78,14 @@ export async function POST(req: Request) {
 
   if (error) {
     const message = error.message ?? ''
-    if (error.code === '42501' || message.includes('row-level security')) {
+    if (message.includes('PAYWALL')) {
       return NextResponse.json(
         { error: 'Sem créditos ou plano ativo para enviar avaliação.' },
         { status: 403 }
       )
+    }
+    if (message.includes('NOT_AUTHENTICATED')) {
+      return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
     }
     console.error('Erro ao inserir avaliação', {
       message: error.message,
@@ -98,5 +98,5 @@ export async function POST(req: Request) {
     )
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, avaliacao_id: data })
 }

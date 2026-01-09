@@ -137,7 +137,7 @@ export default function SelfieOnboardingPage() {
     }
 
     setUploading(false)
-    router.replace('/perfil')
+    router.replace('/home')
   }
 
   return (
