@@ -117,6 +117,15 @@ export async function POST(req: Request) {
     if (message.includes('NOT_AUTHENTICATED')) {
       return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
     }
+    if (
+      message.toLowerCase().includes('row-level security')
+      || error.code === '42501'
+    ) {
+      return NextResponse.json(
+        { error: 'Sem permissão para enviar avaliação.' },
+        { status: 403 }
+      )
+    }
     console.error('Erro ao inserir avaliação', {
       message: error.message,
       code: error.code,
