@@ -1,4 +1,6 @@
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
 import { normalizeNegativeFlags, normalizePositiveFlags } from '@/lib/flags'
 import { getMissingSupabaseEnvDetails } from '@/lib/env'
@@ -43,6 +45,19 @@ export async function POST(req: Request) {
     )
   }
 
+  const supabase = createRouteHandlerClient({ cookies })
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+
+  if (userError) {
+    console.error('Erro ao carregar usuário para avaliação', userError)
+  }
+
+  const userId = userData?.user?.id ?? null
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Usuário não autenticado.' }, { status: 401 })
+  }
+
   let body: AvaliacaoRequest
   try {
     body = await req.json()
@@ -75,7 +90,8 @@ export async function POST(req: Request) {
   const { data, error } = await supabaseAdmin
     .from('avaliacoes')
     .insert({
-      nome_avaliado: nome,
+      user_id: userId,
+      nome,
       cidade: body.cidade?.trim() || null,
       contato: body.contato?.trim() || null,
       comportamento,
@@ -85,7 +101,7 @@ export async function POST(req: Request) {
       confianca: body.confianca ?? 0,
       flags_positive: normalizedPositiveFlags,
       flags_negative: normalizedNegativeFlags,
-      comentario,
+      relato: comentario,
       is_anonymous: isAnonymous,
     })
     .select('id')
