@@ -1,16 +1,18 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
 import { normalizeNegativeFlags, normalizePositiveFlags } from '@/lib/flags'
-import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
+import { getMissingSupabaseEnvDetails } from '@/lib/env'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 type AvaliacaoRequest = {
   nome?: string
+  nome_avaliado?: string
   cidade?: string
   contato?: string
   relato?: string
+  comentario?: string
   anonimo?: boolean
+  is_anonymous?: boolean
   flags?: string[]
   flags_positive?: string[]
   flags_negative?: string[]
@@ -22,9 +24,9 @@ type AvaliacaoRequest = {
 }
 
 export async function POST(req: Request) {
-  let supabaseEnv
+  let supabaseAdmin
   try {
-    supabaseEnv = getSupabasePublicEnv('api/avaliacoes/create')
+    supabaseAdmin = getSupabaseAdminClient()
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
@@ -34,35 +36,11 @@ export async function POST(req: Request) {
     throw error
   }
 
-  if (!supabaseEnv) {
+  if (!supabaseAdmin) {
     return NextResponse.json(
-      { error: 'Supabase público não configurado' },
+      { error: 'Supabase admin não configurado' },
       { status: 503 }
     )
-  }
-
-  const supabase = createRouteHandlerClient({ cookies })
-
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession()
-
-  if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
-    return NextResponse.json({ error: 'Erro ao carregar sessão' }, { status: 401 })
-  }
-
-  if (!session) {
-    return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
-  }
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError?.code === 'AuthSessionMissingError' || authError || !user) {
-    return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
   }
 
   let body: AvaliacaoRequest
@@ -73,7 +51,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Payload inválido' }, { status: 400 })
   }
 
-  const nome = body.nome?.trim() ?? ''
+  const nome = (body.nome_avaliado ?? body.nome)?.trim() ?? ''
   const comportamento = body.comportamento ?? 0
 
   if (!nome || comportamento === 0) {
@@ -83,7 +61,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const isAnonymous = body.anonimo ?? true
+  const isAnonymous = body.is_anonymous ?? body.anonimo ?? true
   const normalizedPositiveFlags = normalizePositiveFlags(body.flags_positive ?? [])
   const negativeInput = [
     ...(body.flags_negative ?? []),
@@ -91,20 +69,27 @@ export async function POST(req: Request) {
   ]
   const normalizedNegativeFlags = normalizeNegativeFlags(negativeInput)
 
-  const { data, error } = await supabase.rpc('submit_avaliacao', {
-    nome,
-    cidade: body.cidade?.trim() || null,
-    contato: body.contato?.trim() || null,
-    relato: body.relato?.trim() || null,
-    flags_positive: normalizedPositiveFlags,
-    flags_negative: normalizedNegativeFlags,
-    anonimo: isAnonymous,
-    comportamento,
-    seguranca_emocional: body.seguranca_emocional ?? 0,
-    respeito: body.respeito ?? 0,
-    carater: body.carater ?? 0,
-    confianca: body.confianca ?? 0,
-  })
+  const comentario = (body.comentario ?? body.relato)?.trim() || null
+
+  // Usa service role para evitar dependência de cookies/sessão e garantir inserts com RLS.
+  const { data, error } = await supabaseAdmin
+    .from('avaliacoes')
+    .insert({
+      nome_avaliado: nome,
+      cidade: body.cidade?.trim() || null,
+      contato: body.contato?.trim() || null,
+      comportamento,
+      seguranca_emocional: body.seguranca_emocional ?? 0,
+      respeito: body.respeito ?? 0,
+      carater: body.carater ?? 0,
+      confianca: body.confianca ?? 0,
+      flags_positive: normalizedPositiveFlags,
+      flags_negative: normalizedNegativeFlags,
+      comentario,
+      is_anonymous: isAnonymous,
+    })
+    .select('id')
+    .single()
 
   if (error) {
     const message = error.message ?? ''
@@ -113,9 +98,6 @@ export async function POST(req: Request) {
         { error: 'Sem créditos ou plano ativo para enviar avaliação.' },
         { status: 403 }
       )
-    }
-    if (message.includes('NOT_AUTHENTICATED')) {
-      return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
     }
     if (
       message.toLowerCase().includes('row-level security')
@@ -137,5 +119,5 @@ export async function POST(req: Request) {
     )
   }
 
-  return NextResponse.json({ success: true, avaliacao_id: data })
+  return NextResponse.json({ success: true, avaliacao_id: data?.id }, { status: 201 })
 }
