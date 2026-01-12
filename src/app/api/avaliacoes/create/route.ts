@@ -52,12 +52,6 @@ export async function POST(req: Request) {
     console.error('Erro ao carregar usuário para avaliação', userError)
   }
 
-  const userId = userData?.user?.id ?? null
-
-  if (!userId) {
-    return NextResponse.json({ error: 'Usuário não autenticado.' }, { status: 401 })
-  }
-
   let body: AvaliacaoRequest
   try {
     body = await req.json()
@@ -77,6 +71,13 @@ export async function POST(req: Request) {
   }
 
   const isAnonymous = body.is_anonymous ?? body.anonimo ?? true
+  const userId = userData?.user?.id ?? null
+
+  if (!isAnonymous && !userId) {
+    return NextResponse.json({ error: 'Usuário não autenticado.' }, { status: 401 })
+  }
+
+  const userIdToInsert = isAnonymous ? null : userId
   const normalizedPositiveFlags = normalizePositiveFlags(body.flags_positive ?? [])
   const negativeInput = [
     ...(body.flags_negative ?? []),
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
   const { data, error } = await supabaseAdmin
     .from('avaliacoes')
     .insert({
-      user_id: userId,
+      user_id: userIdToInsert,
       nome,
       cidade: body.cidade?.trim() || null,
       contato: body.contato?.trim() || null,
@@ -102,7 +103,9 @@ export async function POST(req: Request) {
       flags_positive: normalizedPositiveFlags,
       flags_negative: normalizedNegativeFlags,
       relato: comentario,
+      anonimo: isAnonymous,
       is_anonymous: isAnonymous,
+      publica: !isAnonymous,
     })
     .select('id')
     .single()
@@ -122,6 +125,12 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: 'Sem permissão para enviar avaliação.' },
         { status: 403 }
+      )
+    }
+    if (['22P02', '23502', '23503', '42703'].includes(error.code ?? '')) {
+      return NextResponse.json(
+        { error: 'Payload inválido.' },
+        { status: 400 }
       )
     }
     console.error('Erro ao inserir avaliação', {
