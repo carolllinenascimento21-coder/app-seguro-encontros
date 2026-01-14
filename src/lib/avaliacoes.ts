@@ -27,7 +27,7 @@ type AvaliacaoPayloadValidationError = {
   success: false
   status: 400
   message: string
-  errors: string[]
+  errors: Record<string, string>
 }
 
 type AvaliacaoPayloadValidationResult =
@@ -49,14 +49,14 @@ const normalizeString = (value: unknown) => {
 const normalizeStringArray = (
   value: unknown,
   fieldName: string,
-  errors: string[]
+  errors: Record<string, string>
 ) => {
   if (value === undefined || value === null) {
     return [] as string[]
   }
 
   if (!Array.isArray(value)) {
-    errors.push(`Campo ${fieldName} deve ser um array.`)
+    errors[fieldName] = `Campo ${fieldName} deve ser um array.`
     return [] as string[]
   }
 
@@ -69,7 +69,7 @@ const normalizeStringArray = (
 const parseRating = (
   value: unknown,
   fieldName: string,
-  errors: string[]
+  errors: Record<string, string>
 ) => {
   if (value === undefined || value === null || value === '') {
     return 0
@@ -77,17 +77,22 @@ const parseRating = (
 
   const numeric = typeof value === 'number' ? value : Number(value)
   if (Number.isNaN(numeric)) {
-    errors.push(`Nota inválida para ${fieldName}.`)
+    errors.ratings = `Nota inválida para ${fieldName}.`
     return 0
   }
 
   return Math.round(numeric)
 }
 
+const isUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  )
+
 export const validateAvaliacaoPayload = (
   payload: unknown
 ): AvaliacaoPayloadValidationResult => {
-  const errors: string[] = []
+  const errors: Record<string, string> = {}
   const body = isPlainObject(payload) ? payload : {}
 
   const nome = normalizeString(body.nome_avaliado ?? body.nome)
@@ -95,7 +100,8 @@ export const validateAvaliacaoPayload = (
     body.descricao ?? body.relato ?? body.comentario
   )
 
-  const avaliadoIdRaw = body.avaliadoId ?? body.avaliado_id
+  const avaliadoIdRaw =
+    body.avaliadoId ?? body.avaliacaoId ?? body.avaliado_id
   const avaliadoId =
     typeof avaliadoIdRaw === 'string'
       ? avaliadoIdRaw.trim()
@@ -104,26 +110,28 @@ export const validateAvaliacaoPayload = (
         : null
 
   if (!nome) {
-    errors.push('Nome é obrigatório.')
+    errors.nome = 'Nome é obrigatório.'
   }
 
   if (!avaliadoId) {
-    errors.push('avaliadoId é obrigatório.')
+    errors.avaliadoId = 'avaliadoId é obrigatório.'
   }
 
   if (!descricao) {
-    errors.push('descricao é obrigatória.')
+    errors.descricao = 'descricao é obrigatória.'
   }
 
-  if (avaliadoIdRaw !== undefined && !avaliadoId) {
-    errors.push('avaliadoId inválido.')
+  if (avaliadoId && !isUuid(avaliadoId)) {
+    errors.avaliadoId = 'avaliadoId inválido.'
+  } else if (avaliadoIdRaw !== undefined && !avaliadoId) {
+    errors.avaliadoId = 'avaliadoId inválido.'
   }
 
   const ratingsInput = body.ratings
   const ratingsObject = isPlainObject(ratingsInput) ? ratingsInput : null
 
   if (ratingsInput !== undefined && !ratingsObject) {
-    errors.push('ratings deve ser um objeto com notas numéricas.')
+    errors.ratings = 'ratings deve ser um objeto com notas numéricas.'
   }
 
   if (!ratingsObject) {
@@ -136,7 +144,7 @@ export const validateAvaliacaoPayload = (
     ].some((value) => value !== undefined)
 
     if (!hasLegacyRatings) {
-      errors.push('ratings é obrigatório.')
+      errors.ratings = 'ratings é obrigatório.'
     }
   }
 
@@ -169,7 +177,7 @@ export const validateAvaliacaoPayload = (
   }
 
   if (ratings.comportamento === 0) {
-    errors.push('Preencha ao menos a avaliação de comportamento.')
+    errors.comportamento = 'Preencha ao menos a avaliação de comportamento.'
   }
 
   const greenFlags = normalizeStringArray(
@@ -189,7 +197,7 @@ export const validateAvaliacaoPayload = (
   const cidade = normalizeString(body.cidade)
   const contato = normalizeString(body.contato)
 
-  if (errors.length > 0) {
+  if (Object.keys(errors).length > 0) {
     return {
       success: false,
       status: 400,

@@ -294,7 +294,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
 
         {/* CTA */}
         <Link
-          href="/avaliar"
+          href={`/avaliar?avaliadoId=${encodeURIComponent(id)}`}
           className="block w-full bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] text-black font-semibold py-4 rounded-xl text-center hover:opacity-90 transition-opacity"
         >
           Avaliar Este Perfil

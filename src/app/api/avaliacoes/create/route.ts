@@ -132,11 +132,12 @@ export async function POST(req: Request) {
         details: error.details,
         hint: error.hint,
       })
-      const isDev = process.env.NODE_ENV !== 'production'
       return createErrorResponse(
         500,
-        isDev ? error.message ?? 'Erro ao enviar avaliação' : 'Erro ao enviar avaliação',
-        isDev ? { code: error.code, details: error.details, hint: error.hint } : undefined
+        'Erro ao enviar avaliação',
+        process.env.NODE_ENV !== 'production'
+          ? { code: error.code, details: error.details, hint: error.hint }
+          : undefined
       )
     }
 
@@ -150,11 +151,12 @@ export async function POST(req: Request) {
     )
   } catch (error) {
     console.error('Erro inesperado ao criar avaliação', error)
-    const isDev = process.env.NODE_ENV !== 'production'
     return createErrorResponse(
       500,
-      isDev && error instanceof Error ? error.message : 'Erro ao enviar avaliação',
-      isDev && error instanceof Error ? { stack: error.stack } : undefined
+      'Erro ao enviar avaliação',
+      process.env.NODE_ENV !== 'production' && error instanceof Error
+        ? { stack: error.stack }
+        : undefined
     )
   }
 }
