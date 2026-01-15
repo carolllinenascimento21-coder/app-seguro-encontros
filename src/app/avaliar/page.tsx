@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import Link from 'next/link';
-import { Star } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Star } from 'lucide-react';
 import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags';
 import { perfisMock } from '@/lib/mock-data';
-import type { PerfilMasculino } from '@/lib/types';
 
 type CriterioKey =
   | 'comportamento'
@@ -15,57 +13,24 @@ type CriterioKey =
   | 'carater'
   | 'confianca';
 
-const criterios: { key: CriterioKey; label: string }[] = [
-  { key: 'comportamento', label: 'Comportamento' },
-  { key: 'seguranca_emocional', label: 'Segurança emocional' },
-  { key: 'respeito', label: 'Respeito' },
-  { key: 'carater', label: 'Caráter' },
-  { key: 'confianca', label: 'Confiança' },
-];
-
 export default function AvaliarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const avaliadoId = useMemo(() => {
-    return (
-      searchParams.get('avaliadoId') ??
-      searchParams.get('avaliacaoId')
-    )?.trim() ?? null;
+    return searchParams.get('avaliadoId')?.trim() ?? null;
   }, [searchParams]);
 
   const isValidUuid = useMemo(() => {
     if (!avaliadoId) return false;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-      .test(avaliadoId);
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      avaliadoId
+    );
   }, [avaliadoId]);
 
-  const linkInvalido = !avaliadoId || !isValidUuid;
-
-  const [perfil, setPerfil] = useState<PerfilMasculino | null>(null);
-  const [perfilError, setPerfilError] = useState<string | null>(null);
-  const [perfilLoading, setPerfilLoading] = useState(false);
-
-  useEffect(() => {
-    if (linkInvalido) return;
-
-    setPerfilLoading(true);
-    setPerfilError(null);
-
-    const found = perfisMock.find(p => p.id === avaliadoId);
-
-    if (!found) {
-      setPerfilError('Não foi possível carregar o perfil agora.');
-      setPerfil(null);
-    } else {
-      setPerfil(found);
-    }
-
-    setPerfilLoading(false);
-  }, [avaliadoId, linkInvalido]);
-
-  const [loading, setLoading] = useState(false);
+  const [perfil, setPerfil] = useState<any>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     nome: '',
@@ -80,28 +45,25 @@ export default function AvaliarPage() {
     confianca: 0,
   });
 
-  const [positive, setPositive] = useState<string[]>([]);
-  const [negative, setNegative] = useState<string[]>([]);
+  const [flags, setFlags] = useState<string[]>([]);
 
-  const toggleFlag = (
-    flag: string,
-    setter: Dispatch<SetStateAction<string[]>>
-  ) => {
-    setter(prev =>
-      prev.includes(flag) ? prev.filter(f => f !== flag) : [...prev, flag]
+  useEffect(() => {
+    if (!isValidUuid) return;
+
+    const encontrado = perfisMock.find(p => p.id === avaliadoId);
+    setPerfil(encontrado ?? null);
+  }, [avaliadoId, isValidUuid]);
+
+  const toggleFlag = (slug: string) => {
+    setFlags(prev =>
+      prev.includes(slug) ? prev.filter(f => f !== slug) : [...prev, slug]
     );
   };
 
   const enviar = async () => {
-    if (loading) return;
-
-    if (linkInvalido) {
-      setErro('Link de avaliação inválido.');
-      return;
-    }
-
+    if (!avaliadoId || !isValidUuid) return;
     if (!form.nome || form.comportamento === 0) {
-      setErro('Preencha o nome e ao menos a avaliação de comportamento.');
+      setErro('Preencha nome e comportamento.');
       return;
     }
 
@@ -113,68 +75,103 @@ export default function AvaliarPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          avaliadoId,
-          ...form,
-          flags_positive: positive,
-          flags_negative: negative,
+          avaliado_id: avaliadoId,
+          nome: form.nome,
+          cidade: form.cidade || null,
+          contato: form.contato || null,
+          relato: form.relato || null,
+          flags,
+          anonimo: form.anonimo,
+          comportamento: form.comportamento,
+          seguranca_emocional: form.seguranca_emocional,
+          respeito: form.respeito,
+          carater: form.carater,
+          confianca: form.confianca,
         }),
       });
 
-      if (res.status === 401) return router.push('/login');
-      if (res.status === 403) return router.push('/planos');
-
       if (!res.ok) throw new Error(await res.text());
-
       router.push('/minhas-avaliacoes');
     } catch {
-      setErro('Erro ao enviar avaliação. Tente novamente.');
+      setErro('Erro ao enviar avaliação.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-black">
-      <div className="max-w-md mx-auto px-4 py-8">
+    <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto">
+      <h1 className="text-xl text-white font-bold mb-4">Nova Avaliação</h1>
 
-        <h1 className="text-xl font-bold text-white mb-4">Nova Avaliação</h1>
-
-        {linkInvalido && (
-          <div className="bg-[#1A1A1A] border border-yellow-500/30 text-yellow-400 rounded-xl p-4 mb-4">
-            Link inválido ou incompleto. O formulário permanece disponível,
-            mas o envio está desativado.
-          </div>
-        )}
-
-        <div className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-4 mb-4">
-          {perfilLoading && <p className="text-gray-400">Carregando perfil…</p>}
-          {perfilError && (
-            <p className="text-yellow-400 text-sm">{perfilError}</p>
-          )}
-          {perfil && (
-            <>
-              <p className="text-white font-semibold">{perfil.nome}</p>
-              {perfil.cidade && (
-                <p className="text-gray-400 text-sm">{perfil.cidade}</p>
-              )}
-            </>
-          )}
+      {!isValidUuid && (
+        <div className="bg-[#1A1A1A] border border-yellow-500/40 text-yellow-400 p-4 rounded mb-4">
+          Link inválido ou incompleto. O formulário está disponível, mas o envio
+          está desativado.
         </div>
+      )}
 
-        {erro && <p className="text-red-500 mb-3">{erro}</p>}
+      {perfil && (
+        <div className="mb-4 text-gray-300">
+          Avaliando <b className="text-white">{perfil.nome}</b>
+        </div>
+      )}
 
-        {/* FORMULÁRIO SEMPRE VISÍVEL */}
-        {/* inputs, estrelas, flags… mantidos iguais ao seu código */}
+      <input
+        className="w-full mb-3 p-3 rounded bg-[#1A1A1A] text-white"
+        placeholder="Nome *"
+        value={form.nome}
+        onChange={e => setForm({ ...form, nome: e.target.value })}
+      />
 
-        <button
-          onClick={enviar}
-          disabled={loading || linkInvalido}
-          className="w-full bg-[#D4AF37] text-black py-3 rounded font-bold disabled:opacity-50"
-        >
-          {loading ? 'Enviando...' : 'Enviar avaliação'}
-        </button>
+      {(['comportamento','seguranca_emocional','respeito','carater','confianca'] as CriterioKey[]).map(k => (
+        <div key={k} className="mb-3">
+          <p className="text-gray-300 capitalize">{k.replace('_', ' ')}</p>
+          <div className="flex gap-1">
+            {[1,2,3,4,5].map(n => (
+              <Star
+                key={n}
+                onClick={() => setForm({ ...form, [k]: n })}
+                className={`w-6 h-6 cursor-pointer ${
+                  form[k] >= n ? 'text-yellow-400 fill-current' : 'text-gray-600'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
 
+      <textarea
+        className="w-full p-3 rounded bg-[#1A1A1A] text-white mb-3"
+        placeholder="Relato (opcional)"
+        value={form.relato}
+        onChange={e => setForm({ ...form, relato: e.target.value })}
+      />
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[...GREEN_FLAGS, ...RED_FLAGS].map(f => (
+          <button
+            key={f.slug}
+            onClick={() => toggleFlag(f.slug)}
+            className={`px-3 py-1 rounded-full text-xs ${
+              flags.includes(f.slug)
+                ? 'bg-yellow-500 text-black'
+                : 'bg-gray-700 text-gray-300'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
+
+      {erro && <p className="text-red-500 mb-3">{erro}</p>}
+
+      <button
+        disabled={!isValidUuid || loading}
+        onClick={enviar}
+        className="w-full bg-[#D4AF37] text-black py-3 rounded font-bold disabled:opacity-40"
+      >
+        {loading ? 'Enviando...' : 'Enviar avaliação'}
+      </button>
     </div>
   );
 }
