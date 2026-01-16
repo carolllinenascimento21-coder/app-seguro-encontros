@@ -6,6 +6,10 @@ import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags';
 
 export default function AvaliarPage() {
   const [anonimo, setAnonimo] = useState(false);
+  const [nome, setNome] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [contato, setContato] = useState('');
+  const [relato, setRelato] = useState('');
   const [comportamento, setComportamento] = useState(0);
   const [segurancaEmocional, setSegurancaEmocional] = useState(0);
   const [respeito, setRespeito] = useState(0);
@@ -64,14 +68,24 @@ export default function AvaliarPage() {
     e.preventDefault();
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setLoading(false);
+      alert('Você precisa estar autenticada para publicar uma avaliação.');
+      return;
+    }
 
     const payload = {
+      autor_id: user.id,
       anonimo,
-      nome: anonimo ? null : formData.get('nome'),
-      cidade: formData.get('cidade'),
-      contato: formData.get('contato'),
-      relato: formData.get('relato'),
+      nome: anonimo ? null : nome,
+      cidade,
+      contato,
+      relato,
       // Mapeamento direto para as colunas reais do schema (não existe "estrelas").
       comportamento,
       seguranca_emocional: segurancaEmocional,
@@ -106,7 +120,10 @@ export default function AvaliarPage() {
       alert(error.message);
     } else {
       alert('Avaliação publicada com sucesso');
-      e.currentTarget.reset();
+      setNome('');
+      setCidade('');
+      setContato('');
+      setRelato('');
       setGreenFlags([]);
       setRedFlags([]);
       setComportamento(0);
@@ -129,6 +146,8 @@ export default function AvaliarPage() {
           <input
             name="nome"
             placeholder="Nome"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
             className="w-full bg-zinc-900 p-3 rounded"
           />
         )}
@@ -137,12 +156,16 @@ export default function AvaliarPage() {
           name="cidade"
           placeholder="Cidade"
           required
+          value={cidade}
+          onChange={(e) => setCidade(e.target.value)}
           className="w-full bg-zinc-900 p-3 rounded"
         />
 
         <input
           name="contato"
           placeholder="Contato (opcional)"
+          value={contato}
+          onChange={(e) => setContato(e.target.value)}
           className="w-full bg-zinc-900 p-3 rounded"
         />
 
@@ -227,6 +250,8 @@ export default function AvaliarPage() {
         <textarea
           name="relato"
           placeholder="Relato (opcional)"
+          value={relato}
+          onChange={(e) => setRelato(e.target.value)}
           className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
         />
 
@@ -234,7 +259,13 @@ export default function AvaliarPage() {
           <input
             type="checkbox"
             checked={anonimo}
-            onChange={(e) => setAnonimo(e.target.checked)}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setAnonimo(checked);
+              if (checked) {
+                setNome('');
+              }
+            }}
           />
           Avaliar de forma anônima
         </label>

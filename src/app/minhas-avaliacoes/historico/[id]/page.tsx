@@ -80,7 +80,7 @@ export default function HistoricoAvaliacao() {
         .from('avaliacoes')
         .select('nome_homem, nota_geral, created_at')
         .eq('id', avaliacaoId)
-        .eq('user_id', user.id)
+        .eq('autor_id', user.id)
         .single();
 
       if (avaliacaoError) throw avaliacaoError;
