@@ -72,8 +72,6 @@ export default function AvaliarPage() {
       cidade: formData.get('cidade'),
       contato: formData.get('contato'),
       relato: formData.get('relato'),
-      green_flags: greenFlags,
-      red_flags: redFlags,
       // Mapeamento direto para as colunas reais do schema (não existe "estrelas").
       comportamento,
       seguranca_emocional: segurancaEmocional,
