@@ -6,10 +6,47 @@ import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags';
 
 export default function AvaliarPage() {
   const [anonimo, setAnonimo] = useState(false);
-  const [estrelas, setEstrelas] = useState(0);
+  const [comportamento, setComportamento] = useState(0);
+  const [segurancaEmocional, setSegurancaEmocional] = useState(0);
+  const [respeito, setRespeito] = useState(0);
+  const [carater, setCarater] = useState(0);
+  const [confianca, setConfianca] = useState(0);
   const [greenFlags, setGreenFlags] = useState<string[]>([]);
   const [redFlags, setRedFlags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const criterios = [
+    {
+      key: 'comportamento',
+      label: 'Comportamento',
+      value: comportamento,
+      setValue: setComportamento,
+    },
+    {
+      key: 'segurancaEmocional',
+      label: 'Segurança emocional',
+      value: segurancaEmocional,
+      setValue: setSegurancaEmocional,
+    },
+    {
+      key: 'respeito',
+      label: 'Respeito',
+      value: respeito,
+      setValue: setRespeito,
+    },
+    {
+      key: 'carater',
+      label: 'Caráter',
+      value: carater,
+      setValue: setCarater,
+    },
+    {
+      key: 'confianca',
+      label: 'Confiança',
+      value: confianca,
+      setValue: setConfianca,
+    },
+  ] as const;
 
   function toggleFlag(
     flag: string,
@@ -37,12 +74,21 @@ export default function AvaliarPage() {
       relato: formData.get('relato'),
       green_flags: greenFlags,
       red_flags: redFlags,
-      estrelas,
+      // Mapeamento direto para as colunas reais do schema (não existe "estrelas").
+      comportamento,
+      seguranca_emocional: segurancaEmocional,
+      respeito,
+      carater,
+      confianca,
     };
 
-    if (!payload.cidade || estrelas === 0) {
+    const possuiTodasAvaliacoes = criterios.every(
+      (criterio) => criterio.value > 0
+    );
+
+    if (!payload.cidade || !possuiTodasAvaliacoes) {
       setLoading(false);
-      alert('Cidade e estrelas são obrigatórias');
+      alert('Cidade e avaliações por critério são obrigatórias');
       return;
     }
 
@@ -65,7 +111,11 @@ export default function AvaliarPage() {
       e.currentTarget.reset();
       setGreenFlags([]);
       setRedFlags([]);
-      setEstrelas(0);
+      setComportamento(0);
+      setSegurancaEmocional(0);
+      setRespeito(0);
+      setCarater(0);
+      setConfianca(0);
       setAnonimo(false);
     }
   }
@@ -98,21 +148,32 @@ export default function AvaliarPage() {
           className="w-full bg-zinc-900 p-3 rounded"
         />
 
-        {/* ESTRELAS */}
+        {/* ESTRELAS POR CRITÉRIO */}
         <div>
-          <p className="mb-2">Avaliação geral</p>
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setEstrelas(n)}
-                className={`text-2xl ${
-                  estrelas >= n ? 'text-yellow-400' : 'text-zinc-600'
-                }`}
-              >
-                ★
-              </button>
+          <p className="mb-2">Avaliação por critério</p>
+          <div className="space-y-3">
+            {criterios.map((criterio) => (
+              <div key={criterio.key}>
+                <p className="text-sm text-zinc-300 mb-1">
+                  {criterio.label}
+                </p>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => criterio.setValue(n)}
+                      className={`text-2xl ${
+                        criterio.value >= n
+                          ? 'text-yellow-400'
+                          : 'text-zinc-600'
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -181,7 +242,7 @@ export default function AvaliarPage() {
         </label>
 
         <button
-          disabled={loading || estrelas === 0}
+          disabled={loading || !criterios.every((c) => c.value > 0)}
           className="w-full bg-yellow-500 text-black py-3 rounded font-semibold disabled:opacity-50"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}
