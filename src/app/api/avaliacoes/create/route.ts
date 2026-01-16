@@ -87,7 +87,7 @@ export async function POST(req: Request) {
     const { data, error } = await supabaseAdmin
       .from('avaliacoes')
       .insert({
-        user_id: userIdToInsert,
+        autor_id: userIdToInsert,
         avaliado_id: validation.data.avaliadoId,
         nome,
         cidade,

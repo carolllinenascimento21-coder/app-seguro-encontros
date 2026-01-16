@@ -74,37 +74,31 @@ export default function MinhasAvaliacoes() {
       /**
        * 🔒 LISTAGEM SEGURA
        * Somente avaliações vinculadas ao usuário logado
-       * via RLS em avaliacoes_autoras
+       * via RLS na tabela avaliacoes
        */
       const { data, error } = await supabase
-        .from('avaliacoes_autoras')
+        .from('avaliacoes')
         .select(`
-          avaliacao_id,
-          avaliacoes (
-            id,
-            nome,
-            cidade,
-            contato,
-            flags_positive,
-            flags_negative,
-            relato,
-            comportamento,
-            seguranca_emocional,
-            respeito,
-            carater,
-            confianca,
-            created_at
-          )
+          id,
+          nome,
+          cidade,
+          contato,
+          flags_positive,
+          flags_negative,
+          relato,
+          comportamento,
+          seguranca_emocional,
+          respeito,
+          carater,
+          confianca,
+          created_at
         `)
-        .order('created_at', { foreignTable: 'avaliacoes', ascending: false });
+        .eq('autor_id', user.id)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const lista = (data || [])
-        .map((item: any) => item.avaliacoes)
-        .filter(Boolean);
-
-      setAvaliacoes(lista);
+      setAvaliacoes(data ?? []);
 
     } catch (err) {
       console.error('Erro ao carregar avaliações:', err);
