@@ -1,177 +1,190 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Star } from 'lucide-react';
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags';
-import { perfisMock } from '@/lib/mock-data';
-
-type CriterioKey =
-  | 'comportamento'
-  | 'seguranca_emocional'
-  | 'respeito'
-  | 'carater'
-  | 'confianca';
 
 export default function AvaliarPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const avaliadoId = useMemo(() => {
-    return searchParams.get('avaliadoId')?.trim() ?? null;
-  }, [searchParams]);
-
-  const isValidUuid = useMemo(() => {
-    if (!avaliadoId) return false;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      avaliadoId
-    );
-  }, [avaliadoId]);
-
-  const [perfil, setPerfil] = useState<any>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const [anonimo, setAnonimo] = useState(false);
+  const [estrelas, setEstrelas] = useState(0);
+  const [greenFlags, setGreenFlags] = useState<string[]>([]);
+  const [redFlags, setRedFlags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [form, setForm] = useState({
-    nome: '',
-    cidade: '',
-    contato: '',
-    relato: '',
-    anonimo: true,
-    comportamento: 0,
-    seguranca_emocional: 0,
-    respeito: 0,
-    carater: 0,
-    confianca: 0,
-  });
-
-  const [flags, setFlags] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!isValidUuid) return;
-
-    const encontrado = perfisMock.find(p => p.id === avaliadoId);
-    setPerfil(encontrado ?? null);
-  }, [avaliadoId, isValidUuid]);
-
-  const toggleFlag = (slug: string) => {
-    setFlags(prev =>
-      prev.includes(slug) ? prev.filter(f => f !== slug) : [...prev, slug]
+  function toggleFlag(
+    flag: string,
+    list: string[],
+    setList: (v: string[]) => void
+  ) {
+    setList(
+      list.includes(flag)
+        ? list.filter((f) => f !== flag)
+        : [...list, flag]
     );
-  };
+  }
 
-  const enviar = async () => {
-    if (!avaliadoId || !isValidUuid) return;
-    if (!form.nome || form.comportamento === 0) {
-      setErro('Preencha nome e comportamento.');
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+
+    const payload = {
+      anonimo,
+      nome: anonimo ? null : formData.get('nome'),
+      cidade: formData.get('cidade'),
+      contato: formData.get('contato'),
+      relato: formData.get('relato'),
+      green_flags: greenFlags,
+      red_flags: redFlags,
+      estrelas,
+    };
+
+    if (!payload.cidade || estrelas === 0) {
+      setLoading(false);
+      alert('Cidade e estrelas são obrigatórias');
       return;
     }
 
-    setLoading(true);
-    setErro(null);
-
-    try {
-      const res = await fetch('/api/avaliacoes/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          avaliado_id: avaliadoId,
-          nome: form.nome,
-          cidade: form.cidade || null,
-          contato: form.contato || null,
-          relato: form.relato || null,
-          flags,
-          anonimo: form.anonimo,
-          comportamento: form.comportamento,
-          seguranca_emocional: form.seguranca_emocional,
-          respeito: form.respeito,
-          carater: form.carater,
-          confianca: form.confianca,
-        }),
-      });
-
-      if (!res.ok) throw new Error(await res.text());
-      router.push('/minhas-avaliacoes');
-    } catch {
-      setErro('Erro ao enviar avaliação.');
-    } finally {
+    if (!anonimo && !payload.nome) {
       setLoading(false);
+      alert('Nome é obrigatório quando não for anônimo');
+      return;
     }
-  };
+
+    const { error } = await supabase
+      .from('avaliacoes')
+      .insert(payload);
+
+    setLoading(false);
+
+    if (error) {
+      alert(error.message);
+    } else {
+      alert('Avaliação publicada com sucesso');
+      e.currentTarget.reset();
+      setGreenFlags([]);
+      setRedFlags([]);
+      setEstrelas(0);
+      setAnonimo(false);
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto">
-      <h1 className="text-xl text-white font-bold mb-4">Nova Avaliação</h1>
+    <main className="min-h-screen bg-black text-white px-4 py-6">
+      <h1 className="text-xl font-semibold mb-6">
+        Fazer avaliação
+      </h1>
 
-      {!isValidUuid && (
-        <div className="bg-[#1A1A1A] border border-yellow-500/40 text-yellow-400 p-4 rounded mb-4">
-          Link inválido ou incompleto. O formulário está disponível, mas o envio
-          está desativado.
-        </div>
-      )}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {!anonimo && (
+          <input
+            name="nome"
+            placeholder="Nome"
+            className="w-full bg-zinc-900 p-3 rounded"
+          />
+        )}
 
-      {perfil && (
-        <div className="mb-4 text-gray-300">
-          Avaliando <b className="text-white">{perfil.nome}</b>
-        </div>
-      )}
+        <input
+          name="cidade"
+          placeholder="Cidade"
+          required
+          className="w-full bg-zinc-900 p-3 rounded"
+        />
 
-      <input
-        className="w-full mb-3 p-3 rounded bg-[#1A1A1A] text-white"
-        placeholder="Nome *"
-        value={form.nome}
-        onChange={e => setForm({ ...form, nome: e.target.value })}
-      />
+        <input
+          name="contato"
+          placeholder="Contato (opcional)"
+          className="w-full bg-zinc-900 p-3 rounded"
+        />
 
-      {(['comportamento','seguranca_emocional','respeito','carater','confianca'] as CriterioKey[]).map(k => (
-        <div key={k} className="mb-3">
-          <p className="text-gray-300 capitalize">{k.replace('_', ' ')}</p>
-          <div className="flex gap-1">
-            {[1,2,3,4,5].map(n => (
-              <Star
+        {/* ESTRELAS */}
+        <div>
+          <p className="mb-2">Avaliação geral</p>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
                 key={n}
-                onClick={() => setForm({ ...form, [k]: n })}
-                className={`w-6 h-6 cursor-pointer ${
-                  form[k] >= n ? 'text-yellow-400 fill-current' : 'text-gray-600'
+                type="button"
+                onClick={() => setEstrelas(n)}
+                className={`text-2xl ${
+                  estrelas >= n ? 'text-yellow-400' : 'text-zinc-600'
                 }`}
-              />
+              >
+                ★
+              </button>
             ))}
           </div>
         </div>
-      ))}
 
-      <textarea
-        className="w-full p-3 rounded bg-[#1A1A1A] text-white mb-3"
-        placeholder="Relato (opcional)"
-        value={form.relato}
-        onChange={e => setForm({ ...form, relato: e.target.value })}
-      />
+        {/* GREEN FLAGS */}
+        <div>
+          <p className="mb-2 text-green-400">Green Flags</p>
+          <div className="flex flex-wrap gap-2">
+            {GREEN_FLAGS.map((flag) => (
+              <button
+                type="button"
+                key={flag}
+                onClick={() =>
+                  toggleFlag(flag, greenFlags, setGreenFlags)
+                }
+                className={`px-3 py-1 rounded text-sm ${
+                  greenFlags.includes(flag)
+                    ? 'bg-green-500 text-black'
+                    : 'bg-zinc-800'
+                }`}
+              >
+                {flag}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        {[...GREEN_FLAGS, ...RED_FLAGS].map(f => (
-          <button
-            key={f.slug}
-            onClick={() => toggleFlag(f.slug)}
-            className={`px-3 py-1 rounded-full text-xs ${
-              flags.includes(f.slug)
-                ? 'bg-yellow-500 text-black'
-                : 'bg-gray-700 text-gray-300'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+        {/* RED FLAGS */}
+        <div>
+          <p className="mb-2 text-red-400">Red Flags</p>
+          <div className="flex flex-wrap gap-2">
+            {RED_FLAGS.map((flag) => (
+              <button
+                type="button"
+                key={flag}
+                onClick={() =>
+                  toggleFlag(flag, redFlags, setRedFlags)
+                }
+                className={`px-3 py-1 rounded text-sm ${
+                  redFlags.includes(flag)
+                    ? 'bg-red-500 text-black'
+                    : 'bg-zinc-800'
+                }`}
+              >
+                {flag}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {erro && <p className="text-red-500 mb-3">{erro}</p>}
+        <textarea
+          name="relato"
+          placeholder="Relato (opcional)"
+          className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
+        />
 
-      <button
-        disabled={!isValidUuid || loading}
-        onClick={enviar}
-        className="w-full bg-[#D4AF37] text-black py-3 rounded font-bold disabled:opacity-40"
-      >
-        {loading ? 'Enviando...' : 'Enviar avaliação'}
-      </button>
-    </div>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={anonimo}
+            onChange={(e) => setAnonimo(e.target.checked)}
+          />
+          Avaliar de forma anônima
+        </label>
+
+        <button
+          disabled={loading || estrelas === 0}
+          className="w-full bg-yellow-500 text-black py-3 rounded font-semibold disabled:opacity-50"
+        >
+          {loading ? 'Publicando...' : 'Publicar avaliação'}
+        </button>
+      </form>
+    </main>
   );
 }
