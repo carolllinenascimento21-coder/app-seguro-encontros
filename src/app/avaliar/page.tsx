@@ -124,17 +124,18 @@ export default function AvaliarPage() {
             {GREEN_FLAGS.map((flag) => (
               <button
                 type="button"
-                key={flag}
+                key={flag.slug}
                 onClick={() =>
-                  toggleFlag(flag, greenFlags, setGreenFlags)
+                  toggleFlag(flag.slug, greenFlags, setGreenFlags)
                 }
                 className={`px-3 py-1 rounded text-sm ${
-                  greenFlags.includes(flag)
+                  greenFlags.includes(flag.slug)
                     ? 'bg-green-500 text-black'
                     : 'bg-zinc-800'
                 }`}
               >
-                {flag}
+                {/* Evita erro #31: renderizamos label ao invés do objeto de flag. */}
+                {flag.label}
               </button>
             ))}
           </div>
@@ -147,17 +148,18 @@ export default function AvaliarPage() {
             {RED_FLAGS.map((flag) => (
               <button
                 type="button"
-                key={flag}
+                key={flag.slug}
                 onClick={() =>
-                  toggleFlag(flag, redFlags, setRedFlags)
+                  toggleFlag(flag.slug, redFlags, setRedFlags)
                 }
                 className={`px-3 py-1 rounded text-sm ${
-                  redFlags.includes(flag)
+                  redFlags.includes(flag.slug)
                     ? 'bg-red-500 text-black'
                     : 'bg-zinc-800'
                 }`}
               >
-                {flag}
+                {/* Evita erro #31: renderizamos label ao invés do objeto de flag. */}
+                {flag.label}
               </button>
             ))}
           </div>
