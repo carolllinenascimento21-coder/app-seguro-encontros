@@ -44,10 +44,16 @@ export default function ConsultarReputacao() {
       setLoading(true);
 
       const params = new URLSearchParams();
-      if (nome.trim()) params.set('nome', nome.trim());
+
+      // ✅ backend espera "q" para nome
+      if (nome.trim()) params.set('q', nome.trim());
+
       if (cidade.trim()) params.set('cidade', cidade.trim());
 
-      const res = await fetch(`/api/busca?${params.toString()}`);
+      // ✅ rota correta
+      const res = await fetch(
+        `/api/reputation/search?${params.toString()}`
+      );
 
       if (!res.ok) {
         console.error('Erro ao buscar reputação', await res.text());
@@ -56,7 +62,7 @@ export default function ConsultarReputacao() {
       }
 
       const payload = await res.json();
-      setResults(payload.results || []);
+      setResults(payload.results ?? []);
     } catch (err) {
       console.error('Erro ao buscar reputação:', err);
       alert('Erro ao buscar reputação.');
@@ -105,7 +111,9 @@ export default function ConsultarReputacao() {
             <div
               key={r.id}
               className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5 cursor-pointer"
-              onClick={() => router.push(`/consultar-reputacao/${r.id}`)}
+              onClick={() =>
+                router.push(`/consultar-reputacao/${r.id}`)
+              }
             >
               <div className="flex justify-between mb-2">
                 <div>
@@ -133,12 +141,13 @@ export default function ConsultarReputacao() {
                 </div>
               )}
 
-              {r.flags_negative?.length === 0 && r.flags_positive?.length > 0 && (
-                <div className="flex items-center gap-2 text-green-400 text-xs mt-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Pontos positivos destacados
-                </div>
-              )}
+              {r.flags_negative?.length === 0 &&
+                r.flags_positive?.length > 0 && (
+                  <div className="flex items-center gap-2 text-green-400 text-xs mt-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Pontos positivos destacados
+                  </div>
+                )}
             </div>
           ))}
 
