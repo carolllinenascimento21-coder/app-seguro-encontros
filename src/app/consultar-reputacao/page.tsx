@@ -1,14 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Search, MapPin, Star, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
-import { useAccessControl } from '@/hooks/use-access-control';
-import { ensureProfileForUser } from '@/lib/profile-utils';
-import { createSupabaseClient } from '@/lib/supabase';
-
-const supabase = createSupabaseClient();
 
 interface Avaliacao {
   id: string;
@@ -29,57 +24,6 @@ export default function ConsultarReputacao() {
   const [cidade, setCidade] = useState('');
   const [results, setResults] = useState<Avaliacao[]>([]);
   const [loading, setLoading] = useState(false);
-  const { checkAccess, profile } = useAccessControl();
-
-  useEffect(() => {
-    const prepare = async () => {
-      if (!supabase) {
-        console.error('Supabase client não inicializado no frontend.');
-        return;
-      }
-
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
-        console.error('Erro ao carregar sessão:', sessionError);
-        return;
-      }
-
-      if (!session) {
-        checkAccess({ redirectOnBlock: false });
-        return;
-      }
-
-      // ✅ Garante perfil existente para contas antigas antes de consultar reputação.
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError?.code === 'AuthSessionMissingError') {
-        checkAccess({ redirectOnBlock: false });
-        return;
-      }
-
-      if (user) {
-        const { error: profileError } = await ensureProfileForUser(
-          supabase,
-          user
-        );
-
-        if (profileError) {
-          console.error('Erro ao garantir perfil na reputação:', profileError);
-        }
-      }
-
-      checkAccess({ redirectOnBlock: false });
-    };
-
-    prepare();
-  }, [checkAccess]);
 
   const media = (a: Avaliacao) =>
     (
@@ -98,25 +42,12 @@ export default function ConsultarReputacao() {
 
     try {
       setLoading(true);
-      const access = await checkAccess();
-      if (!access.allowed) {
-        return;
-      }
 
       const params = new URLSearchParams();
-      if (nome.trim()) {
-        params.set('q', nome.trim());
-      }
-      if (cidade.trim()) {
-        params.set('cidade', cidade.trim());
-      }
+      if (nome.trim()) params.set('nome', nome.trim());
+      if (cidade.trim()) params.set('cidade', cidade.trim());
 
       const res = await fetch(`/api/busca?${params.toString()}`);
-
-      if (res.status === 401) {
-        router.push('/login');
-        return;
-      }
 
       if (!res.ok) {
         console.error('Erro ao buscar reputação', await res.text());
@@ -125,13 +56,7 @@ export default function ConsultarReputacao() {
       }
 
       const payload = await res.json();
-      if (payload.allowed === false) {
-        router.push('/planos');
-        return;
-      }
-
       setResults(payload.results || []);
-      await checkAccess({ redirectOnBlock: false });
     } catch (err) {
       console.error('Erro ao buscar reputação:', err);
       alert('Erro ao buscar reputação.');
@@ -149,20 +74,6 @@ export default function ConsultarReputacao() {
         <p className="text-gray-400 text-sm mb-6">
           Apenas avaliações públicas são exibidas.
         </p>
-
-        {profile?.plan === 'free' && (
-          <div className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-4 mb-4 text-gray-300 text-sm">
-            Consultas gratuitas restantes:{' '}
-            <span className="text-white font-semibold">
-              {Math.max(0, 3 - (profile?.freeQueriesUsed ?? 0))}
-            </span>
-            {profile?.credits && profile.credits > 0 && (
-              <span className="block text-xs text-gray-400">
-                Créditos disponíveis: {profile.credits}
-              </span>
-            )}
-          </div>
-        )}
 
         <div className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800 mb-6">
           <input
@@ -194,9 +105,7 @@ export default function ConsultarReputacao() {
             <div
               key={r.id}
               className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5 cursor-pointer"
-              onClick={() =>
-                router.push(`/consultar-reputacao/${r.id}`)
-              }
+              onClick={() => router.push(`/consultar-reputacao/${r.id}`)}
             >
               <div className="flex justify-between mb-2">
                 <div>
