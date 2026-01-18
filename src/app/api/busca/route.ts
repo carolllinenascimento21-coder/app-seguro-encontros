@@ -147,8 +147,7 @@ export async function GET(req: Request) {
   }
 
   /**
-   * 6️⃣ BUSCA CORRETA NA VIEW DE REPUTAÇÃO AGREGADA
-   *    ⚠️ NÃO usar mais a tabela "avaliacoes"
+   * 6️⃣ BUSCA NA VIEW DE REPUTAÇÃO AGREGADA
    */
   let query = supabaseAdmin
     .from('reputacao_agregada')
