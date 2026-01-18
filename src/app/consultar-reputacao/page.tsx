@@ -25,14 +25,20 @@ export default function ConsultarReputacao() {
   const [results, setResults] = useState<Avaliacao[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const media = (a: Avaliacao) =>
-    (
-      (a.comportamento +
-        a.seguranca_emocional +
-        a.respeito +
-        a.carater +
-        a.confianca) / 5
-    ).toFixed(1);
+  const media = (a: Avaliacao) => {
+  const valores = [
+    a.comportamento,
+    a.seguranca_emocional,
+    a.respeito,
+    a.carater,
+    a.confianca,
+  ].filter(v => typeof v === 'number');
+
+  if (valores.length === 0) return '—';
+
+  const soma = valores.reduce((acc, v) => acc + v, 0);
+  return (soma / valores.length).toFixed(1);
+};
 
   const buscar = async () => {
     if (!nome.trim() && !cidade.trim()) {
