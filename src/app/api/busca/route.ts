@@ -8,6 +8,9 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 const DEFAULT_LIMIT = 20
 
 export async function GET(req: Request) {
+  /**
+   * 1️⃣ Validação de ambiente Supabase público
+   */
   let supabaseEnv
   try {
     supabaseEnv = getSupabasePublicEnv('api/busca')
@@ -15,7 +18,10 @@ export async function GET(req: Request) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
       console.error(envError.message)
-      return NextResponse.json({ error: envError.message }, { status: envError.status })
+      return NextResponse.json(
+        { error: envError.message },
+        { status: envError.status }
+      )
     }
     throw error
   }
@@ -27,6 +33,9 @@ export async function GET(req: Request) {
     )
   }
 
+  /**
+   * 2️⃣ Cliente admin (necessário para consumir créditos)
+   */
   let supabaseAdmin
   try {
     supabaseAdmin = getSupabaseAdminClient()
@@ -34,7 +43,10 @@ export async function GET(req: Request) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
       console.error(envError.message)
-      return NextResponse.json({ error: envError.message }, { status: envError.status })
+      return NextResponse.json(
+        { error: envError.message },
+        { status: envError.status }
+      )
     }
     throw error
   }
@@ -46,6 +58,9 @@ export async function GET(req: Request) {
     )
   }
 
+  /**
+   * 3️⃣ Cliente com sessão (para autenticação)
+   */
   const supabase = createRouteHandlerClient({ cookies })
 
   const {
@@ -54,11 +69,17 @@ export async function GET(req: Request) {
   } = await supabase.auth.getSession()
 
   if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
-    return NextResponse.json({ error: 'Erro ao carregar sessão' }, { status: 401 })
+    return NextResponse.json(
+      { error: 'Erro ao carregar sessão' },
+      { status: 401 }
+    )
   }
 
   if (!session) {
-    return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
+    return NextResponse.json(
+      { error: 'Usuária não autenticada' },
+      { status: 401 }
+    )
   }
 
   const {
@@ -66,18 +87,33 @@ export async function GET(req: Request) {
     error: authError,
   } = await supabase.auth.getUser()
 
-  if (authError?.code === 'AuthSessionMissingError' || authError || !user) {
-    return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
+  if (authError || !user) {
+    return NextResponse.json(
+      { error: 'Usuária não autenticada' },
+      { status: 401 }
+    )
   }
 
+  /**
+   * 4️⃣ Parâmetros de busca
+   */
   const { searchParams } = new URL(req.url)
-  const nome = searchParams.get('q')?.trim() ?? ''
+
+  const nome = searchParams.get('nome')?.trim() ?? ''
   const cidade = searchParams.get('cidade')?.trim() ?? ''
+
   const limitParam = Number(searchParams.get('limit'))
   const offsetParam = Number(searchParams.get('offset'))
 
-  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : DEFAULT_LIMIT
-  const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? offsetParam : 0
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0
+      ? limitParam
+      : DEFAULT_LIMIT
+
+  const offset =
+    Number.isFinite(offsetParam) && offsetParam >= 0
+      ? offsetParam
+      : 0
 
   if (!nome && !cidade) {
     return NextResponse.json(
@@ -86,36 +122,48 @@ export async function GET(req: Request) {
     )
   }
 
-  const { data: accessState, error: accessError } = await supabaseAdmin.rpc(
-    'consume_query',
-    {
+  /**
+   * 5️⃣ Consome crédito / consulta
+   */
+  const { data: accessState, error: accessError } =
+    await supabaseAdmin.rpc('consume_query', {
       user_uuid: user.id,
-    }
-  )
+    })
 
   if (accessError) {
     const message = accessError.message ?? ''
     if (message.includes('PAYWALL')) {
-      return NextResponse.json({ allowed: false, reason: 'PAYWALL' }, { status: 200 })
+      return NextResponse.json(
+        { allowed: false, reason: 'PAYWALL' },
+        { status: 200 }
+      )
     }
+
     console.error('Erro ao consumir consulta', accessError)
-    return NextResponse.json({ error: 'Erro ao validar créditos' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Erro ao validar créditos' },
+      { status: 500 }
+    )
   }
 
+  /**
+   * 6️⃣ BUSCA CORRETA NA VIEW DE REPUTAÇÃO AGREGADA
+   *    ⚠️ NÃO usar mais a tabela "avaliacoes"
+   */
   let query = supabaseAdmin
-  .from('reputacao_agregada')
-  .select(`
-    nome,
-    cidade,
-    total_avaliacoes,
-    comportamento,
-    seguranca_emocional,
-    respeito,
-    carater,
-    confianca,
-    flags_positive,
-    flags_negative
-  `)
+    .from('reputacao_agregada')
+    .select(`
+      nome,
+      cidade,
+      total_avaliacoes,
+      comportamento,
+      seguranca_emocional,
+      respeito,
+      carater,
+      confianca,
+      flags_positive,
+      flags_negative
+    `)
 
   if (nome) {
     query = query.ilike('nome', `%${nome}%`)
@@ -125,14 +173,25 @@ export async function GET(req: Request) {
     query = query.ilike('cidade', `%${cidade}%`)
   }
 
-  const { data, error } = await query.range(offset, offset + limit - 1)
+  const { data, error } = await query.range(
+    offset,
+    offset + limit - 1
+  )
 
   if (error) {
-    console.error('Erro ao buscar reputação', error)
-    return NextResponse.json({ error: 'Erro ao buscar reputação' }, { status: 500 })
+    console.error('Erro ao buscar reputação agregada', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar reputação' },
+      { status: 500 }
+    )
   }
 
-  const state = Array.isArray(accessState) ? accessState[0] : null
+  /**
+   * 7️⃣ Retorno padronizado
+   */
+  const state = Array.isArray(accessState)
+    ? accessState[0]
+    : null
 
   return NextResponse.json({
     allowed: true,
@@ -140,7 +199,10 @@ export async function GET(req: Request) {
     profile: state
       ? {
           plan: state.plan,
-          freeQueriesUsed: state.free_queries_used ?? state.freeQueriesUsed ?? 0,
+          freeQueriesUsed:
+            state.free_queries_used ??
+            state.freeQueriesUsed ??
+            0,
           credits: state.credits ?? 0,
         }
       : null,
