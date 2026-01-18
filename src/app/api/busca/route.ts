@@ -8,16 +8,12 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 const DEFAULT_LIMIT = 20
 
 export async function GET(req: Request) {
-  /**
-   * 1️⃣ Validação de ambiente Supabase público
-   */
-  let supabaseEnv
+  // 1️⃣ Ambiente Supabase público
   try {
-    supabaseEnv = getSupabasePublicEnv('api/busca')
+    getSupabasePublicEnv('api/busca')
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
-      console.error(envError.message)
       return NextResponse.json(
         { error: envError.message },
         { status: envError.status }
@@ -26,31 +22,8 @@ export async function GET(req: Request) {
     throw error
   }
 
-  if (!supabaseEnv) {
-    return NextResponse.json(
-      { error: 'Supabase público não configurado' },
-      { status: 503 }
-    )
-  }
-
-  /**
-   * 2️⃣ Cliente admin (necessário para consumir créditos)
-   */
-  let supabaseAdmin
-  try {
-    supabaseAdmin = getSupabaseAdminClient()
-  } catch (error) {
-    const envError = getMissingSupabaseEnvDetails(error)
-    if (envError) {
-      console.error(envError.message)
-      return NextResponse.json(
-        { error: envError.message },
-        { status: envError.status }
-      )
-    }
-    throw error
-  }
-
+  // 2️⃣ Supabase Admin
+  const supabaseAdmin = getSupabaseAdminClient()
   if (!supabaseAdmin) {
     return NextResponse.json(
       { error: 'Supabase admin não configurado' },
@@ -58,152 +31,66 @@ export async function GET(req: Request) {
     )
   }
 
-  /**
-   * 3️⃣ Cliente com sessão (para autenticação)
-   */
+  // 3️⃣ Autenticação
   const supabase = createRouteHandlerClient({ cookies })
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession()
-
-  if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
-    return NextResponse.json(
-      { error: 'Erro ao carregar sessão' },
-      { status: 401 }
-    )
-  }
-
-  if (!session) {
+  if (!user) {
     return NextResponse.json(
       { error: 'Usuária não autenticada' },
       { status: 401 }
     )
   }
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Usuária não autenticada' },
-      { status: 401 }
-    )
-  }
-
-  /**
-   * 4️⃣ Parâmetros de busca
-   */
+  // 4️⃣ Parâmetros
   const { searchParams } = new URL(req.url)
-
   const nome = searchParams.get('nome')?.trim() ?? ''
   const cidade = searchParams.get('cidade')?.trim() ?? ''
 
-  const limitParam = Number(searchParams.get('limit'))
-  const offsetParam = Number(searchParams.get('offset'))
-
-  const limit =
-    Number.isFinite(limitParam) && limitParam > 0
-      ? limitParam
-      : DEFAULT_LIMIT
-
-  const offset =
-    Number.isFinite(offsetParam) && offsetParam >= 0
-      ? offsetParam
-      : 0
-
   if (!nome && !cidade) {
     return NextResponse.json(
-      { error: 'Informe nome ou cidade para buscar' },
+      { error: 'Informe nome ou cidade' },
       { status: 400 }
     )
   }
 
-  /**
-   * 5️⃣ Consome crédito / consulta
-   */
-  const { data: accessState, error: accessError } =
-    await supabaseAdmin.rpc('consume_query', {
-      user_uuid: user.id,
-    })
+  // 5️⃣ Consome crédito
+  const { error: creditError } = await supabaseAdmin.rpc(
+    'consume_query',
+    { user_uuid: user.id }
+  )
 
-  if (accessError) {
-    const message = accessError.message ?? ''
-    if (message.includes('PAYWALL')) {
-      return NextResponse.json(
-        { allowed: false, reason: 'PAYWALL' },
-        { status: 200 }
-      )
+  if (creditError) {
+    if (creditError.message?.includes('PAYWALL')) {
+      return NextResponse.json({ allowed: false }, { status: 200 })
     }
-
-    console.error('Erro ao consumir consulta', accessError)
     return NextResponse.json(
       { error: 'Erro ao validar créditos' },
       { status: 500 }
     )
   }
 
-  /**
-   * 6️⃣ BUSCA NA VIEW DE REPUTAÇÃO AGREGADA
-   */
+  // 6️⃣ BUSCA NA VIEW (CORRETA)
   let query = supabaseAdmin
     .from('reputacao_agregada')
-    .select(`
-      nome,
-      cidade,
-      total_avaliacoes,
-      comportamento,
-      seguranca_emocional,
-      respeito,
-      carater,
-      confianca,
-      flags_positive,
-      flags_negative
-    `)
+    .select('*')
 
-  if (nome) {
-    query = query.ilike('nome', `%${nome}%`)
-  }
+  if (nome) query = query.ilike('nome', `%${nome}%`)
+  if (cidade) query = query.ilike('cidade', `%${cidade}%`)
 
-  if (cidade) {
-    query = query.ilike('cidade', `%${cidade}%`)
-  }
-
-  const { data, error } = await query.range(
-    offset,
-    offset + limit - 1
-  )
+  const { data, error } = await query.limit(DEFAULT_LIMIT)
 
   if (error) {
-    console.error('Erro ao buscar reputação agregada', error)
+    console.error(error)
     return NextResponse.json(
       { error: 'Erro ao buscar reputação' },
       { status: 500 }
     )
   }
 
-  /**
-   * 7️⃣ Retorno padronizado
-   */
-  const state = Array.isArray(accessState)
-    ? accessState[0]
-    : null
-
+  // 7️⃣ Retorno
   return NextResponse.json({
     allowed: true,
     results: data ?? [],
-    profile: state
-      ? {
-          plan: state.plan,
-          freeQueriesUsed:
-            state.free_queries_used ??
-            state.freeQueriesUsed ??
-            0,
-          credits: state.credits ?? 0,
-        }
-      : null,
   })
 }
