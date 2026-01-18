@@ -103,12 +103,19 @@ export async function GET(req: Request) {
   }
 
   let query = supabaseAdmin
-    .from('avaliacoes')
-    .select(
-      'id, nome, cidade, comportamento, seguranca_emocional, respeito, carater, confianca, flags_positive, flags_negative'
-    )
-    .eq('is_anonymous', false)
-    .eq('publica', true)
+  .from('reputacao_agregada')
+  .select(`
+    nome,
+    cidade,
+    total_avaliacoes,
+    comportamento,
+    seguranca_emocional,
+    respeito,
+    carater,
+    confianca,
+    flags_positive,
+    flags_negative
+  `)
 
   if (nome) {
     query = query.ilike('nome', `%${nome}%`)
