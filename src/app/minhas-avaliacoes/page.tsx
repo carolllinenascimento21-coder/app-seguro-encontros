@@ -202,7 +202,7 @@ export default function MinhasAvaliacoes() {
                 <div className="flex justify-between mb-2">
                   <div>
                     <h3 className="text-white font-bold">
-                      {a.nome || 'Nome não informado'}
+                      {a.nome || 'Avaliação Anônima'}
                     </h3>
                     <p className="text-gray-400 text-xs">
                       {formatDate(a.created_at)}
