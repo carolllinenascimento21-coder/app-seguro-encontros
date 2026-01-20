@@ -1,7 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, MapPin, Star, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import {
+  Search,
+  MapPin,
+  Star,
+  AlertTriangle,
+  CheckCircle2,
+} from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
 
@@ -9,13 +15,13 @@ interface Avaliacao {
   id: string;
   nome: string | null;
   cidade: string | null;
-  comportamento: number;
-  seguranca_emocional: number;
-  respeito: number;
-  carater: number;
-  confianca: number;
-  flags_positive: string[];
-  flags_negative: string[];
+  comportamento: number | null;
+  seguranca_emocional: number | null;
+  respeito: number | null;
+  carater: number | null;
+  confianca: number | null;
+  flags_positive: string[] | null;
+  flags_negative: string[] | null;
 }
 
 export default function ConsultarReputacao() {
@@ -25,21 +31,27 @@ export default function ConsultarReputacao() {
   const [results, setResults] = useState<Avaliacao[]>([]);
   const [loading, setLoading] = useState(false);
 
+  /**
+   * ⭐ Média segura (NUNCA retorna NaN)
+   */
   const media = (a: Avaliacao) => {
-  const valores = [
-    a.comportamento,
-    a.seguranca_emocional,
-    a.respeito,
-    a.carater,
-    a.confianca,
-  ].filter(v => typeof v === 'number');
+    const valores = [
+      a.comportamento,
+      a.seguranca_emocional,
+      a.respeito,
+      a.carater,
+      a.confianca,
+    ].filter((v): v is number => typeof v === 'number');
 
-  if (valores.length === 0) return '—';
+    if (valores.length === 0) return '—';
 
-  const soma = valores.reduce((acc, v) => acc + v, 0);
-  return (soma / valores.length).toFixed(1);
-};
+    const soma = valores.reduce((acc, v) => acc + v, 0);
+    return (soma / valores.length).toFixed(1);
+  };
 
+  /**
+   * 🔍 Busca reputação agregada
+   */
   const buscar = async () => {
     if (!nome.trim() && !cidade.trim()) {
       alert('Digite um nome ou cidade para buscar.');
@@ -50,16 +62,11 @@ export default function ConsultarReputacao() {
       setLoading(true);
 
       const params = new URLSearchParams();
-
-      // ✅ backend espera "q" para nome
-      if (nome.trim()) params.set('q', nome.trim());
-
+      if (nome.trim()) params.set('nome', nome.trim());
       if (cidade.trim()) params.set('cidade', cidade.trim());
 
-      // ✅ rota correta
-      const res = await fetch(
-        `/api/reputation/search?${params.toString()}`
-      );
+      // ✅ ROTA CORRETA
+      const res = await fetch(`/api/busca?${params.toString()}`);
 
       if (!res.ok) {
         console.error('Erro ao buscar reputação', await res.text());
@@ -87,6 +94,7 @@ export default function ConsultarReputacao() {
           Apenas avaliações públicas são exibidas.
         </p>
 
+        {/* 🔎 Filtro */}
         <div className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800 mb-6">
           <input
             value={nome}
@@ -112,6 +120,7 @@ export default function ConsultarReputacao() {
           </button>
         </div>
 
+        {/* 📊 Resultados */}
         <div className="space-y-4">
           {results.map(r => (
             <div
@@ -124,8 +133,9 @@ export default function ConsultarReputacao() {
               <div className="flex justify-between mb-2">
                 <div>
                   <h3 className="text-white font-bold">
-                    {r.nome || 'Nome não informado'}
+                    {r.nome ?? 'Avaliação anônima'}
                   </h3>
+
                   {r.cidade && (
                     <p className="text-gray-400 text-xs flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
@@ -140,20 +150,17 @@ export default function ConsultarReputacao() {
                 </div>
               </div>
 
-              {r.flags_negative?.length > 0 && (
+              {r.flags_negative?.length ? (
                 <div className="flex items-center gap-2 text-red-400 text-xs mt-2">
                   <AlertTriangle className="w-4 h-4" />
                   Possui alertas
                 </div>
-              )}
-
-              {r.flags_negative?.length === 0 &&
-                r.flags_positive?.length > 0 && (
-                  <div className="flex items-center gap-2 text-green-400 text-xs mt-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Pontos positivos destacados
-                  </div>
-                )}
+              ) : r.flags_positive?.length ? (
+                <div className="flex items-center gap-2 text-green-400 text-xs mt-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Pontos positivos destacados
+                </div>
+              ) : null}
             </div>
           ))}
 
