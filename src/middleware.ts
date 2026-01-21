@@ -7,6 +7,17 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
+  const { pathname } = req.nextUrl
+
+  /**
+   * 🔓 EXCEÇÃO ABSOLUTA
+   * Funil é SEMPRE acessível para usuária NÃO logada.
+   * Essa saída antecipada é OBRIGATÓRIA.
+   */
+  if (pathname === '/funil' || pathname.startsWith('/funil/')) {
+    return res
+  }
+
   let supabaseEnv
 
   try {
@@ -20,11 +31,8 @@ export async function middleware(req: NextRequest) {
     throw error
   }
 
-  const { pathname } = req.nextUrl
-
   const PUBLIC_ROUTES = [
     '/',
-    '/funil',
     '/onboarding',
     '/login',
     '/signup',
@@ -41,6 +49,9 @@ export async function middleware(req: NextRequest) {
 
   const supabase = createMiddlewareClient({ req, res })
 
+  /**
+   * 🔐 SESSÃO
+   */
   const {
     data: { session },
     error: sessionError,
@@ -53,6 +64,9 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
+  /**
+   * 🚪 USUÁRIA NÃO LOGADA
+   */
   if (!session || isAuthSessionMissing) {
     const isPublicRoute = PUBLIC_ROUTES.some(
       route => pathname === route || pathname.startsWith(`${route}/`)
@@ -65,6 +79,9 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
+  /**
+   * 👤 USUÁRIA LOGADA
+   */
   const {
     data: { user },
     error: userError,
@@ -74,12 +91,13 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
-  // 🚫 LOGADA → bloqueia acesso ao funil
+  /**
+   * 🚫 LOGADA NÃO PODE VER FUNIL
+   */
   if (pathname === '/funil' || pathname.startsWith('/funil/')) {
-  return NextResponse.redirect(new URL('/home', req.url))
+    return NextResponse.redirect(new URL('/home', req.url))
   }
-  
-  // 5️⃣ LOGADA → bloqueia login/signup
+
   if (pathname.startsWith('/api')) {
     return res
   }
@@ -92,20 +110,25 @@ export async function middleware(req: NextRequest) {
     user
   )
 
-  // ✅ Falhas técnicas não devem redirecionar (o guard exibe erro amigável).
+  // Falhas técnicas não redirecionam (guard lida com isso)
   if (profileError || !profile) {
     return res
   }
 
   const needsOnboarding = profile.onboarding_completed !== true
 
-  // 5️⃣ LOGADA → bloqueia login/signup/register quando já há sessão
+  /**
+   * 🚫 LOGADA → bloqueia login/signup/register
+   */
   if (pathname === '/login' || pathname === '/signup' || pathname === '/register') {
     return NextResponse.redirect(
       new URL(needsOnboarding ? '/onboarding/selfie' : '/home', req.url)
     )
   }
 
+  /**
+   * 🔁 Fluxo normal de onboarding
+   */
   if (needsOnboarding && !isOnboardingRoute) {
     return NextResponse.redirect(new URL('/onboarding/selfie', req.url))
   }
