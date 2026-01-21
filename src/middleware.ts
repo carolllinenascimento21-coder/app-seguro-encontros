@@ -42,14 +42,8 @@ export async function middleware(req: NextRequest) {
 
   /**
    * 🚪 USUÁRIA NÃO LOGADA
-   * AQUI é onde o bug estava.
    */
   if (!session || isAuthSessionMissing) {
-    // 🔓 FUNIL É EXCEÇÃO ABSOLUTA
-    if (pathname === '/funil' || pathname.startsWith('/funil/')) {
-      return res
-    }
-
     const PUBLIC_ROUTES = [
       '/',
       '/onboarding',
@@ -85,13 +79,6 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
-  /**
-   * 🚫 LOGADA NÃO PODE VER FUNIL
-   */
-  if (pathname === '/funil' || pathname.startsWith('/funil/')) {
-    return NextResponse.redirect(new URL('/home', req.url))
-  }
-
   if (pathname.startsWith('/api')) {
     return res
   }
@@ -110,12 +97,18 @@ export async function middleware(req: NextRequest) {
 
   const needsOnboarding = profile.onboarding_completed !== true
 
+  /**
+   * 🚫 LOGADA → bloqueia login/signup/register
+   */
   if (pathname === '/login' || pathname === '/signup' || pathname === '/register') {
     return NextResponse.redirect(
       new URL(needsOnboarding ? '/onboarding/selfie' : '/home', req.url)
     )
   }
 
+  /**
+   * 🔁 Fluxo normal de onboarding
+   */
   if (needsOnboarding && !isOnboardingRoute) {
     return NextResponse.redirect(new URL('/onboarding/selfie', req.url))
   }
@@ -127,6 +120,12 @@ export async function middleware(req: NextRequest) {
   return res
 }
 
+/**
+ * 🔥 REGRA CRÍTICA
+ * O middleware NÃO roda para /funil
+ */
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|funil).*)',
+  ],
 }
