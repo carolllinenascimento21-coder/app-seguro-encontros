@@ -9,15 +9,6 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
-  /**
-   * 🔓 EXCEÇÃO ABSOLUTA
-   * Funil é SEMPRE acessível para usuária NÃO logada.
-   * Essa saída antecipada é OBRIGATÓRIA.
-   */
-  if (pathname === '/funil' || pathname.startsWith('/funil/')) {
-    return res
-  }
-
   let supabaseEnv
 
   try {
@@ -31,27 +22,12 @@ export async function middleware(req: NextRequest) {
     throw error
   }
 
-  const PUBLIC_ROUTES = [
-    '/',
-    '/onboarding',
-    '/login',
-    '/signup',
-    '/register',
-    '/planos',
-    '/plans',
-    '/verification-pending',
-    '/auth/callback',
-  ]
-
   if (!supabaseEnv) {
     return res
   }
 
   const supabase = createMiddlewareClient({ req, res })
 
-  /**
-   * 🔐 SESSÃO
-   */
   const {
     data: { session },
     error: sessionError,
@@ -66,8 +42,26 @@ export async function middleware(req: NextRequest) {
 
   /**
    * 🚪 USUÁRIA NÃO LOGADA
+   * AQUI é onde o bug estava.
    */
   if (!session || isAuthSessionMissing) {
+    // 🔓 FUNIL É EXCEÇÃO ABSOLUTA
+    if (pathname === '/funil' || pathname.startsWith('/funil/')) {
+      return res
+    }
+
+    const PUBLIC_ROUTES = [
+      '/',
+      '/onboarding',
+      '/login',
+      '/signup',
+      '/register',
+      '/planos',
+      '/plans',
+      '/verification-pending',
+      '/auth/callback',
+    ]
+
     const isPublicRoute = PUBLIC_ROUTES.some(
       route => pathname === route || pathname.startsWith(`${route}/`)
     )
@@ -110,25 +104,18 @@ export async function middleware(req: NextRequest) {
     user
   )
 
-  // Falhas técnicas não redirecionam (guard lida com isso)
   if (profileError || !profile) {
     return res
   }
 
   const needsOnboarding = profile.onboarding_completed !== true
 
-  /**
-   * 🚫 LOGADA → bloqueia login/signup/register
-   */
   if (pathname === '/login' || pathname === '/signup' || pathname === '/register') {
     return NextResponse.redirect(
       new URL(needsOnboarding ? '/onboarding/selfie' : '/home', req.url)
     )
   }
 
-  /**
-   * 🔁 Fluxo normal de onboarding
-   */
   if (needsOnboarding && !isOnboardingRoute) {
     return NextResponse.redirect(new URL('/onboarding/selfie', req.url))
   }
