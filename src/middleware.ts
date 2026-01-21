@@ -24,6 +24,7 @@ export async function middleware(req: NextRequest) {
 
   const PUBLIC_ROUTES = [
     '/',
+    '/funil',
     '/onboarding',
     '/login',
     '/signup',
@@ -73,6 +74,11 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
+  // 🚫 LOGADA → bloqueia acesso ao funil
+  if (pathname === '/funil' || pathname.startsWith('/funil/')) {
+  return NextResponse.redirect(new URL('/home', req.url))
+  }
+  
   // 5️⃣ LOGADA → bloqueia login/signup
   if (pathname.startsWith('/api')) {
     return res
