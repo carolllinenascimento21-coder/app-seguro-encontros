@@ -4,14 +4,43 @@ import type { NextRequest } from 'next/server'
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // 🔥 PROVA ABSOLUTA
-  // Se isso não funcionar, o middleware NÃO está ativo
+  const publicPaths = [
+    '/',
+    '/funil',
+    '/onboarding',
+    '/login',
+    '/signup',
+    '/register',
+    '/planos',
+    '/plans',
+    '/verification-pending',
+    '/auth/callback',
+    '/api',
+  ]
+
+  const isPublicRoute = publicPaths.some(
+    path => pathname === path || pathname.startsWith(`${path}/`)
+  )
+
   if (pathname.startsWith('/funil')) {
-    return NextResponse.next()
+    console.info('[middleware] funil público', pathname)
+  }
+
+  if (isPublicRoute) {
+    const response = NextResponse.next()
+    response.headers.set('x-middleware-active', 'true')
+    response.headers.set('x-middleware-path', pathname)
+    if (pathname.startsWith('/funil')) {
+      response.headers.set('x-funil-public', 'true')
+    }
+    return response
   }
 
   // Todas as outras rotas vão para onboarding
-  return NextResponse.redirect(new URL('/onboarding', req.url))
+  const redirectResponse = NextResponse.redirect(new URL('/onboarding', req.url))
+  redirectResponse.headers.set('x-middleware-active', 'true')
+  redirectResponse.headers.set('x-middleware-path', pathname)
+  return redirectResponse
 }
 
 export const config = {

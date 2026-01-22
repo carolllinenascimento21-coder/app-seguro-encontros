@@ -45,6 +45,7 @@ export default function OnboardingGuard({
       '/register',
       '/planos',
       '/plans',
+      '/funil',
       '/verification-pending',
       '/auth/callback',
     ],
