@@ -28,66 +28,105 @@ export default function FunilPage() {
         {/* Headline principal */}
         <div className="border-2 border-[#D4AF37] rounded-3xl p-8 text-center">
           <p className="text-[#D4AF37] text-sm font-semibold uppercase tracking-wide">
-            Antes de confiar
+            Antes de se envolver
           </p>
 
           <h1 className="text-white text-2xl font-bold mt-2 leading-snug">
-            Veja se outras mulheres já confiaram
+            Clareza para decidir com consciência
           </h1>
 
           <p className="text-[#EFD9A7] text-sm mt-4">
-            Informação pode evitar situações que você nunca deveria passar.
+            Informação confiável preserva sua segurança emocional
+            e o seu tempo.
           </p>
+        </div>
+
+        {/* CTA principal */}
+        <div className="space-y-3">
+          <Button
+            onClick={() => router.push('/onboarding')}
+            className="w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black py-6 rounded-2xl font-bold text-base"
+          >
+            Continuar
+          </Button>
+
+          <div className="flex items-center justify-center gap-2 text-[#EFD9A7] text-xs">
+            <Crown className="w-4 h-4 text-[#D4AF37]" />
+            <span>Você pode usar gratuitamente no início</span>
+          </div>
         </div>
 
         {/* Bloco de identificação */}
         <div className="space-y-4">
           <p className="text-[#EFD9A7] text-sm">
-            Se você já:
+            Se você já ignorou um alerta interno.
           </p>
-
-          <ul className="space-y-2 text-sm text-[#EFD9A7]">
-            <li>• Ignorou um alerta interno</li>
-            <li>• Confiou apenas no que te contaram</li>
-            <li>• Pensou “se eu soubesse antes…”</li>
-          </ul>
 
           <p className="text-[#EFD9A7] text-sm">
-            Você não está sozinha.  
-            O problema nunca foi você — foi a falta de informação.
+            Se confiou apenas no que foi dito.
+          </p>
+
+          <p className="text-[#EFD9A7] text-sm">
+            Se pensou “eu precisava de mais informação”.
           </p>
         </div>
 
-        {/* Proposta de valor */}
-        <div className="border border-[#D4AF37]/40 rounded-2xl p-6 space-y-3">
+        {/* Contexto do problema */}
+        <div className="space-y-3">
+          <p className="text-[#EFD9A7] text-sm">
+            Você não está sozinha.
+          </p>
+          <p className="text-[#EFD9A7] text-sm">
+            O problema sempre foi a falta de histórico confiável.
+          </p>
+        </div>
+
+        {/* Desejo */}
+        <div className="space-y-3">
           <p className="text-white font-semibold text-center">
-            O Confia+ é uma ferramenta de proteção feminina
+            Clareza antes de se envolver
           </p>
-
           <p className="text-[#EFD9A7] text-sm text-center">
-            Baseada em experiências reais, uso responsável e prevenção.
+            Decisão consciente — com responsabilidade emocional.
           </p>
         </div>
 
-        {/* CTA principal */}
-        <Button
-          onClick={() => router.push('/onboarding')}
-          className="w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black py-6 rounded-2xl font-bold text-base"
-        >
-          Continuar
-        </Button>
-
-        {/* CTA secundário */}
-        <div className="flex items-center justify-center gap-2 text-[#EFD9A7] text-xs">
-          <Crown className="w-4 h-4 text-[#D4AF37]" />
-          <span>Você pode usar gratuitamente no início</span>
+        {/* Como funciona */}
+        <div className="border border-[#D4AF37]/40 rounded-2xl p-6 space-y-3 text-center">
+          <p className="text-white font-semibold">
+            Consulte avaliações
+          </p>
+          <p className="text-[#EFD9A7] text-sm">
+            Entenda o histórico com calma.
+          </p>
+          <p className="text-[#EFD9A7] text-sm">
+            Decida com informação.
+          </p>
         </div>
 
-        {/* Rodapé emocional */}
-        <p className="text-center text-xs text-[#EFD9A7]/70 mt-4">
-          Informação não tira sua liberdade.  
-          Informação te devolve o controle.
-        </p>
+        {/* Diferenciais */}
+        <div className="space-y-3 text-center">
+          <p className="text-white font-semibold">
+            Confia+ não é app de relacionamento
+          </p>
+          <p className="text-[#EFD9A7] text-sm">
+            Homens não têm perfil.  
+            Mulheres consultam avaliações feitas por outras mulheres.
+          </p>
+        </div>
+
+        {/* CTA final */}
+        <div className="space-y-4 pt-2">
+          <Button
+            onClick={() => router.push('/onboarding')}
+            className="w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black py-6 rounded-2xl font-bold text-base"
+          >
+            Quero clareza agora
+          </Button>
+          <p className="text-center text-xs text-[#EFD9A7]/70">
+            Informação não tira sua liberdade — devolve o controle.
+          </p>
+        </div>
       </div>
     </div>
   )
