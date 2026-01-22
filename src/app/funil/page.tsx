@@ -5,6 +5,7 @@ import { Crown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useEffect } from 'react'
 
+export const dynamic = 'force-dynamic'
 export default function FunilPage() {
   const router = useRouter()
 
