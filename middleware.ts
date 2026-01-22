@@ -4,40 +4,51 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
+  const { pathname } = req.nextUrl
 
+  /**
+   * ======================================================
+   * 1️⃣ ROTAS TOTALMENTE PÚBLICAS (NÃO TOCAR NO SUPABASE)
+   * ======================================================
+   */
+  const PUBLIC_ROUTES = [
+    '/',
+    '/funil',
+    '/login',
+    '/register',
+    '/planos',
+    '/auth/callback',
+  ]
+
+  const isPublicRoute = PUBLIC_ROUTES.some(
+    route => pathname === route || pathname.startsWith(`${route}/`)
+  )
+
+  // Se for rota pública, deixa passar direto
+  if (isPublicRoute) {
+    return res
+  }
+
+  /**
+   * ======================================================
+   * 2️⃣ A PARTIR DAQUI, PODE CONSULTAR SESSÃO
+   * ======================================================
+   */
   const supabase = createMiddlewareClient({ req, res })
 
   const {
     data: { session },
   } = await supabase.auth.getSession()
 
-  const pathname = req.nextUrl.pathname
-
   /**
    * ======================================================
-   * 1️⃣ ROTAS PÚBLICAS (NUNCA REDIRECIONAR)
-   * ======================================================
-   */
-  const PUBLIC_ROUTES = [
-    '/',
-    '/login',
-    '/register',
-    '/funil',
-    '/planos',
-  ]
-
-  const isPublicRoute = PUBLIC_ROUTES.some(route =>
-    pathname === route || pathname.startsWith(`${route}/`)
-  )
-
-  /**
-   * ======================================================
-   * 2️⃣ VISITANTE (SEM LOGIN)
+   * 3️⃣ VISITANTE (SEM LOGIN)
    * ======================================================
    */
   if (!session) {
-    // 🔐 Bloqueia áreas protegidas
+    // Bloqueia apenas áreas protegidas
     if (
+      pathname.startsWith('/home') ||
       pathname.startsWith('/consultar-reputacao') ||
       pathname.startsWith('/avaliar') ||
       pathname.startsWith('/perfil')
@@ -47,13 +58,12 @@ export async function middleware(req: NextRequest) {
       )
     }
 
-    // ✅ Funil e páginas públicas liberadas
     return res
   }
 
   /**
    * ======================================================
-   * 3️⃣ USUÁRIA AUTENTICADA → BUSCA PROFILE
+   * 4️⃣ USUÁRIA LOGADA → CHECA ONBOARDING
    * ======================================================
    */
   const { data: profile, error } = await supabase
@@ -62,8 +72,8 @@ export async function middleware(req: NextRequest) {
     .eq('id', session.user.id)
     .single()
 
+  // Falha defensiva
   if (error || !profile) {
-    // Segurança defensiva
     return NextResponse.redirect(
       new URL('/login', req.url)
     )
@@ -71,26 +81,23 @@ export async function middleware(req: NextRequest) {
 
   /**
    * ======================================================
-   * 4️⃣ ONBOARDING OBRIGATÓRIO
+   * 5️⃣ ONBOARDING OBRIGATÓRIO
    * ======================================================
    */
   if (!profile.onboarding_completed) {
-    // Usuária autenticada SEM onboarding
     if (!pathname.startsWith('/onboarding')) {
       return NextResponse.redirect(
         new URL('/onboarding', req.url)
       )
     }
-
     return res
   }
 
   /**
    * ======================================================
-   * 5️⃣ USUÁRIA OK (LOGADA + ONBOARDING FEITO)
+   * 6️⃣ EVITA VOLTAR PARA ONBOARDING
    * ======================================================
    */
-  // Evita voltar para onboarding depois de concluído
   if (pathname.startsWith('/onboarding')) {
     return NextResponse.redirect(
       new URL('/home', req.url)
@@ -100,16 +107,8 @@ export async function middleware(req: NextRequest) {
   return res
 }
 
-/**
- * ======================================================
- * 6️⃣ MATCHER — APLICAÇÃO DO MIDDLEWARE
- * ======================================================
- */
 export const config = {
   matcher: [
-    /*
-     * Ignora arquivos estáticos
-     */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }
