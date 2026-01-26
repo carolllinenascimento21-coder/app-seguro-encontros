@@ -1,6 +1,6 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
 import {
   Search,
   MapPin,
@@ -9,34 +9,35 @@ import {
   CheckCircle2,
   Lock,
   Crown,
-} from 'lucide-react';
-import Navbar from '@/components/custom/navbar';
-import { useRouter } from 'next/navigation';
+} from 'lucide-react'
+import Navbar from '@/components/custom/navbar'
+import { useRouter } from 'next/navigation'
 
 interface Avaliacao {
-  id: string;
-  nome: string | null;
-  cidade: string | null;
-  comportamento: number | null;
-  seguranca_emocional: number | null;
-  respeito: number | null;
-  carater: number | null;
-  confianca: number | null;
-  flags_positive: string[] | null;
-  flags_negative: string[] | null;
+  id: string
+  nome: string | null
+  cidade: string | null
+  comportamento: number | null
+  seguranca_emocional: number | null
+  respeito: number | null
+  carater: number | null
+  confianca: number | null
+  flags_positive: string[] | null
+  flags_negative: string[] | null
 }
 
 export default function ConsultarReputacao() {
-  const router = useRouter();
-  const [nome, setNome] = useState('');
-  const [cidade, setCidade] = useState('');
-  const [results, setResults] = useState<Avaliacao[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [blocked, setBlocked] = useState(false); // 🔒 PAYWALL
+  const router = useRouter()
 
-  /**
+  const [nome, setNome] = useState('')
+  const [cidade, setCidade] = useState('')
+  const [results, setResults] = useState<Avaliacao[]>([])
+  const [loading, setLoading] = useState(false)
+  const [blocked, setBlocked] = useState(false) // 🔒 paywall backend
+
+  /* ────────────────────────────────────────────────
    * ⭐ Média segura
-   */
+   * ──────────────────────────────────────────────── */
   const media = (a: Avaliacao) => {
     const valores = [
       a.comportamento,
@@ -44,47 +45,49 @@ export default function ConsultarReputacao() {
       a.respeito,
       a.carater,
       a.confianca,
-    ].filter((v): v is number => typeof v === 'number');
+    ].filter((v): v is number => typeof v === 'number')
 
-    if (valores.length === 0) return '—';
+    if (valores.length === 0) return '—'
+    return (valores.reduce((acc, v) => acc + v, 0) / valores.length).toFixed(1)
+  }
 
-    const soma = valores.reduce((acc, v) => acc + v, 0);
-    return (soma / valores.length).toFixed(1);
-  };
-
-  /**
-   * 🔍 Busca reputação (backend decide se pode)
-   */
+  /* ────────────────────────────────────────────────
+   * 🔍 Busca (backend decide tudo)
+   * ──────────────────────────────────────────────── */
   const buscar = async () => {
     if (!nome.trim() && !cidade.trim()) {
-      alert('Digite um nome ou cidade para buscar.');
-      return;
+      alert('Digite um nome ou cidade para buscar.')
+      return
     }
 
     try {
-      setLoading(true);
+      setLoading(true)
 
-      const params = new URLSearchParams();
-      if (nome.trim()) params.set('nome', nome.trim());
-      if (cidade.trim()) params.set('cidade', cidade.trim());
+      const params = new URLSearchParams()
+      if (nome.trim()) params.set('nome', nome.trim())
+      if (cidade.trim()) params.set('cidade', cidade.trim())
 
-      const res = await fetch(`/api/busca?${params.toString()}`);
-      const payload = await res.json();
+      const res = await fetch(`/api/busca?${params.toString()}`)
+      const payload = await res.json()
 
-      // 🔒 PAYWALL CONTROLADO PELO BACKEND
-      if (payload.allowed === false) {
-        setBlocked(true);
-        return;
+      if (!res.ok && payload?.code === 'FREE_LIMIT_REACHED') {
+        setBlocked(true)
+        return
       }
 
-      setBlocked(false);
-      setResults(payload.results ?? []);
-    } catch (err) {
-      alert('Erro ao buscar reputação.');
+      if (!res.ok) {
+        alert('Erro ao buscar reputação.')
+        return
+      }
+
+      setBlocked(false)
+      setResults(payload.results ?? [])
+    } catch {
+      alert('Erro ao buscar reputação.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <div className="min-h-screen bg-black pb-20">
@@ -94,7 +97,7 @@ export default function ConsultarReputacao() {
         </h1>
 
         <p className="text-gray-400 text-sm mb-6">
-          Uma consulta gratuita disponível. Resultados completos exigem plano.
+          Uma consulta gratuita disponível. Detalhes completos exigem plano.
         </p>
 
         {/* 🔎 Filtro */}
@@ -123,7 +126,7 @@ export default function ConsultarReputacao() {
           </button>
         </div>
 
-        {/* 🔒 BLOQUEIO */}
+        {/* 🔒 PAYWALL */}
         {blocked && (
           <div className="border border-[#D4AF37] rounded-xl p-5 mb-6 bg-black/60">
             <div className="flex gap-3 items-start">
@@ -155,9 +158,7 @@ export default function ConsultarReputacao() {
               key={r.id}
               className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5 cursor-pointer"
               onClick={() =>
-                blocked
-                  ? router.push('/planos')
-                  : router.push(`/consultar-reputacao/${r.id}`)
+                router.push(`/consultar-reputacao/${r.id}`)
               }
             >
               <div className="flex justify-between mb-2">
@@ -211,5 +212,5 @@ export default function ConsultarReputacao() {
 
       <Navbar />
     </div>
-  );
+  )
 }
