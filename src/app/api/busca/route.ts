@@ -6,9 +6,12 @@ import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_LIMIT = 20
+const FREE_LIMIT = 1
 
 export async function GET(req: Request) {
-  // 1️⃣ Ambiente Supabase público
+  /* ────────────────────────────────────────────────
+   * 1️⃣ Verificação de ambiente público
+   * ──────────────────────────────────────────────── */
   try {
     getSupabasePublicEnv('api/busca')
   } catch (error) {
@@ -22,7 +25,9 @@ export async function GET(req: Request) {
     throw error
   }
 
-  // 2️⃣ Supabase Admin
+  /* ────────────────────────────────────────────────
+   * 2️⃣ Supabase Admin
+   * ──────────────────────────────────────────────── */
   const supabaseAdmin = getSupabaseAdminClient()
   if (!supabaseAdmin) {
     return NextResponse.json(
@@ -31,7 +36,9 @@ export async function GET(req: Request) {
     )
   }
 
-  // 3️⃣ Autenticação
+  /* ────────────────────────────────────────────────
+   * 3️⃣ Autenticação
+   * ──────────────────────────────────────────────── */
   const supabase = createRouteHandlerClient({ cookies })
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -42,7 +49,9 @@ export async function GET(req: Request) {
     )
   }
 
-  // 4️⃣ Parâmetros
+  /* ────────────────────────────────────────────────
+   * 4️⃣ Parâmetros de busca
+   * ──────────────────────────────────────────────── */
   const { searchParams } = new URL(req.url)
   const nome = searchParams.get('nome')?.trim() ?? ''
   const cidade = searchParams.get('cidade')?.trim() ?? ''
@@ -54,23 +63,44 @@ export async function GET(req: Request) {
     )
   }
 
-  // 5️⃣ Consome crédito
-  const { error: creditError } = await supabaseAdmin.rpc(
-    'consume_query',
-    { user_uuid: user.id }
-  )
+  /* ────────────────────────────────────────────────
+   * 5️⃣ Carregar perfil (CRÍTICO)
+   * ──────────────────────────────────────────────── */
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('has_active_plan, current_plan_id, free_queries_used')
+    .eq('id', user.id)
+    .single()
 
-  if (creditError) {
-    if (creditError.message?.includes('PAYWALL')) {
-      return NextResponse.json({ allowed: false }, { status: 200 })
-    }
+  if (profileError || !profile) {
+    console.error('Erro ao carregar perfil', profileError)
     return NextResponse.json(
-      { error: 'Erro ao validar créditos' },
+      { error: 'Erro ao validar perfil' },
       { status: 500 }
     )
   }
 
-  // 6️⃣ BUSCA NA VIEW (CORRETA)
+  const isFree =
+    !profile.has_active_plan ||
+    profile.current_plan_id === 'free'
+
+  /* ────────────────────────────────────────────────
+   * 6️⃣ BLOQUEIO FREE (PAYWALL)
+   * ──────────────────────────────────────────────── */
+  if (isFree && (profile.free_queries_used ?? 0) >= FREE_LIMIT) {
+    return NextResponse.json(
+      {
+        code: 'FREE_LIMIT_REACHED',
+        message: 'Consulta gratuita já utilizada',
+        allowed: false,
+      },
+      { status: 403 }
+    )
+  }
+
+  /* ────────────────────────────────────────────────
+   * 7️⃣ BUSCA NA VIEW AGREGADA
+   * ──────────────────────────────────────────────── */
   let query = supabaseAdmin
     .from('reputacao_agregada')
     .select('*')
@@ -81,14 +111,33 @@ export async function GET(req: Request) {
   const { data, error } = await query.limit(DEFAULT_LIMIT)
 
   if (error) {
-    console.error(error)
+    console.error('Erro ao buscar reputação', error)
     return NextResponse.json(
       { error: 'Erro ao buscar reputação' },
       { status: 500 }
     )
   }
 
-  // 7️⃣ Retorno
+  /* ────────────────────────────────────────────────
+   * 8️⃣ Incrementa uso FREE (APÓS sucesso)
+   * ──────────────────────────────────────────────── */
+  if (isFree) {
+    const { error: incError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        free_queries_used: (profile.free_queries_used ?? 0) + 1,
+      })
+      .eq('id', user.id)
+
+    if (incError) {
+      console.error('Erro ao incrementar free_queries_used', incError)
+      // ⚠️ não bloqueia o retorno — evita fricção
+    }
+  }
+
+  /* ────────────────────────────────────────────────
+   * 9️⃣ Retorno OK
+   * ──────────────────────────────────────────────── */
   return NextResponse.json({
     allowed: true,
     results: data ?? [],
