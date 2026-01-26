@@ -10,7 +10,7 @@ const FREE_LIMIT = 1
 
 export async function GET(req: Request) {
   /* ────────────────────────────────────────────────
-   * 1️⃣ Verificação de ambiente público
+   * 1️⃣ Ambiente público
    * ──────────────────────────────────────────────── */
   try {
     getSupabasePublicEnv('api/busca')
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 2️⃣ Supabase Admin
+   * 2️⃣ Supabase
    * ──────────────────────────────────────────────── */
   const supabaseAdmin = getSupabaseAdminClient()
   if (!supabaseAdmin) {
@@ -36,9 +36,6 @@ export async function GET(req: Request) {
     )
   }
 
-  /* ────────────────────────────────────────────────
-   * 3️⃣ Autenticação
-   * ──────────────────────────────────────────────── */
   const supabase = createRouteHandlerClient({ cookies })
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -50,7 +47,7 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 4️⃣ Parâmetros de busca
+   * 3️⃣ Parâmetros
    * ──────────────────────────────────────────────── */
   const { searchParams } = new URL(req.url)
   const nome = searchParams.get('nome')?.trim() ?? ''
@@ -64,7 +61,7 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 5️⃣ Carregar perfil (CRÍTICO)
+   * 4️⃣ Carregar perfil
    * ──────────────────────────────────────────────── */
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
@@ -85,21 +82,46 @@ export async function GET(req: Request) {
     profile.current_plan_id === 'free'
 
   /* ────────────────────────────────────────────────
-   * 6️⃣ BLOQUEIO FREE (PAYWALL)
+   * 5️⃣ Tracking: tentativa de busca
+   * ──────────────────────────────────────────────── */
+  await supabaseAdmin
+    .from('analytics_events')
+    .insert({
+      user_id: user.id,
+      event_name: 'consult_basic',
+      metadata: {
+        nome: !!nome,
+        cidade: !!cidade,
+        plan: profile.current_plan_id ?? 'free',
+      },
+    })
+
+  /* ────────────────────────────────────────────────
+   * 6️⃣ PAYWALL FREE
    * ──────────────────────────────────────────────── */
   if (isFree && (profile.free_queries_used ?? 0) >= FREE_LIMIT) {
+    await supabaseAdmin
+      .from('analytics_events')
+      .insert({
+        user_id: user.id,
+        event_name: 'free_limit_reached',
+        metadata: {
+          location: 'api/busca',
+        },
+      })
+
     return NextResponse.json(
       {
+        allowed: false,
         code: 'FREE_LIMIT_REACHED',
         message: 'Consulta gratuita já utilizada',
-        allowed: false,
       },
       { status: 403 }
     )
   }
 
   /* ────────────────────────────────────────────────
-   * 7️⃣ BUSCA NA VIEW AGREGADA
+   * 7️⃣ Busca
    * ──────────────────────────────────────────────── */
   let query = supabaseAdmin
     .from('reputacao_agregada')
@@ -119,24 +141,32 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 8️⃣ Incrementa uso FREE (APÓS sucesso)
+   * 8️⃣ Incrementa uso FREE
    * ──────────────────────────────────────────────── */
   if (isFree) {
-    const { error: incError } = await supabaseAdmin
+    await supabaseAdmin
       .from('profiles')
       .update({
         free_queries_used: (profile.free_queries_used ?? 0) + 1,
       })
       .eq('id', user.id)
-
-    if (incError) {
-      console.error('Erro ao incrementar free_queries_used', incError)
-      // ⚠️ não bloqueia o retorno — evita fricção
-    }
   }
 
   /* ────────────────────────────────────────────────
-   * 9️⃣ Retorno OK
+   * 9️⃣ Tracking: resultado exibido
+   * ──────────────────────────────────────────────── */
+  await supabaseAdmin
+    .from('analytics_events')
+    .insert({
+      user_id: user.id,
+      event_name: 'view_result_summary',
+      metadata: {
+        results_count: data?.length ?? 0,
+      },
+    })
+
+  /* ────────────────────────────────────────────────
+   * 10️⃣ Retorno
    * ──────────────────────────────────────────────── */
   return NextResponse.json({
     allowed: true,
