@@ -11,16 +11,27 @@ export const dynamic = 'force-dynamic'
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 
 /**
- * Planos válidos reconhecidos pelo sistema
- * (DEV DEFENSIVO: nunca confiar cegamente em metadata)
+ * 🔐 Padrão interno do sistema (NÃO mudar banco)
  */
-const ALLOWED_PLANS = [
-  'premium_monthly',
-  'premium_plus',
-  'premium_yearly',
-] as const
+const PLAN_MAP: Record<string, 'premium_monthly' | 'premium_yearly' | 'premium_plus'> = {
+  // aliases frontend (pt-BR)
+  premium_mensal: 'premium_monthly',
+  premium_anual: 'premium_yearly',
+  premium_plus: 'premium_plus',
 
-type AllowedPlan = (typeof ALLOWED_PLANS)[number]
+  // aliases defensivos
+  premium_monthly: 'premium_monthly',
+  premium_yearly: 'premium_yearly',
+}
+
+/**
+ * Eventos aceitos
+ */
+const HANDLED_EVENTS = [
+  'checkout.session.completed',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+]
 
 export async function POST(req: Request) {
   const signature = headers().get('stripe-signature')
@@ -32,7 +43,6 @@ export async function POST(req: Request) {
 
   const stripe = getStripeClient()
   if (!stripe) {
-    console.error('[stripe-webhook] stripe client ausente')
     return NextResponse.json({ error: 'Stripe não configurado' }, { status: 500 })
   }
 
@@ -44,17 +54,8 @@ export async function POST(req: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro desconhecido'
     console.error('[stripe-webhook] assinatura inválida', message)
-    return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 })
+    return NextResponse.json({ error: message }, { status: 400 })
   }
-
-  /**
-   * Ignora eventos que não impactam billing/permissão
-   */
-  const HANDLED_EVENTS = [
-    'checkout.session.completed',
-    'customer.subscription.updated',
-    'customer.subscription.deleted',
-  ]
 
   if (!HANDLED_EVENTS.includes(event.type)) {
     return NextResponse.json({ received: true })
@@ -66,19 +67,9 @@ export async function POST(req: Request) {
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
-      return NextResponse.json(
-        { error: envError.message },
-        { status: envError.status }
-      )
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
     }
     throw error
-  }
-
-  if (!supabaseAdmin) {
-    return NextResponse.json(
-      { error: 'Supabase admin indisponível' },
-      { status: 503 }
-    )
   }
 
   /* =====================================================
@@ -88,10 +79,7 @@ export async function POST(req: Request) {
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.metadata?.user_id
 
-    if (!userId) {
-      console.error('[stripe-webhook] checkout sem user_id')
-      return NextResponse.json({ received: true })
-    }
+    if (!userId) return NextResponse.json({ received: true })
 
     const stripeCustomerId =
       typeof session.customer === 'string'
@@ -101,26 +89,27 @@ export async function POST(req: Request) {
     /* ---------- ASSINATURA ---------- */
     if (session.mode === 'subscription') {
       const rawPlan = session.metadata?.plan
-      const plan: AllowedPlan | null =
-        ALLOWED_PLANS.includes(rawPlan as AllowedPlan)
-          ? (rawPlan as AllowedPlan)
-          : null
+      const plan = rawPlan ? PLAN_MAP[rawPlan] : null
 
       if (!plan) {
-        console.error('[stripe-webhook] plano inválido na metadata', rawPlan)
+        console.error('[stripe-webhook] plano inválido', rawPlan)
         return NextResponse.json({ received: true })
       }
 
-      await supabaseAdmin
-        .from('profiles')
-        .update({
-          current_plan_id: plan,
-          subscription_status: 'active',
-          has_active_plan: true,
-          stripe_customer_id: stripeCustomerId,
-          free_queries_used: 0, // reset defensivo
-        })
-        .eq('id', userId)
+      await supabaseAdmin.from('profiles').update({
+        current_plan_id: plan,
+        subscription_status: 'active',
+        has_active_plan: true,
+        stripe_customer_id: stripeCustomerId,
+        free_queries_used: 0,
+      }).eq('id', userId)
+
+      // 📊 analytics
+      await supabaseAdmin.from('analytics_events').insert({
+        user_id: userId,
+        event_name: 'subscription_activated',
+        metadata: { plan, source: 'stripe' },
+      })
 
       return NextResponse.json({ received: true })
     }
@@ -131,19 +120,18 @@ export async function POST(req: Request) {
       const externalReference =
         session.payment_intent?.toString() ?? session.id
 
-      if (stripeCustomerId) {
-        await supabaseAdmin
-          .from('profiles')
-          .update({ stripe_customer_id: stripeCustomerId })
-          .eq('id', userId)
-      }
-
       if (Number.isFinite(credits) && credits > 0) {
         await supabaseAdmin.rpc('add_profile_credits_with_transaction', {
           user_uuid: userId,
           credit_delta: credits,
           external_ref: externalReference,
           transaction_type: 'credit_purchase',
+        })
+
+        await supabaseAdmin.from('analytics_events').insert({
+          user_id: userId,
+          event_name: 'credits_purchased',
+          metadata: { credits, source: 'stripe' },
         })
       }
 
@@ -152,7 +140,7 @@ export async function POST(req: Request) {
   }
 
   /* =====================================================
-     ATUALIZAÇÃO / CANCELAMENTO DE ASSINATURA
+     ATUALIZAÇÃO / CANCELAMENTO
   ===================================================== */
   if (
     event.type === 'customer.subscription.updated' ||
@@ -160,36 +148,26 @@ export async function POST(req: Request) {
   ) {
     const subscription = event.data.object as Stripe.Subscription
     const userId = subscription.metadata?.user_id
-
-    if (!userId) {
-      console.error('[stripe-webhook] subscription sem user_id')
-      return NextResponse.json({ received: true })
-    }
-
-    const stripeCustomerId =
-      typeof subscription.customer === 'string'
-        ? subscription.customer
-        : subscription.customer?.id ?? null
+    if (!userId) return NextResponse.json({ received: true })
 
     const isActive =
       subscription.status === 'active' ||
       subscription.status === 'trialing'
 
     const rawPlan = subscription.metadata?.plan
-    const plan: AllowedPlan | null =
-      ALLOWED_PLANS.includes(rawPlan as AllowedPlan)
-        ? (rawPlan as AllowedPlan)
-        : null
+    const plan = rawPlan ? PLAN_MAP[rawPlan] : null
 
-    await supabaseAdmin
-      .from('profiles')
-      .update({
-        current_plan_id: isActive && plan ? plan : 'free',
-        subscription_status: subscription.status,
-        has_active_plan: isActive,
-        stripe_customer_id: stripeCustomerId,
-      })
-      .eq('id', userId)
+    await supabaseAdmin.from('profiles').update({
+      current_plan_id: isActive && plan ? plan : 'free',
+      subscription_status: subscription.status,
+      has_active_plan: isActive,
+    }).eq('id', userId)
+
+    await supabaseAdmin.from('analytics_events').insert({
+      user_id: userId,
+      event_name: isActive ? 'subscription_updated' : 'subscription_canceled',
+      metadata: { plan, status: subscription.status },
+    })
   }
 
   return NextResponse.json({ received: true })
