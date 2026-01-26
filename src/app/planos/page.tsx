@@ -1,18 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import {
-  Eye,
-  Lock,
-  Check,
-  X,
-  Shield,
-  Zap,
-  Crown,
-  Star,
-  AlertTriangle,
-  ChevronDown,
-} from 'lucide-react'
+import { Eye, Lock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 /**
@@ -20,13 +9,17 @@ import { useRouter } from 'next/navigation'
  * 👉 NÃO são IDs do banco
  * 👉 Webhook faz o mapeamento
  */
-type FrontPlanId =
+type SubscriptionFrontPlanId =
   | 'premium_mensal'
   | 'premium_anual'
   | 'premium_plus'
+
+type CreditFrontPlanId =
   | 'credits_3'
   | 'credits_10'
   | 'credits_25'
+
+type FrontPlanId = SubscriptionFrontPlanId | CreditFrontPlanId
 
 type PlanRecord = {
   id: string
@@ -101,18 +94,15 @@ export default function PlanosPage() {
   const premiumMensal = resolvePlan('premium_mensal')
   const premiumAnual = resolvePlan('premium_anual')
   const premiumPlus = resolvePlan('premium_plus')
-  const credits3 = resolvePlan('credits_3')
-  const credits10 = resolvePlan('credits_10')
-  const credits25 = resolvePlan('credits_25')
 
   /* ======================================================
-     CHECKOUT (com metadata segura)
+     CHECKOUT
      ====================================================== */
   const startCheckout = async (
     payload:
-      | { mode: 'subscription'; planId: FrontPlanId }
-      | { mode: 'payment'; creditPackId: FrontPlanId },
-    key: string
+      | { mode: 'subscription'; planId: SubscriptionFrontPlanId }
+      | { mode: 'payment'; creditPackId: CreditFrontPlanId },
+    key: FrontPlanId
   ) => {
     setLoadingCheckout(key)
 
@@ -147,7 +137,7 @@ export default function PlanosPage() {
      ====================================================== */
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="max-w-7xl mx-auto px-4 py-10">
+      <div className="max-w-5xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-3 mb-3">
@@ -160,9 +150,9 @@ export default function PlanosPage() {
           </p>
         </div>
 
-        {/* PLANOS */}
+        {/* Planos */}
         <div className="grid md:grid-cols-3 gap-6 mb-20">
-          {/* PREMIUM MENSAL */}
+          {/* Premium Mensal */}
           <div className="border border-[#D4AF37]/30 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-[#D4AF37] mb-2">
               Premium Mensal
@@ -191,7 +181,7 @@ export default function PlanosPage() {
             </button>
           </div>
 
-          {/* PREMIUM ANUAL */}
+          {/* Premium Anual */}
           <div className="border-4 border-[#FFD700] rounded-2xl p-6 scale-105">
             <h3 className="text-xl font-bold text-[#FFD700] mb-2">
               Premium Anual
@@ -223,7 +213,7 @@ export default function PlanosPage() {
             </button>
           </div>
 
-          {/* PREMIUM PLUS */}
+          {/* Premium Plus */}
           <div className="border border-gray-500 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-gray-300 mb-2">
               Premium Plus
@@ -253,7 +243,7 @@ export default function PlanosPage() {
           </div>
         </div>
 
-        {/* VOLTAR */}
+        {/* Voltar */}
         <div className="text-center">
           <button
             onClick={() => router.back()}
