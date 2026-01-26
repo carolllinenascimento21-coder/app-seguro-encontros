@@ -1,53 +1,47 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import Stripe from 'stripe'
 
-import {
-  CreditPackId,
-  SubscriptionPlanId,
-  creditPackEnvById,
-  creditPackAmounts,
-  getSiteUrl,
-  subscriptionPriceEnvByPlan,
-} from '@/lib/billing'
 import { getStripeClient } from '@/lib/stripe'
-import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
-
-type CheckoutRequest =
-  | { mode: 'subscription'; planId: string }
-  | { mode: 'payment'; creditPackId: CreditPackId }
+import { getSupabasePublicEnv, getMissingSupabaseEnvDetails } from '@/lib/env'
+import { getSiteUrl } from '@/lib/billing'
 
 /**
- * 🔁 Mapeamento frontend (pt-BR) → backend (padrão do sistema)
- * ⚠️ NÃO altera banco, NÃO altera webhook
+ * 🔐 Normalização de planos
+ * Frontend → padrão interno / ENV
  */
-const PLAN_ID_MAP: Record<string, SubscriptionPlanId> = {
+const PLAN_ALIAS_MAP: Record<string, 'premium_monthly' | 'premium_yearly' | 'premium_plus'> = {
   premium_mensal: 'premium_monthly',
   premium_anual: 'premium_yearly',
   premium_plus: 'premium_plus',
+
+  // defensivo
+  premium_monthly: 'premium_monthly',
+  premium_yearly: 'premium_yearly',
 }
 
-function getPriceId(mode: CheckoutRequest['mode'], id: string) {
-  if (mode === 'subscription') {
-    return process.env[
-      subscriptionPriceEnvByPlan[id as SubscriptionPlanId] as string
-    ]
-  }
-
-  return process.env[creditPackEnvById[id as CreditPackId] as string]
+/**
+ * 🔐 ENV por plano normalizado
+ */
+const PLAN_PRICE_ENV: Record<
+  'premium_monthly' | 'premium_yearly' | 'premium_plus',
+  string
+> = {
+  premium_monthly: 'STRIPE_PRICE_PREMIUM_MONTHLY',
+  premium_yearly: 'STRIPE_PRICE_PREMIUM_YEARLY',
+  premium_plus: 'STRIPE_PRICE_PREMIUM_PLUS',
 }
 
 export async function POST(req: Request) {
-  /* ────────────────────────────────────────────────
+  /* =====================================================
      1️⃣ Validação de ambiente Supabase
-     ──────────────────────────────────────────────── */
-  let supabaseEnv
+  ===================================================== */
   try {
-    supabaseEnv = getSupabasePublicEnv('api/stripe/checkout')
+    getSupabasePublicEnv('api/stripe/checkout')
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
-      console.error(envError.message)
       return NextResponse.json(
         { error: envError.message },
         { status: envError.status }
@@ -56,29 +50,10 @@ export async function POST(req: Request) {
     throw error
   }
 
-  if (!supabaseEnv) {
-    return NextResponse.json(
-      { error: 'Supabase público não configurado' },
-      { status: 503 }
-    )
-  }
-
-  /* ────────────────────────────────────────────────
+  /* =====================================================
      2️⃣ Autenticação
-     ──────────────────────────────────────────────── */
+  ===================================================== */
   const supabase = createRouteHandlerClient({ cookies })
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    return NextResponse.json(
-      { error: 'Usuária não autenticada' },
-      { status: 401 }
-    )
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -90,56 +65,54 @@ export async function POST(req: Request) {
     )
   }
 
-  /* ────────────────────────────────────────────────
+  /* =====================================================
      3️⃣ Payload
-     ──────────────────────────────────────────────── */
-  let body: CheckoutRequest
+  ===================================================== */
+  let body: { mode: 'subscription'; planId: string }
+
   try {
     body = await req.json()
-  } catch (error) {
-    console.error('Erro ao ler payload do checkout', error)
-    return NextResponse.json({ error: 'Payload inválido' }, { status: 400 })
-  }
-
-  if (
-    (body.mode === 'subscription' && !(body as any).planId) ||
-    (body.mode === 'payment' && !(body as any).creditPackId)
-  ) {
+  } catch {
     return NextResponse.json(
-      { error: 'Dados incompletos para checkout' },
+      { error: 'Payload inválido' },
       { status: 400 }
     )
   }
 
-  /* ────────────────────────────────────────────────
-     4️⃣ Resolver ID real do plano
-     ──────────────────────────────────────────────── */
-  const resolvedId =
-    body.mode === 'subscription'
-      ? PLAN_ID_MAP[(body as any).planId]
-      : (body as any).creditPackId
+  if (body.mode !== 'subscription' || !body.planId) {
+    return NextResponse.json(
+      { error: 'Dados de checkout inválidos' },
+      { status: 400 }
+    )
+  }
 
-  if (!resolvedId) {
-    console.error('Plano inválido recebido:', body)
+  /* =====================================================
+     4️⃣ Normaliza plano
+  ===================================================== */
+  const normalizedPlan = PLAN_ALIAS_MAP[body.planId]
+
+  if (!normalizedPlan) {
+    console.error('[checkout] plano inválido:', body.planId)
     return NextResponse.json(
       { error: 'Plano inválido' },
       { status: 400 }
     )
   }
 
-  const priceId = getPriceId(body.mode, resolvedId)
+  const priceEnv = PLAN_PRICE_ENV[normalizedPlan]
+  const priceId = process.env[priceEnv]
 
   if (!priceId) {
-    console.error('Preço não configurado para:', resolvedId)
+    console.error('[checkout] ENV ausente:', priceEnv)
     return NextResponse.json(
-      { error: 'Configuração de preços ausente' },
+      { error: 'Preço não configurado no ambiente' },
       { status: 500 }
     )
   }
 
-  /* ────────────────────────────────────────────────
-     5️⃣ Stripe Checkout
-     ──────────────────────────────────────────────── */
+  /* =====================================================
+     5️⃣ Stripe
+  ===================================================== */
   const stripe = getStripeClient()
   if (!stripe) {
     return NextResponse.json(
@@ -149,12 +122,10 @@ export async function POST(req: Request) {
   }
 
   const siteUrl = getSiteUrl()
-  const successUrl = `${siteUrl}/planos?status=success`
-  const cancelUrl = `${siteUrl}/planos?status=cancel`
 
   try {
-    const checkoutSession = await stripe.checkout.sessions.create({
-      mode: body.mode,
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
       line_items: [
         {
           price: priceId,
@@ -162,35 +133,23 @@ export async function POST(req: Request) {
         },
       ],
       customer_email: user.email ?? undefined,
-      client_reference_id: user.id,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata:
-        body.mode === 'subscription'
-          ? {
-              user_id: user.id,
-              plan: resolvedId,
-            }
-          : {
-              user_id: user.id,
-              credits: String(
-                creditPackAmounts[(body as any).creditPackId]
-              ),
-            },
-      subscription_data:
-        body.mode === 'subscription'
-          ? {
-              metadata: {
-                user_id: user.id,
-                plan: resolvedId,
-              },
-            }
-          : undefined,
+      success_url: `${siteUrl}/planos?status=success`,
+      cancel_url: `${siteUrl}/planos?status=cancel`,
+      metadata: {
+        user_id: user.id,
+        plan: normalizedPlan,
+      },
+      subscription_data: {
+        metadata: {
+          user_id: user.id,
+          plan: normalizedPlan,
+        },
+      },
     })
 
-    return NextResponse.json({ url: checkoutSession.url })
+    return NextResponse.json({ url: session.url })
   } catch (error) {
-    console.error('Erro ao criar sessão Stripe', error)
+    console.error('[checkout] erro stripe:', error)
     return NextResponse.json(
       { error: 'Erro ao iniciar checkout' },
       { status: 500 }
