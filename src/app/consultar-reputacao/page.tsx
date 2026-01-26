@@ -1,5 +1,6 @@
 'use client'
 
+import { trackEvent } from '@/lib/track'
 import { useState } from 'react'
 import {
   Search,
