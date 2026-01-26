@@ -22,25 +22,19 @@ export default async function DetalhesReputacao({ params }: PageProps) {
 
   if (!user) redirect('/login')
 
-  /* 2️⃣ Buscar profile */
+  /* 2️⃣ Perfil */
   const { data: profile } = await supabase
     .from('profiles')
-    .select('has_active_plan, current_plan_id, free_queries_used')
+    .select('has_active_plan, current_plan_id')
     .eq('id', user.id)
     .single()
 
   if (!profile) redirect('/login')
 
-  const freeQueriesUsed = Number(profile.free_queries_used ?? 0)
   const isPremium = canAccessFeature(profile, 'VIEW_RESULT_FULL')
   const isFree = !isPremium
 
-  /* 3️⃣ FREE: só pode ver resumo UMA VEZ */
-  if (isFree && freeQueriesUsed >= 1) {
-    redirect('/planos?from=free-detail-limit')
-  }
-
-  /* 4️⃣ Buscar dados (admin) */
+  /* 3️⃣ Buscar avaliação (admin) */
   const supabaseAdmin = getSupabaseAdminClient()
 
   const { data: avaliacao, error } = await supabaseAdmin
@@ -53,7 +47,7 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     redirect('/consultar-reputacao')
   }
 
-  /* 5️⃣ Média segura */
+  /* 4️⃣ Média segura */
   const valores = [
     avaliacao.comportamento,
     avaliacao.seguranca_emocional,
@@ -67,7 +61,9 @@ export default async function DetalhesReputacao({ params }: PageProps) {
       ? (valores.reduce((a, b) => a + b, 0) / valores.length).toFixed(1)
       : '—'
 
-  /* 6️⃣ FREE → RESUMO (1x) */
+  /* =========================================================
+     🔒 FREE → SOMENTE RESUMO (SEM CONSUMIR LIMITE)
+     ========================================================= */
   if (isFree) {
     return (
       <div className="min-h-screen bg-black pb-20">
@@ -133,7 +129,9 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     )
   }
 
-  /* 7️⃣ PREMIUM → DETALHE COMPLETO */
+  /* =========================================================
+     ⭐ PREMIUM → DETALHE COMPLETO
+     ========================================================= */
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto text-white">
