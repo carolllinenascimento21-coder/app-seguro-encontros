@@ -13,7 +13,10 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 /**
  * 🔐 Padrão interno do sistema (NÃO mudar banco)
  */
-const PLAN_MAP: Record<string, 'premium_monthly' | 'premium_yearly' | 'premium_plus'> = {
+const PLAN_MAP: Record<
+  string,
+  'premium_monthly' | 'premium_yearly' | 'premium_plus'
+> = {
   // aliases frontend (pt-BR)
   premium_mensal: 'premium_monthly',
   premium_anual: 'premium_yearly',
@@ -67,9 +70,19 @@ export async function POST(req: Request) {
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
-      return NextResponse.json({ error: envError.message }, { status: envError.status })
+      return NextResponse.json(
+        { error: envError.message },
+        { status: envError.status }
+      )
     }
     throw error
+  }
+
+  if (!supabaseAdmin) {
+    return NextResponse.json(
+      { error: 'Supabase admin indisponível' },
+      { status: 503 }
+    )
   }
 
   /* =====================================================
@@ -79,7 +92,10 @@ export async function POST(req: Request) {
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.metadata?.user_id
 
-    if (!userId) return NextResponse.json({ received: true })
+    if (!userId) {
+      console.warn('[stripe-webhook] checkout sem user_id')
+      return NextResponse.json({ received: true })
+    }
 
     const stripeCustomerId =
       typeof session.customer === 'string'
@@ -96,20 +112,27 @@ export async function POST(req: Request) {
         return NextResponse.json({ received: true })
       }
 
-      await supabaseAdmin.from('profiles').update({
-        current_plan_id: plan,
-        subscription_status: 'active',
-        has_active_plan: true,
-        stripe_customer_id: stripeCustomerId,
-        free_queries_used: 0,
-      }).eq('id', userId)
+      await supabaseAdmin
+        .from('profiles')
+        .update({
+          current_plan_id: plan,
+          subscription_status: 'active',
+          has_active_plan: true,
+          stripe_customer_id: stripeCustomerId,
+          free_queries_used: 0,
+        })
+        .eq('id', userId)
 
-      // 📊 analytics
-      await supabaseAdmin.from('analytics_events').insert({
-        user_id: userId,
-        event_name: 'subscription_activated',
-        metadata: { plan, source: 'stripe' },
-      })
+      // 📊 analytics (não bloqueante)
+      try {
+        await supabaseAdmin.from('analytics_events').insert({
+          user_id: userId,
+          event_name: 'subscription_activated',
+          metadata: { plan, source: 'stripe' },
+        })
+      } catch (e) {
+        console.warn('[analytics] falha ao registrar subscription_activated')
+      }
 
       return NextResponse.json({ received: true })
     }
@@ -128,11 +151,15 @@ export async function POST(req: Request) {
           transaction_type: 'credit_purchase',
         })
 
-        await supabaseAdmin.from('analytics_events').insert({
-          user_id: userId,
-          event_name: 'credits_purchased',
-          metadata: { credits, source: 'stripe' },
-        })
+        try {
+          await supabaseAdmin.from('analytics_events').insert({
+            user_id: userId,
+            event_name: 'credits_purchased',
+            metadata: { credits, source: 'stripe' },
+          })
+        } catch (e) {
+          console.warn('[analytics] falha ao registrar credits_purchased')
+        }
       }
 
       return NextResponse.json({ received: true })
@@ -148,7 +175,16 @@ export async function POST(req: Request) {
   ) {
     const subscription = event.data.object as Stripe.Subscription
     const userId = subscription.metadata?.user_id
-    if (!userId) return NextResponse.json({ received: true })
+
+    if (!userId) {
+      console.warn('[stripe-webhook] subscription sem user_id')
+      return NextResponse.json({ received: true })
+    }
+
+    const stripeCustomerId =
+      typeof subscription.customer === 'string'
+        ? subscription.customer
+        : subscription.customer?.id ?? null
 
     const isActive =
       subscription.status === 'active' ||
@@ -157,17 +193,27 @@ export async function POST(req: Request) {
     const rawPlan = subscription.metadata?.plan
     const plan = rawPlan ? PLAN_MAP[rawPlan] : null
 
-    await supabaseAdmin.from('profiles').update({
-      current_plan_id: isActive && plan ? plan : 'free',
-      subscription_status: subscription.status,
-      has_active_plan: isActive,
-    }).eq('id', userId)
+    await supabaseAdmin
+      .from('profiles')
+      .update({
+        current_plan_id: isActive && plan ? plan : 'free',
+        subscription_status: subscription.status,
+        has_active_plan: isActive,
+        stripe_customer_id: stripeCustomerId,
+      })
+      .eq('id', userId)
 
-    await supabaseAdmin.from('analytics_events').insert({
-      user_id: userId,
-      event_name: isActive ? 'subscription_updated' : 'subscription_canceled',
-      metadata: { plan, status: subscription.status },
-    })
+    try {
+      await supabaseAdmin.from('analytics_events').insert({
+        user_id: userId,
+        event_name: isActive
+          ? 'subscription_updated'
+          : 'subscription_canceled',
+        metadata: { plan, status: subscription.status },
+      })
+    } catch (e) {
+      console.warn('[analytics] falha ao registrar subscription update/cancel')
+    }
   }
 
   return NextResponse.json({ received: true })
