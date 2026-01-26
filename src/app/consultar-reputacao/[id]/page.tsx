@@ -31,11 +31,12 @@ export default async function DetalhesReputacao({ params }: PageProps) {
 
   if (!profile) redirect('/login')
 
+  const freeQueriesUsed = Number(profile.free_queries_used ?? 0)
   const isPremium = canAccessFeature(profile, 'VIEW_RESULT_FULL')
   const isFree = !isPremium
 
   /* 3️⃣ FREE: só pode ver resumo UMA VEZ */
-  if (isFree && (profile.free_queries_used ?? 0) >= 1) {
+  if (isFree && freeQueriesUsed >= 1) {
     redirect('/planos?from=free-detail-limit')
   }
 
@@ -71,13 +72,13 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     return (
       <div className="min-h-screen bg-black pb-20">
         <div className="px-4 pt-8 max-w-md mx-auto text-white">
-          <button
-            onClick={() => redirect('/consultar-reputacao')}
+          <a
+            href="/consultar-reputacao"
             className="text-gray-400 flex items-center gap-2 mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
             Voltar
-          </button>
+          </a>
 
           <h1 className="text-2xl font-bold mb-1">
             {avaliacao.nome || 'Nome não informado'}
@@ -95,14 +96,23 @@ export default async function DetalhesReputacao({ params }: PageProps) {
               <span className="text-4xl font-bold">{media}</span>
             </div>
 
-            <p className="text-center text-gray-400 text-sm">
-              Resumo gratuito — detalhes completos exigem plano
+            <p className="text-center text-gray-400 text-sm mt-2">
+              Este é um resumo público de segurança.
+              <br />
+              Informações detalhadas são exibidas apenas
+              para usuárias verificadas.
+            </p>
+
+            <p className="text-center text-[#EFD9A7] text-xs mt-3">
+              Mesmo quando o resumo parece neutro,
+              sinais importantes podem estar ocultos.
             </p>
           </div>
 
           <div className="border border-[#D4AF37] rounded-xl p-4 bg-black/40">
             <p className="text-sm text-[#EFD9A7] mb-3">
-              Para ver histórico completo, alertas e padrões recorrentes:
+              Proteja-se antes de se envolver.
+              Desbloqueie alertas e informações completas.
             </p>
 
             <a
@@ -111,6 +121,10 @@ export default async function DetalhesReputacao({ params }: PageProps) {
             >
               Ativar acesso seguro
             </a>
+
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              Pagamento seguro • Cancele quando quiser
+            </p>
           </div>
         </div>
 
