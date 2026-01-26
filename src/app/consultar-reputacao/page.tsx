@@ -64,6 +64,11 @@ export default function ConsultarReputacao() {
     try {
       setLoading(true)
 
+      trackEvent('search_attempt', 'frontend', {
+        nome: !!nome,
+        cidade: !!cidade,
+      })
+
       const params = new URLSearchParams()
       if (nome.trim()) params.set('nome', nome.trim())
       if (cidade.trim()) params.set('cidade', cidade.trim())
@@ -73,6 +78,9 @@ export default function ConsultarReputacao() {
 
       if (!res.ok && payload?.code === 'FREE_LIMIT_REACHED') {
         setBlocked(true)
+
+        trackEvent('search_blocked_free_limit', 'backend')
+
         return
       }
 
@@ -83,11 +91,29 @@ export default function ConsultarReputacao() {
 
       setBlocked(false)
       setResults(payload.results ?? [])
+
+      trackEvent('search_success', 'backend', {
+        results_count: payload.results?.length ?? 0,
+      })
     } catch {
       alert('Erro ao buscar reputação.')
     } finally {
       setLoading(false)
     }
+  }
+
+  /* ────────────────────────────────────────────────
+   * 🔗 Clique em resultado
+   * ──────────────────────────────────────────────── */
+  const handleOpen = (id: string) => {
+    if (blocked) {
+      trackEvent('click_result_blocked', 'frontend')
+      router.push('/planos')
+      return
+    }
+
+    trackEvent('open_reputation_detail', 'frontend', { id })
+    router.push(`/consultar-reputacao/${id}`)
   }
 
   return (
@@ -141,7 +167,10 @@ export default function ConsultarReputacao() {
                 </p>
 
                 <button
-                  onClick={() => router.push('/planos')}
+                  onClick={() => {
+                    trackEvent('cta_upgrade_from_search', 'frontend')
+                    router.push('/planos')
+                  }}
                   className="mt-4 flex items-center gap-2 bg-[#D4AF37] text-black font-bold px-4 py-2 rounded-lg"
                 >
                   <Crown className="w-4 h-4" />
@@ -158,9 +187,7 @@ export default function ConsultarReputacao() {
             <div
               key={r.id}
               className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5 cursor-pointer"
-              onClick={() =>
-                router.push(`/consultar-reputacao/${r.id}`)
-              }
+              onClick={() => handleOpen(r.id)}
             >
               <div className="flex justify-between mb-2">
                 <div>
