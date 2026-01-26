@@ -1,93 +1,137 @@
-'use client';
+import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Star, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react'
 
-import { useParams, useRouter } from 'next/navigation';
-import { Star, ArrowLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import Navbar from '@/components/custom/navbar';
-import { useEffect, useState } from 'react';
-import { getNegativeFlagLabel, getPositiveFlagLabel } from '@/lib/flags';
-export default function DetalhesReputacao() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const [avaliacao, setAvaliacao] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+import Navbar from '@/components/custom/navbar'
+import { canAccessFeature } from '@/lib/permissions'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import { getNegativeFlagLabel, getPositiveFlagLabel } from '@/lib/flags'
 
-  useEffect(() => {
-    const carregar = async () => {
-      try {
-        const res = await fetch(`/api/reputation/${id}`);
+interface PageProps {
+  params: { id: string }
+}
 
-        if (res.status === 401) {
-          router.push('/login');
-          return;
-        }
+export default async function DetalhesReputacao({ params }: PageProps) {
+  const supabase = createServerComponentClient({ cookies })
 
-        if (!res.ok) {
-          console.error('Erro ao carregar avaliação', await res.text());
-          setAvaliacao(null);
-          return;
-        }
+  /* 1️⃣ Usuária autenticada */
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-        const payload = await res.json();
-        if (payload.allowed === false) {
-          router.push('/planos');
-          return;
-        }
+  if (!user) redirect('/login')
 
-        setAvaliacao(payload.data ?? null);
-      } catch (err) {
-        console.error(err);
-        setAvaliacao(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+  /* 2️⃣ Buscar profile */
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('has_active_plan, current_plan_id, free_queries_used')
+    .eq('id', user.id)
+    .single()
 
-    carregar();
-  }, [id, router]);
+  if (!profile) redirect('/login')
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-gray-400">
-        Carregando...
-      </div>
-    );
+  const isPremium = canAccessFeature(profile, 'VIEW_RESULT_FULL')
+  const isFree = !isPremium
+
+  /* 3️⃣ FREE: só pode ver resumo UMA VEZ */
+  if (isFree && (profile.free_queries_used ?? 0) >= 1) {
+    redirect('/planos?from=free-detail-limit')
   }
 
-  if (!avaliacao) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center">
-        <p className="text-white mb-4">Perfil não encontrado</p>
-        <button
-          onClick={() => router.back()}
-          className="text-[#D4AF37]"
-        >
-          Voltar
-        </button>
-      </div>
-    );
+  /* 4️⃣ Buscar dados (admin) */
+  const supabaseAdmin = getSupabaseAdminClient()
+
+  const { data: avaliacao, error } = await supabaseAdmin
+    .from('reputacao_agregada')
+    .select('*')
+    .eq('id', params.id)
+    .single()
+
+  if (error || !avaliacao) {
+    redirect('/consultar-reputacao')
   }
+
+  /* 5️⃣ Média segura */
+  const valores = [
+    avaliacao.comportamento,
+    avaliacao.seguranca_emocional,
+    avaliacao.respeito,
+    avaliacao.carater,
+    avaliacao.confianca,
+  ].filter((v: number | null) => typeof v === 'number') as number[]
 
   const media =
-    (
-      (avaliacao.comportamento +
-        avaliacao.seguranca_emocional +
-        avaliacao.respeito +
-        avaliacao.carater +
-        avaliacao.confianca) / 5
-    ).toFixed(1);
+    valores.length > 0
+      ? (valores.reduce((a, b) => a + b, 0) / valores.length).toFixed(1)
+      : '—'
 
+  /* 6️⃣ FREE → RESUMO (1x) */
+  if (isFree) {
+    return (
+      <div className="min-h-screen bg-black pb-20">
+        <div className="px-4 pt-8 max-w-md mx-auto text-white">
+          <button
+            onClick={() => redirect('/consultar-reputacao')}
+            className="text-gray-400 flex items-center gap-2 mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Voltar
+          </button>
+
+          <h1 className="text-2xl font-bold mb-1">
+            {avaliacao.nome || 'Nome não informado'}
+          </h1>
+
+          {avaliacao.cidade && (
+            <p className="text-gray-400 text-sm mb-4">
+              {avaliacao.cidade}
+            </p>
+          )}
+
+          <div className="bg-[#1A1A1A] border border-[#D4AF37]/40 rounded-xl p-6 mb-4">
+            <div className="flex justify-center items-center gap-2 text-[#D4AF37] mb-2">
+              <Star className="w-8 h-8 fill-current" />
+              <span className="text-4xl font-bold">{media}</span>
+            </div>
+
+            <p className="text-center text-gray-400 text-sm">
+              Resumo gratuito — detalhes completos exigem plano
+            </p>
+          </div>
+
+          <div className="border border-[#D4AF37] rounded-xl p-4 bg-black/40">
+            <p className="text-sm text-[#EFD9A7] mb-3">
+              Para ver histórico completo, alertas e padrões recorrentes:
+            </p>
+
+            <a
+              href="/planos"
+              className="block text-center bg-[#D4AF37] text-black font-bold py-3 rounded-lg"
+            >
+              Ativar acesso seguro
+            </a>
+          </div>
+        </div>
+
+        <Navbar />
+      </div>
+    )
+  }
+
+  /* 7️⃣ PREMIUM → DETALHE COMPLETO */
   return (
     <div className="min-h-screen bg-black pb-20">
-      <div className="px-4 pt-8 max-w-md mx-auto">
-        <button
-          onClick={() => router.back()}
+      <div className="px-4 pt-8 max-w-md mx-auto text-white">
+        <a
+          href="/consultar-reputacao"
           className="text-gray-400 flex items-center gap-2 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
           Voltar
-        </button>
+        </a>
 
-        <h1 className="text-2xl font-bold text-white mb-1">
+        <h1 className="text-2xl font-bold mb-1">
           {avaliacao.nome || 'Nome não informado'}
         </h1>
 
@@ -112,7 +156,7 @@ export default function DetalhesReputacao() {
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-4">
             <div className="flex gap-2 text-red-400 font-bold mb-2">
               <AlertTriangle className="w-5 h-5" />
-              Pontos de atenção (Red Flags)
+              Pontos de atenção
             </div>
             <div className="flex flex-wrap gap-2">
               {avaliacao.flags_negative.map((f: string, i: number) => (
@@ -131,7 +175,7 @@ export default function DetalhesReputacao() {
           <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
             <div className="flex gap-2 text-green-400 font-bold mb-2">
               <CheckCircle2 className="w-5 h-5" />
-              Pontos positivos (Green Flags)
+              Pontos positivos
             </div>
             <div className="flex flex-wrap gap-2">
               {avaliacao.flags_positive.map((f: string, i: number) => (
@@ -149,5 +193,5 @@ export default function DetalhesReputacao() {
 
       <Navbar />
     </div>
-  );
+  )
 }
