@@ -10,23 +10,29 @@ export const dynamic = 'force-dynamic'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 
+/**
+ * Planos válidos reconhecidos pelo sistema
+ * (DEV DEFENSIVO: nunca confiar cegamente em metadata)
+ */
 const ALLOWED_PLANS = [
   'premium_monthly',
   'premium_plus',
   'premium_yearly',
-]
+] as const
+
+type AllowedPlan = (typeof ALLOWED_PLANS)[number]
 
 export async function POST(req: Request) {
   const signature = headers().get('stripe-signature')
 
   if (!signature || !webhookSecret) {
-    console.error('Webhook Stripe não configurado')
+    console.error('[stripe-webhook] assinatura ausente')
     return NextResponse.json({ error: 'Webhook não configurado' }, { status: 400 })
   }
 
   const stripe = getStripeClient()
   if (!stripe) {
-    console.error('Stripe não configurado')
+    console.error('[stripe-webhook] stripe client ausente')
     return NextResponse.json({ error: 'Stripe não configurado' }, { status: 500 })
   }
 
@@ -37,17 +43,20 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro desconhecido'
-    console.error('Erro ao validar webhook Stripe', message)
+    console.error('[stripe-webhook] assinatura inválida', message)
     return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 })
   }
 
-  if (
-    ![
-      'checkout.session.completed',
-      'customer.subscription.updated',
-      'customer.subscription.deleted',
-    ].includes(event.type)
-  ) {
+  /**
+   * Ignora eventos que não impactam billing/permissão
+   */
+  const HANDLED_EVENTS = [
+    'checkout.session.completed',
+    'customer.subscription.updated',
+    'customer.subscription.deleted',
+  ]
+
+  if (!HANDLED_EVENTS.includes(event.type)) {
     return NextResponse.json({ received: true })
   }
 
@@ -57,13 +66,19 @@ export async function POST(req: Request) {
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
-      return NextResponse.json({ error: envError.message }, { status: envError.status })
+      return NextResponse.json(
+        { error: envError.message },
+        { status: envError.status }
+      )
     }
     throw error
   }
 
   if (!supabaseAdmin) {
-    return NextResponse.json({ error: 'Supabase admin indisponível' }, { status: 503 })
+    return NextResponse.json(
+      { error: 'Supabase admin indisponível' },
+      { status: 503 }
+    )
   }
 
   /* =====================================================
@@ -74,30 +89,36 @@ export async function POST(req: Request) {
     const userId = session.metadata?.user_id
 
     if (!userId) {
-      console.error('Checkout sem user_id')
+      console.error('[stripe-webhook] checkout sem user_id')
       return NextResponse.json({ received: true })
     }
 
     const stripeCustomerId =
       typeof session.customer === 'string'
         ? session.customer
-        : session.customer?.id
+        : session.customer?.id ?? null
 
     /* ---------- ASSINATURA ---------- */
     if (session.mode === 'subscription') {
-      const planFromMetadata = session.metadata?.plan
-      const plan = ALLOWED_PLANS.includes(planFromMetadata)
-        ? planFromMetadata
-        : 'free'
+      const rawPlan = session.metadata?.plan
+      const plan: AllowedPlan | null =
+        ALLOWED_PLANS.includes(rawPlan as AllowedPlan)
+          ? (rawPlan as AllowedPlan)
+          : null
+
+      if (!plan) {
+        console.error('[stripe-webhook] plano inválido na metadata', rawPlan)
+        return NextResponse.json({ received: true })
+      }
 
       await supabaseAdmin
         .from('profiles')
         .update({
-          plan,
           current_plan_id: plan,
           subscription_status: 'active',
           has_active_plan: true,
-          stripe_customer_id: stripeCustomerId ?? null,
+          stripe_customer_id: stripeCustomerId,
+          free_queries_used: 0, // reset defensivo
         })
         .eq('id', userId)
 
@@ -141,32 +162,32 @@ export async function POST(req: Request) {
     const userId = subscription.metadata?.user_id
 
     if (!userId) {
-      console.error('Assinatura sem user_id')
+      console.error('[stripe-webhook] subscription sem user_id')
       return NextResponse.json({ received: true })
     }
 
     const stripeCustomerId =
       typeof subscription.customer === 'string'
         ? subscription.customer
-        : subscription.customer?.id
+        : subscription.customer?.id ?? null
 
     const isActive =
       subscription.status === 'active' ||
       subscription.status === 'trialing'
 
-    const planFromMetadata = subscription.metadata?.plan
-    const plan = ALLOWED_PLANS.includes(planFromMetadata)
-      ? planFromMetadata
-      : 'free'
+    const rawPlan = subscription.metadata?.plan
+    const plan: AllowedPlan | null =
+      ALLOWED_PLANS.includes(rawPlan as AllowedPlan)
+        ? (rawPlan as AllowedPlan)
+        : null
 
     await supabaseAdmin
       .from('profiles')
       .update({
-        plan: isActive ? plan : 'free',
-        current_plan_id: isActive ? plan : 'free',
+        current_plan_id: isActive && plan ? plan : 'free',
         subscription_status: subscription.status,
         has_active_plan: isActive,
-        stripe_customer_id: stripeCustomerId ?? null,
+        stripe_customer_id: stripeCustomerId,
       })
       .eq('id', userId)
   }
