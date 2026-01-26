@@ -20,22 +20,30 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login')
+  if (!user) {
+    redirect('/login')
+  }
 
   /* 2️⃣ Perfil */
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('has_active_plan, current_plan_id')
     .eq('id', user.id)
     .single()
 
-  if (!profile) redirect('/login')
+  if (profileError || !profile) {
+    redirect('/login')
+  }
 
   const isPremium = canAccessFeature(profile, 'VIEW_RESULT_FULL')
   const isFree = !isPremium
 
   /* 3️⃣ Buscar avaliação (admin) */
   const supabaseAdmin = getSupabaseAdminClient()
+
+  if (!supabaseAdmin) {
+    redirect('/consultar-reputacao')
+  }
 
   const { data: avaliacao, error } = await supabaseAdmin
     .from('reputacao_agregada')
@@ -62,7 +70,7 @@ export default async function DetalhesReputacao({ params }: PageProps) {
       : '—'
 
   /* =========================================================
-     🔒 FREE → SOMENTE RESUMO (SEM CONSUMIR LIMITE)
+     🔒 FREE → SOMENTE RESUMO
      ========================================================= */
   if (isFree) {
     return (
