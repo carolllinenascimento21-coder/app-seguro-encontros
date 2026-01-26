@@ -14,45 +14,59 @@ import { getStripeClient } from '@/lib/stripe'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 type CheckoutRequest =
-  | { mode: 'subscription'; planId: SubscriptionPlanId }
+  | { mode: 'subscription'; planId: string }
   | { mode: 'payment'; creditPackId: CreditPackId }
+
+/**
+ * 🔁 Normaliza IDs amigáveis (frontend) → IDs internos (billing)
+ */
+function normalizePlanId(planId: string): SubscriptionPlanId | null {
+  const map: Record<string, SubscriptionPlanId> = {
+    premium_mensal: 'premium_monthly',
+    premium_anual: 'premium_yearly',
+    premium_plus: 'premium_plus',
+
+    // defensivo
+    premium_monthly: 'premium_monthly',
+    premium_yearly: 'premium_yearly',
+  }
+
+  return map[planId] ?? null
+}
 
 function getPriceId(mode: CheckoutRequest['mode'], id: string) {
   if (mode === 'subscription') {
-    return process.env[subscriptionPriceEnvByPlan[id as SubscriptionPlanId] as string]
+    const normalized = normalizePlanId(id)
+    if (!normalized) return null
+
+    return process.env[
+      subscriptionPriceEnvByPlan[normalized] as string
+    ]
   }
-  return process.env[creditPackEnvById[id as CreditPackId] as string]
+
+  return process.env[
+    creditPackEnvById[id as CreditPackId] as string
+  ]
 }
 
 export async function POST(req: Request) {
-  let supabaseEnv
   try {
-    supabaseEnv = getSupabasePublicEnv('api/stripe/checkout')
+    getSupabasePublicEnv('api/stripe/checkout')
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
-      console.error(envError.message)
-      return NextResponse.json({ error: envError.message }, { status: envError.status })
+      return NextResponse.json(
+        { error: envError.message },
+        { status: envError.status }
+      )
     }
     throw error
-  }
-
-  if (!supabaseEnv) {
-    return NextResponse.json(
-      { error: 'Supabase público não configurado' },
-      { status: 503 }
-    )
   }
 
   const supabase = createRouteHandlerClient({ cookies })
   const {
     data: { session },
-    error: sessionError,
   } = await supabase.auth.getSession()
-
-  if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
-    return NextResponse.json({ error: 'Erro ao carregar sessão' }, { status: 401 })
-  }
 
   if (!session) {
     return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
@@ -60,64 +74,52 @@ export async function POST(req: Request) {
 
   const {
     data: { user },
-    error: authError,
   } = await supabase.auth.getUser()
 
-  if (authError?.code === 'AuthSessionMissingError' || authError || !user) {
+  if (!user) {
     return NextResponse.json({ error: 'Usuária não autenticada' }, { status: 401 })
   }
 
   let body: CheckoutRequest
   try {
     body = await req.json()
-  } catch (error) {
-    console.error('Erro ao ler payload do checkout', error)
+  } catch {
     return NextResponse.json({ error: 'Payload inválido' }, { status: 400 })
-  }
-
-  if (
-    (body.mode === 'subscription' && !body.planId) ||
-    (body.mode === 'payment' && !body.creditPackId)
-  ) {
-    return NextResponse.json({ error: 'Dados incompletos para checkout' }, { status: 400 })
   }
 
   const priceId = getPriceId(
     body.mode,
-    body.mode === 'subscription' ? body.planId : body.creditPackId
+    body.mode === 'subscription'
+      ? body.planId
+      : body.creditPackId
   )
 
   if (!priceId) {
-    console.error('Preço não configurado para', body)
-    return NextResponse.json({ error: 'Configuração de preços ausente' }, { status: 500 })
-  }
-
-  const siteUrl = getSiteUrl()
-  const successUrl = `${siteUrl}/planos?status=success`
-  const cancelUrl = `${siteUrl}/planos?status=cancel`
-
-  const stripe = getStripeClient()
-
-  if (!stripe) {
+    console.error('Preço não encontrado para payload:', body)
     return NextResponse.json(
-      { error: 'Stripe não configurado. Verifique STRIPE_SECRET_KEY.' },
+      { error: 'Plano não configurado no Stripe' },
       { status: 500 }
     )
   }
 
+  const stripe = getStripeClient()
+  if (!stripe) {
+    return NextResponse.json(
+      { error: 'Stripe não configurado' },
+      { status: 500 }
+    )
+  }
+
+  const siteUrl = getSiteUrl()
+
   try {
-    const session = await stripe.checkout.sessions.create({
+    const checkoutSession = await stripe.checkout.sessions.create({
       mode: body.mode,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       customer_email: user.email ?? undefined,
       client_reference_id: user.id,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+      success_url: `${siteUrl}/planos?status=success`,
+      cancel_url: `${siteUrl}/planos?status=cancel`,
       metadata:
         body.mode === 'subscription'
           ? {
@@ -139,9 +141,12 @@ export async function POST(req: Request) {
           : undefined,
     })
 
-    return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: checkoutSession.url })
   } catch (error) {
-    console.error('Erro ao criar sessão do Stripe', error)
-    return NextResponse.json({ error: 'Erro ao iniciar checkout' }, { status: 500 })
+    console.error('Erro Stripe:', error)
+    return NextResponse.json(
+      { error: 'Erro ao iniciar checkout' },
+      { status: 500 }
+    )
   }
 }
