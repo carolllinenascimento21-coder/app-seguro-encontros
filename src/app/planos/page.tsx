@@ -5,21 +5,20 @@ import { Eye, Lock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 /**
- * IDs amigáveis (frontend)
- * 👉 NÃO são IDs do banco
- * 👉 Webhook faz o mapeamento
+ * IDs CANÔNICOS
+ * 👉 Iguais ao banco, backend e Stripe
  */
-type SubscriptionFrontPlanId =
-  | 'premium_mensal'
-  | 'premium_anual'
+type SubscriptionPlanId =
+  | 'premium_monthly'
+  | 'premium_yearly'
   | 'premium_plus'
 
-type CreditFrontPlanId =
+type CreditPlanId =
   | 'credits_3'
   | 'credits_10'
   | 'credits_25'
 
-type FrontPlanId = SubscriptionFrontPlanId | CreditFrontPlanId
+type FrontPlanId = SubscriptionPlanId | CreditPlanId
 
 type PlanRecord = {
   id: string
@@ -42,24 +41,21 @@ const formatPrice = (
   if (formatted) return formatted
   if (price == null || Number.isNaN(price)) return null
 
-  const normalized =
-    Number.isInteger(price) && price >= 100 ? price / 100 : price
-
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: currency ?? 'BRL',
     minimumFractionDigits: 2,
-  }).format(normalized)
+  }).format(price)
 }
 
 export default function PlanosPage() {
   const router = useRouter()
-  const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null)
+  const [loadingCheckout, setLoadingCheckout] = useState<FrontPlanId | null>(null)
   const [plans, setPlans] = useState<PlanRecord[]>([])
   const [plansLoading, setPlansLoading] = useState(true)
 
   /* ======================================================
-     CARREGA PLANOS (Stripe → API)
+     CARREGA PLANOS
      ====================================================== */
   useEffect(() => {
     let mounted = true
@@ -83,16 +79,13 @@ export default function PlanosPage() {
   }, [])
 
   const resolvePlan = useMemo(
-    () => (key: string) =>
-      plans.find(plan => {
-        const keys = [plan.id, ...(plan.lookupKeys ?? [])].filter(Boolean)
-        return keys.includes(key)
-      }),
+    () => (id: string) =>
+      plans.find(p => p.id === id || p.lookupKeys?.includes(id)),
     [plans]
   )
 
-  const premiumMensal = resolvePlan('premium_mensal')
-  const premiumAnual = resolvePlan('premium_anual')
+  const premiumMonthly = resolvePlan('premium_monthly')
+  const premiumYearly = resolvePlan('premium_yearly')
   const premiumPlus = resolvePlan('premium_plus')
 
   /* ======================================================
@@ -100,8 +93,8 @@ export default function PlanosPage() {
      ====================================================== */
   const startCheckout = async (
     payload:
-      | { mode: 'subscription'; planId: SubscriptionFrontPlanId }
-      | { mode: 'payment'; creditPackId: CreditFrontPlanId },
+      | { mode: 'subscription'; planId: SubscriptionPlanId }
+      | { mode: 'payment'; creditPackId: CreditPlanId },
     key: FrontPlanId
   ) => {
     setLoadingCheckout(key)
@@ -159,23 +152,23 @@ export default function PlanosPage() {
             </h3>
             <p className="text-3xl font-bold mb-4">
               {formatPrice(
-                premiumMensal?.price,
-                premiumMensal?.priceFormatted,
-                premiumMensal?.currency
+                premiumMonthly?.price,
+                premiumMonthly?.priceFormatted,
+                premiumMonthly?.currency
               ) ?? 'R$ 9,90'}
             </p>
 
             <button
               onClick={() =>
                 startCheckout(
-                  { mode: 'subscription', planId: 'premium_mensal' },
-                  'premium_mensal'
+                  { mode: 'subscription', planId: 'premium_monthly' },
+                  'premium_monthly'
                 )
               }
-              disabled={loadingCheckout === 'premium_mensal'}
+              disabled={loadingCheckout === 'premium_monthly'}
               className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-xl disabled:opacity-60"
             >
-              {loadingCheckout === 'premium_mensal'
+              {loadingCheckout === 'premium_monthly'
                 ? 'Processando...'
                 : 'Assinar Mensal'}
             </button>
@@ -188,9 +181,9 @@ export default function PlanosPage() {
             </h3>
             <p className="text-3xl font-bold mb-1">
               {formatPrice(
-                premiumAnual?.price,
-                premiumAnual?.priceFormatted,
-                premiumAnual?.currency
+                premiumYearly?.price,
+                premiumYearly?.priceFormatted,
+                premiumYearly?.currency
               ) ?? 'R$ 79,90'}
             </p>
             <p className="text-sm text-[#FFD700] mb-4">
@@ -200,14 +193,14 @@ export default function PlanosPage() {
             <button
               onClick={() =>
                 startCheckout(
-                  { mode: 'subscription', planId: 'premium_anual' },
-                  'premium_anual'
+                  { mode: 'subscription', planId: 'premium_yearly' },
+                  'premium_yearly'
                 )
               }
-              disabled={loadingCheckout === 'premium_anual'}
+              disabled={loadingCheckout === 'premium_yearly'}
               className="w-full bg-[#FFD700] text-black font-bold py-3 rounded-xl disabled:opacity-60"
             >
-              {loadingCheckout === 'premium_anual'
+              {loadingCheckout === 'premium_yearly'
                 ? 'Processando...'
                 : 'Assinar Anual'}
             </button>
