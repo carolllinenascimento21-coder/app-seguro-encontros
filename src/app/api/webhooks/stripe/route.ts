@@ -10,16 +10,10 @@ export const dynamic = 'force-dynamic'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 
-type InternalPlan = 'premium_monthly' | 'premium_yearly' | 'premium_plus'
-
-/**
- * 🔐 Normalização de planos
- */
-const PLAN_MAP: Record<string, InternalPlan> = {
+const PLAN_MAP: Record<string, 'premium_monthly' | 'premium_yearly' | 'premium_plus'> = {
   premium_mensal: 'premium_monthly',
   premium_anual: 'premium_yearly',
   premium_plus: 'premium_plus',
-
   premium_monthly: 'premium_monthly',
   premium_yearly: 'premium_yearly',
 }
@@ -38,53 +32,34 @@ export async function POST(req: Request) {
   }
 
   const stripe = getStripeClient()
-  if (!stripe) {
-    return NextResponse.json({ error: 'Stripe não configurado' }, { status: 500 })
-  }
-
   const body = await req.text()
 
   let event: Stripe.Event
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Erro de assinatura'
-    return NextResponse.json({ error: message }, { status: 400 })
+    return NextResponse.json({ error: 'Assinatura inválida' }, { status: 400 })
   }
 
   if (!HANDLED_EVENTS.includes(event.type)) {
     return NextResponse.json({ received: true })
   }
 
-  let supabaseAdmin
-  try {
-    supabaseAdmin = getSupabaseAdminClient()
-  } catch (error) {
-    const envError = getMissingSupabaseEnvDetails(error)
-    if (envError) {
-      return NextResponse.json(
-        { error: envError.message },
-        { status: envError.status }
-      )
-    }
-    throw error
+  const supabaseAdmin = getSupabaseAdminClient()
+  if (!supabaseAdmin) {
+    return NextResponse.json({ error: 'Supabase indisponível' }, { status: 503 })
   }
 
-  /* ================================
-     CHECKOUT CONCLUÍDO
-  ================================= */
+  /* =====================================================
+     CHECKOUT FINALIZADO
+  ===================================================== */
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.metadata?.user_id
 
     if (!userId) return NextResponse.json({ received: true })
 
-    const stripeCustomerId =
-      typeof session.customer === 'string'
-        ? session.customer
-        : session.customer?.id ?? null
-
-    /* -------- ASSINATURA -------- */
+    /* ===== ASSINATURAS ===== */
     if (session.mode === 'subscription') {
       const rawPlan = session.metadata?.plan
       const plan = rawPlan ? PLAN_MAP[rawPlan] : null
@@ -97,25 +72,22 @@ export async function POST(req: Request) {
           current_plan_id: plan,
           subscription_status: 'active',
           has_active_plan: true,
-          stripe_customer_id: stripeCustomerId,
-          free_queries_used: 0,
+          stripe_customer_id: session.customer?.toString(),
         })
         .eq('id', userId)
 
       return NextResponse.json({ received: true })
     }
 
-    /* -------- CRÉDITOS -------- */
+    /* ===== CRÉDITOS ===== */
     if (session.mode === 'payment') {
       const credits = Number(session.metadata?.credits ?? 0)
-      const reference =
-        session.payment_intent?.toString() ?? session.id
 
       if (credits > 0) {
         await supabaseAdmin.rpc('add_profile_credits_with_transaction', {
           user_uuid: userId,
           credit_delta: credits,
-          external_ref: reference,
+          external_ref: session.payment_intent?.toString() ?? session.id,
           transaction_type: 'credit_purchase',
         })
       }
@@ -124,23 +96,22 @@ export async function POST(req: Request) {
     }
   }
 
-  /* ================================
-     UPDATE / CANCELAMENTO
-  ================================= */
+  /* =====================================================
+     CANCELAMENTO / UPDATE ASSINATURA
+  ===================================================== */
   if (
     event.type === 'customer.subscription.updated' ||
     event.type === 'customer.subscription.deleted'
   ) {
     const subscription = event.data.object as Stripe.Subscription
     const userId = subscription.metadata?.user_id
+
     if (!userId) return NextResponse.json({ received: true })
 
     const isActive =
-      subscription.status === 'active' ||
-      subscription.status === 'trialing'
+      subscription.status === 'active' || subscription.status === 'trialing'
 
-    const rawPlan = subscription.metadata?.plan
-    const plan = rawPlan ? PLAN_MAP[rawPlan] : null
+    const plan = PLAN_MAP[subscription.metadata?.plan ?? '']
 
     await supabaseAdmin
       .from('profiles')
