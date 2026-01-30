@@ -1,44 +1,59 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Coins } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
-type Entitlements = {
-  credits: number
-  hasActivePlan: boolean
-  currentPlan: string | null
+type CreditsState = {
+  balance: number
+  loading: boolean
 }
 
 export default function HeaderCredits() {
   const router = useRouter()
-  const [data, setData] = useState<Entitlements | null>(null)
+  const [state, setState] = useState<CreditsState>({
+    balance: 0,
+    loading: true,
+  })
 
   useEffect(() => {
-    const load = async () => {
+    let mounted = true
+
+    const loadCredits = async () => {
       try {
         const res = await fetch('/api/me/entitlements')
-        if (res.ok) {
-          const json = await res.json()
-          setData(json)
+        const data = await res.json()
+
+        if (mounted) {
+          setState({
+            balance: data?.credits ?? 0,
+            loading: false,
+          })
         }
-      } catch {}
+      } catch {
+        if (mounted) {
+          setState({ balance: 0, loading: false })
+        }
+      }
     }
-    load()
+
+    loadCredits()
+    return () => {
+      mounted = false
+    }
   }, [])
 
-  if (!data) return null
-
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <div className="flex items-center gap-1 text-[#D4AF37] font-semibold">
-        <Coins size={16} />
-        {data.credits} créditos
-      </div>
+    <div className="flex items-center gap-3 bg-black/60 border border-[#D4AF37]/40 rounded-xl px-4 py-2">
+      <Coins className="w-5 h-5 text-[#D4AF37]" />
+
+      <span className="text-sm text-white">
+        {state.loading ? 'Carregando…' : `${state.balance} créditos`}
+      </span>
 
       <button
         onClick={() => router.push('/planos')}
-        className="px-3 py-1 rounded-full border border-[#D4AF37]/40 hover:bg-[#D4AF37]/10 transition"
+        className="text-xs bg-[#D4AF37] text-black font-semibold px-3 py-1 rounded-lg hover:brightness-110"
       >
         Comprar
       </button>
