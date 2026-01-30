@@ -2,61 +2,29 @@
 
 import { useEffect, useState } from 'react'
 import { Coins } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-
-type CreditsState = {
-  balance: number
-  loading: boolean
-}
 
 export default function HeaderCredits() {
-  const router = useRouter()
-  const [state, setState] = useState<CreditsState>({
-    balance: 0,
-    loading: true,
-  })
+  const [credits, setCredits] = useState<number | null>(null)
 
   useEffect(() => {
-    let mounted = true
-
     const loadCredits = async () => {
-      try {
-        const res = await fetch('/api/me/entitlements')
-        const data = await res.json()
-
-        if (mounted) {
-          setState({
-            balance: data?.credits ?? 0,
-            loading: false,
-          })
-        }
-      } catch {
-        if (mounted) {
-          setState({ balance: 0, loading: false })
-        }
-      }
+      const res = await fetch('/api/me/credits')
+      if (!res.ok) return
+      const data = await res.json()
+      setCredits(data.balance ?? 0)
     }
 
     loadCredits()
-    return () => {
-      mounted = false
-    }
   }, [])
 
+  if (credits === null) return null
+
   return (
-    <div className="flex items-center gap-3 bg-black/60 border border-[#D4AF37]/40 rounded-xl px-4 py-2">
-      <Coins className="w-5 h-5 text-[#D4AF37]" />
-
-      <span className="text-sm text-white">
-        {state.loading ? 'Carregando…' : `${state.balance} créditos`}
+    <div className="flex items-center gap-2 bg-[#111] border border-[#D4AF37]/40 px-4 py-2 rounded-full">
+      <Coins className="w-4 h-4 text-[#D4AF37]" />
+      <span className="text-sm text-[#D4AF37] font-semibold">
+        {credits} créditos
       </span>
-
-      <button
-        onClick={() => router.push('/planos')}
-        className="text-xs bg-[#D4AF37] text-black font-semibold px-3 py-1 rounded-lg hover:brightness-110"
-      >
-        Comprar
-      </button>
     </div>
   )
 }
