@@ -2,14 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Eye, Lock, Zap, Crown, Shield } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 
 type SubscriptionPlanId =
   | 'premium_monthly'
   | 'premium_yearly'
   | 'premium_plus'
-
-type FrontPlanId = SubscriptionPlanId
 
 type PlanRecord = {
   id: string
@@ -35,8 +32,7 @@ const formatPrice = (
 }
 
 export default function PlanosPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState<FrontPlanId | null>(null)
+  const [loading, setLoading] = useState<SubscriptionPlanId | null>(null)
   const [plans, setPlans] = useState<PlanRecord[]>([])
 
   useEffect(() => {
@@ -56,9 +52,28 @@ export default function PlanosPage() {
   const premiumYearly = resolvePlan('premium_yearly')
   const premiumPlus = resolvePlan('premium_plus')
 
-  const goToCheckout = (planId: SubscriptionPlanId) => {
+  const startStripeCheckout = async (planId: SubscriptionPlanId) => {
     setLoading(planId)
-    router.push(`/checkout?mode=subscription&planId=${planId}`)
+
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data?.url) {
+        throw new Error('Falha ao iniciar checkout')
+      }
+
+      // 🔥 REDIRECIONA DIRETO PARA O STRIPE
+      window.location.href = data.url
+    } catch (err) {
+      alert('Não foi possível iniciar o pagamento. Tente novamente.')
+      setLoading(null)
+    }
   }
 
   return (
@@ -77,7 +92,6 @@ export default function PlanosPage() {
           </p>
         </div>
 
-        {/* Planos */}
         <div className="grid md:grid-cols-3 gap-8 mb-20">
 
           {/* Premium Mensal */}
@@ -96,20 +110,14 @@ export default function PlanosPage() {
               <span className="text-sm text-gray-400"> /mês</span>
             </p>
 
-            <ul className="space-y-2 text-sm text-gray-300 mb-6">
-              <li>✔ Pesquisas ilimitadas</li>
-              <li>✔ Acesso às avaliações completas</li>
-              <li>✔ Alertas detalhados</li>
-              <li>✔ Histórico comportamental</li>
-              <li>✔ Red flags reveladas</li>
-            </ul>
-
             <button
-              onClick={() => goToCheckout('premium_monthly')}
+              onClick={() => startStripeCheckout('premium_monthly')}
               disabled={loading === 'premium_monthly'}
               className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-xl disabled:opacity-60"
             >
-              {loading === 'premium_monthly' ? 'Processando...' : 'Assinar Mensal'}
+              {loading === 'premium_monthly'
+                ? 'Redirecionando...'
+                : 'Assinar Mensal'}
             </button>
           </div>
 
@@ -137,20 +145,14 @@ export default function PlanosPage() {
               Equivalente a R$ 6,60/mês • Economia de 33%
             </p>
 
-            <ul className="space-y-2 text-sm text-gray-300 mb-6">
-              <li>✔ Tudo do plano mensal</li>
-              <li>✔ Avisos antecipados</li>
-              <li>✔ Prioridade de segurança</li>
-              <li>✔ Histórico completo</li>
-              <li>✔ Red flags e padrões emocionais</li>
-            </ul>
-
             <button
-              onClick={() => goToCheckout('premium_yearly')}
+              onClick={() => startStripeCheckout('premium_yearly')}
               disabled={loading === 'premium_yearly'}
               className="w-full bg-[#FFD700] text-black font-bold py-3 rounded-xl disabled:opacity-60"
             >
-              {loading === 'premium_yearly' ? 'Processando...' : 'Assinar Anual'}
+              {loading === 'premium_yearly'
+                ? 'Redirecionando...'
+                : 'Assinar Anual'}
             </button>
           </div>
 
@@ -170,31 +172,16 @@ export default function PlanosPage() {
               <span className="text-sm text-gray-400"> /mês</span>
             </p>
 
-            <ul className="space-y-2 text-sm text-gray-300 mb-6">
-              <li>✔ Tudo do Premium Anual</li>
-              <li>✔ Análise de padrões emocionais</li>
-              <li>✔ Mapa de risco comportamental</li>
-              <li>✔ Alertas automáticos em tempo real</li>
-            </ul>
-
             <button
-              onClick={() => goToCheckout('premium_plus')}
+              onClick={() => startStripeCheckout('premium_plus')}
               disabled={loading === 'premium_plus'}
               className="w-full bg-gray-300 text-black font-bold py-3 rounded-xl disabled:opacity-60"
             >
-              {loading === 'premium_plus' ? 'Processando...' : 'Assinar Plus'}
+              {loading === 'premium_plus'
+                ? 'Redirecionando...'
+                : 'Assinar Plus'}
             </button>
           </div>
-        </div>
-
-        {/* Voltar */}
-        <div className="text-center">
-          <button
-            onClick={() => router.back()}
-            className="text-gray-400 underline hover:text-[#D4AF37]"
-          >
-            Voltar
-          </button>
         </div>
       </div>
     </div>
