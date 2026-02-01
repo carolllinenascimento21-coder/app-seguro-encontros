@@ -69,12 +69,14 @@ export default function CheckoutPage() {
           body: JSON.stringify(checkoutRequest.body),
         })
 
-        if (res.status === 401) {
-          router.replace('/login')
+        const data = await res.json()
+        if (!res.ok) {
+          setState({
+            status: 'error',
+            message: data?.error ?? 'Não foi possível iniciar o checkout.',
+          })
           return
         }
-
-        const data = await res.json()
         if (data?.url) {
           window.location.href = data.url
           return
