@@ -43,7 +43,7 @@ export default function OnboardingGuard({
       '/login',
       '/signup',
       '/register',
-      '/planos',
+      '/planos-publicos',
       '/plans',
       '/funil',
       '/verification-pending',
