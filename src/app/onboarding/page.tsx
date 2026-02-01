@@ -69,7 +69,7 @@ export default function OnboardingPage() {
       {/* Botão Ver Planos */}
       <div className="absolute top-6 right-6 z-20">
         <button
-          onClick={() => router.push('/planos-publicos')}
+          onClick={() => router.push('/planos-publicos/planos')}
           className="flex items-center gap-2 bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-2 px-4 rounded-full"
         >
           <Crown className="w-4 h-4" />
