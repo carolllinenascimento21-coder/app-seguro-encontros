@@ -51,19 +51,12 @@ export async function POST(req: Request) {
   }
 
   /* =====================================================
-     2️⃣ Autenticação
+     2️⃣ Autenticação (opcional)
   ===================================================== */
   const supabase = createRouteHandlerClient({ cookies })
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json(
-      { error: 'Usuária não autenticada' },
-      { status: 401 }
-    )
-  }
 
   /* =====================================================
      3️⃣ Payload
@@ -132,18 +125,26 @@ export async function POST(req: Request) {
           quantity: 1,
         },
       ],
-      customer_email: user.email ?? undefined,
+      customer_email: user?.email ?? undefined,
       success_url: `${siteUrl}/planos?status=success`,
       cancel_url: `${siteUrl}/planos?status=cancel`,
-      metadata: {
-        user_id: user.id,
-        plan: normalizedPlan,
-      },
+      metadata: user
+        ? {
+            user_id: user.id,
+            plan: normalizedPlan,
+          }
+        : {
+            plan: normalizedPlan,
+          },
       subscription_data: {
-        metadata: {
-          user_id: user.id,
-          plan: normalizedPlan,
-        },
+        metadata: user
+          ? {
+              user_id: user.id,
+              plan: normalizedPlan,
+            }
+          : {
+              plan: normalizedPlan,
+            },
       },
     })
 
