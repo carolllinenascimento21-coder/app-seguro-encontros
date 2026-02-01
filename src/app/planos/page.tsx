@@ -91,7 +91,7 @@ export default function PlanosPage() {
   /* ======================================================
      CHECKOUT
      ====================================================== */
-  const startCheckout = async (
+  const startCheckout = (
     payload:
       | { mode: 'subscription'; planId: SubscriptionPlanId }
       | { mode: 'payment'; creditPackId: CreditPlanId },
@@ -99,30 +99,16 @@ export default function PlanosPage() {
   ) => {
     setLoadingCheckout(key)
 
-    try {
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (res.status === 401) {
-        router.push('/login')
-        return
-      }
-
-      const data = await res.json()
-      if (data?.url) {
-        window.location.href = data.url
-      } else {
-        alert('Não foi possível iniciar o checkout.')
-      }
-    } catch (err) {
-      console.error(err)
-      alert('Erro ao iniciar checkout.')
-    } finally {
-      setLoadingCheckout(null)
+    const params = new URLSearchParams()
+    if (payload.mode === 'subscription') {
+      params.set('mode', payload.mode)
+      params.set('planId', payload.planId)
+    } else {
+      params.set('mode', payload.mode)
+      params.set('creditPackId', payload.creditPackId)
     }
+
+    router.push(`/checkout?${params.toString()}`)
   }
 
   /* ======================================================

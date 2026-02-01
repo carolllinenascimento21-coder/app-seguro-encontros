@@ -57,8 +57,18 @@ export default function OnboardingGuard({
     [pathname]
   )
 
+  const isPlanosRoute = useMemo(
+    () => pathname === '/planos' || pathname.startsWith('/planos/') || pathname === '/plans',
+    [pathname]
+  )
+
   const checkProfile = useCallback(async () => {
     setState({ status: 'checking' })
+
+    if (isPlanosRoute) {
+      setState({ status: 'ready' })
+      return
+    }
 
     if (!supabase) {
       console.error('Supabase client não inicializado no onboarding guard.')
@@ -174,12 +184,17 @@ export default function OnboardingGuard({
     }
 
     setState({ status: 'ready' })
-  }, [isOnboardingRoute, pathname, publicRoutes, router])
+  }, [isOnboardingRoute, isPlanosRoute, pathname, publicRoutes, router])
 
   useEffect(() => {
     let isMounted = true
 
     const runCheck = async () => {
+      if (isPlanosRoute) {
+        setState({ status: 'ready' })
+        return
+      }
+
       await checkProfile()
     }
 
@@ -199,6 +214,10 @@ export default function OnboardingGuard({
       isMounted = false
     }
   }, [checkProfile])
+
+  if (isPlanosRoute) {
+    return <>{children}</>
+  }
 
   if (state.status === 'checking') {
     return (
