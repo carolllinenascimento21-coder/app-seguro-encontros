@@ -1,48 +1,22 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 
 export async function GET() {
-  const cookieStore = cookies();
-
-  const supabase = createServerClient(
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          // Em route handlers, geralmente não precisa setar cookies,
-          // mas deixamos aqui por compatibilidade.
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
-      },
-    }
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // ⚠️ NÃO tenta autenticar aqui
+  // Créditos são buscados via RLS no client
 
-  // Se não estiver logada, não quebra: devolve 0 créditos.
-  if (!user) {
-    return NextResponse.json({ credits: 0 }, { status: 200 });
-  }
-
-  // Ajuste para a sua tabela real de créditos:
-  // - se for `user_credits` com `user_id` e `balance`, ok.
   const { data, error } = await supabase
     .from("user_credits")
     .select("balance")
-    .eq("user_id", user.id)
+    .limit(1)
     .maybeSingle();
 
   if (error) {
-    // Não derruba a UI por causa disso.
     return NextResponse.json({ credits: 0 }, { status: 200 });
   }
 
