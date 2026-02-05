@@ -1,7 +1,7 @@
 'use client'
 
-import OnboardingGuard from '@/components/custom/onboarding-guard'
 import HeaderCredits from '@/components/HeaderCredits'
+import AppNav from '@/components/AppNav'
 
 export default function AppLayout({
   children,
@@ -9,13 +9,14 @@ export default function AppLayout({
   children: React.ReactNode
 }) {
   return (
-    <OnboardingGuard>
-      {/* Header do app logado */}
-      <div className="fixed top-4 right-4 z-50">
+    <div className="min-h-screen bg-black text-white">
+      <header className="fixed top-4 right-4 z-50">
         <HeaderCredits />
-      </div>
+      </header>
 
-      {children}
-    </OnboardingGuard>
+      <AppNav /> {/* aqui entra o link "Planos" */}
+
+      <main className="pt-16">{children}</main>
+    </div>
   )
 }
