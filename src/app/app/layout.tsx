@@ -11,7 +11,7 @@ export default function AppLayout({
   return (
     <OnboardingGuard>
       <div className="fixed top-4 right-4 z-50">
-        <HeaderCredits />
+       // <HeaderCredits />
       </div>
 
       {children}
