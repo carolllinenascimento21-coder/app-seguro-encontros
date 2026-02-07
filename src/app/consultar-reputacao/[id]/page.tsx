@@ -48,7 +48,7 @@ export default async function DetalhesReputacao({ params }: PageProps) {
   const { data: avaliacao, error } = await supabaseAdmin
     .from('reputacao_agregada')
     .select('*')
-    .eq('id', params.id)
+    .eq('male_profile_id', params.id)
     .single()
 
   if (error || !avaliacao) {
