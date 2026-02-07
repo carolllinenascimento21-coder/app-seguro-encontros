@@ -124,21 +124,19 @@ export async function GET(req: Request) {
     .from('reputacao_agregada')
     .select(`
       male_profile_id,
-      display_name,
-      city,
-      state,
-      country,
+      nome,
+      cidade,
       total_avaliacoes,
       media_geral,
       confiabilidade_percentual
     `)
 
   if (nome) {
-    query = query.ilike('display_name', `%${nome}%`)
+    query = query.ilike('nome', `%${nome}%`)
   }
 
   if (cidade) {
-    query = query.ilike('city', `%${cidade}%`)
+    query = query.ilike('cidade', `%${cidade}%`)
   }
 
   const { data, error } = await query.limit(DEFAULT_LIMIT)
@@ -146,7 +144,7 @@ export async function GET(req: Request) {
   if (error) {
     console.error('Erro ao buscar reputação', error)
     return NextResponse.json(
-      { error: 'Erro ao buscar reputação' },
+      { error: 'Erro ao buscar reputação', details: error.message },
       { status: 500 }
     )
   }
@@ -179,6 +177,9 @@ export async function GET(req: Request) {
    * ──────────────────────────────────────────────── */
   return NextResponse.json({
     allowed: true,
-    results: data ?? [],
+    results: (data ?? []).map(result => ({
+      id: result.male_profile_id,
+      ...result,
+    })),
   })
 }
