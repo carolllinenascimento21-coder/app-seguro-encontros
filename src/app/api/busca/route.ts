@@ -37,7 +37,9 @@ export async function GET(req: Request) {
   }
 
   const supabase = createRouteHandlerClient({ cookies })
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return NextResponse.json(
@@ -61,7 +63,7 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 4️⃣ Carregar perfil
+   * 4️⃣ Carregar perfil da usuária
    * ──────────────────────────────────────────────── */
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
@@ -78,37 +80,32 @@ export async function GET(req: Request) {
   }
 
   const isFree =
-    !profile.has_active_plan ||
-    profile.current_plan_id === 'free'
+    !profile.has_active_plan || profile.current_plan_id === 'free'
 
   /* ────────────────────────────────────────────────
    * 5️⃣ Tracking: tentativa de busca
    * ──────────────────────────────────────────────── */
-  await supabaseAdmin
-    .from('analytics_events')
-    .insert({
-      user_id: user.id,
-      event_name: 'consult_basic',
-      metadata: {
-        nome: !!nome,
-        cidade: !!cidade,
-        plan: profile.current_plan_id ?? 'free',
-      },
-    })
+  await supabaseAdmin.from('analytics_events').insert({
+    user_id: user.id,
+    event_name: 'consult_basic',
+    metadata: {
+      nome: !!nome,
+      cidade: !!cidade,
+      plan: profile.current_plan_id ?? 'free',
+    },
+  })
 
   /* ────────────────────────────────────────────────
    * 6️⃣ PAYWALL FREE
    * ──────────────────────────────────────────────── */
   if (isFree && (profile.free_queries_used ?? 0) >= FREE_LIMIT) {
-    await supabaseAdmin
-      .from('analytics_events')
-      .insert({
-        user_id: user.id,
-        event_name: 'free_limit_reached',
-        metadata: {
-          location: 'api/busca',
-        },
-      })
+    await supabaseAdmin.from('analytics_events').insert({
+      user_id: user.id,
+      event_name: 'free_limit_reached',
+      metadata: {
+        location: 'api/busca',
+      },
+    })
 
     return NextResponse.json(
       {
@@ -121,14 +118,28 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 7️⃣ Busca
+   * 7️⃣ Busca na VIEW reputacao_agregada (CORRIGIDO)
    * ──────────────────────────────────────────────── */
   let query = supabaseAdmin
     .from('reputacao_agregada')
-    .select('*')
+    .select(`
+      male_profile_id,
+      display_name,
+      city,
+      state,
+      country,
+      total_avaliacoes,
+      media_geral,
+      confiabilidade_percentual
+    `)
 
-  if (nome) query = query.ilike('nome', `%${nome}%`)
-  if (cidade) query = query.ilike('cidade', `%${cidade}%`)
+  if (nome) {
+    query = query.ilike('display_name', `%${nome}%`)
+  }
+
+  if (cidade) {
+    query = query.ilike('city', `%${cidade}%`)
+  }
 
   const { data, error } = await query.limit(DEFAULT_LIMIT)
 
@@ -155,18 +166,16 @@ export async function GET(req: Request) {
   /* ────────────────────────────────────────────────
    * 9️⃣ Tracking: resultado exibido
    * ──────────────────────────────────────────────── */
-  await supabaseAdmin
-    .from('analytics_events')
-    .insert({
-      user_id: user.id,
-      event_name: 'view_result_summary',
-      metadata: {
-        results_count: data?.length ?? 0,
-      },
-    })
+  await supabaseAdmin.from('analytics_events').insert({
+    user_id: user.id,
+    event_name: 'view_result_summary',
+    metadata: {
+      results_count: data?.length ?? 0,
+    },
+  })
 
   /* ────────────────────────────────────────────────
-   * 10️⃣ Retorno
+   * 🔟 Retorno
    * ──────────────────────────────────────────────── */
   return NextResponse.json({
     allowed: true,
