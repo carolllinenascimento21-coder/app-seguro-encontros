@@ -15,7 +15,9 @@ interface PageProps {
 export default async function DetalhesReputacao({ params }: PageProps) {
   const supabase = createServerComponentClient({ cookies })
 
-  /* 1️⃣ Usuária autenticada */
+  /* ────────────────────────────────────────────────
+   * 1️⃣ Usuária autenticada
+   * ──────────────────────────────────────────────── */
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -24,7 +26,9 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     redirect('/login')
   }
 
-  /* 2️⃣ Perfil */
+  /* ────────────────────────────────────────────────
+   * 2️⃣ Perfil da usuária
+   * ──────────────────────────────────────────────── */
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('has_active_plan, current_plan_id')
@@ -38,7 +42,9 @@ export default async function DetalhesReputacao({ params }: PageProps) {
   const isPremium = canAccessFeature(profile, 'VIEW_RESULT_FULL')
   const isFree = !isPremium
 
-  /* 3️⃣ Buscar avaliação (admin) */
+  /* ────────────────────────────────────────────────
+   * 3️⃣ Buscar reputação agregada (ADMIN)
+   * ──────────────────────────────────────────────── */
   const supabaseAdmin = getSupabaseAdminClient()
 
   if (!supabaseAdmin) {
@@ -47,7 +53,18 @@ export default async function DetalhesReputacao({ params }: PageProps) {
 
   const { data: avaliacao, error } = await supabaseAdmin
     .from('reputacao_agregada')
-    .select('*')
+    .select(`
+      male_profile_id,
+      display_name,
+      city,
+      state,
+      country,
+      total_avaliacoes,
+      media_geral,
+      confiabilidade_percentual,
+      flags_positive,
+      flags_negative
+    `)
     .eq('male_profile_id', params.id)
     .single()
 
@@ -55,18 +72,9 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     redirect('/consultar-reputacao')
   }
 
-  /* 4️⃣ Média segura */
-  const valores = [
-    avaliacao.comportamento,
-    avaliacao.seguranca_emocional,
-    avaliacao.respeito,
-    avaliacao.carater,
-    avaliacao.confianca,
-  ].filter((v: number | null) => typeof v === 'number') as number[]
-
   const media =
-    valores.length > 0
-      ? (valores.reduce((a, b) => a + b, 0) / valores.length).toFixed(1)
+    typeof avaliacao.media_geral === 'number'
+      ? avaliacao.media_geral.toFixed(1)
       : '—'
 
   /* =========================================================
@@ -85,12 +93,12 @@ export default async function DetalhesReputacao({ params }: PageProps) {
           </a>
 
           <h1 className="text-2xl font-bold mb-1">
-            {avaliacao.nome || 'Nome não informado'}
+            {avaliacao.display_name || 'Nome não informado'}
           </h1>
 
-          {avaliacao.cidade && (
+          {avaliacao.city && (
             <p className="text-gray-400 text-sm mb-4">
-              {avaliacao.cidade}
+              {avaliacao.city}
             </p>
           )}
 
@@ -152,12 +160,12 @@ export default async function DetalhesReputacao({ params }: PageProps) {
         </a>
 
         <h1 className="text-2xl font-bold mb-1">
-          {avaliacao.nome || 'Nome não informado'}
+          {avaliacao.display_name || 'Nome não informado'}
         </h1>
 
-        {avaliacao.cidade && (
+        {avaliacao.city && (
           <p className="text-gray-400 text-sm mb-4">
-            {avaliacao.cidade}
+            {avaliacao.city}
           </p>
         )}
 
@@ -169,6 +177,11 @@ export default async function DetalhesReputacao({ params }: PageProps) {
 
           <p className="text-center text-gray-400 text-sm">
             Média geral das avaliações
+          </p>
+
+          <p className="text-center text-xs text-gray-500 mt-2">
+            {avaliacao.total_avaliacoes} avaliações •{' '}
+            {avaliacao.confiabilidade_percentual}% de confiabilidade
           </p>
         </div>
 
