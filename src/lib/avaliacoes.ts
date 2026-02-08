@@ -38,12 +38,9 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
 const normalizeString = (value: unknown) => {
-  if (typeof value !== 'string') {
-    return null
-  }
-
+  if (typeof value !== 'string') return null
   const trimmed = value.trim()
-  return trimmed ? trimmed : null
+  return trimmed || null
 }
 
 const normalizeStringArray = (
@@ -51,18 +48,14 @@ const normalizeStringArray = (
   fieldName: string,
   errors: Record<string, string>
 ) => {
-  if (value === undefined || value === null) {
-    return [] as string[]
-  }
-
+  if (value == null) return []
   if (!Array.isArray(value)) {
     errors[fieldName] = `Campo ${fieldName} deve ser um array.`
-    return [] as string[]
+    return []
   }
-
   return value
-    .filter((item) => typeof item === 'string')
-    .map((item) => item.trim())
+    .filter((v) => typeof v === 'string')
+    .map((v) => v.trim())
     .filter(Boolean)
 }
 
@@ -71,16 +64,12 @@ const parseRating = (
   fieldName: string,
   errors: Record<string, string>
 ) => {
-  if (value === undefined || value === null || value === '') {
-    return 0
-  }
-
+  if (value === undefined || value === null || value === '') return 0
   const numeric = typeof value === 'number' ? value : Number(value)
   if (Number.isNaN(numeric)) {
     errors.ratings = `Nota inválida para ${fieldName}.`
     return 0
   }
-
   return Math.round(numeric)
 }
 
@@ -95,9 +84,12 @@ export const validateAvaliacaoPayload = (
   const errors: Record<string, string> = {}
   const body = isPlainObject(payload) ? payload : {}
 
-  const nome = normalizeString(body.nome_avaliado ?? body.nome)
+  const anonimoRaw = body.anonimo ?? body.is_anonymous
+  const anonimo = typeof anonimoRaw === 'boolean' ? anonimoRaw : true
+
+  const nome = normalizeString(body.nome)
   const descricao = normalizeString(
-    body.descricao ?? body.relato ?? body.comentario
+    body.descricao ?? body.relato ?? body.comentario ?? body.comment
   )
 
   const avaliadoIdRaw =
@@ -109,25 +101,19 @@ export const validateAvaliacaoPayload = (
         ? String(avaliadoIdRaw)
         : null
 
-  if (!nome) {
-    errors.nome = 'Nome é obrigatório.'
+  // 🔒 REGRA: nome só é obrigatório quando NÃO for anônimo
+  if (!anonimo && !nome) {
+    errors.nome = 'Nome é obrigatório quando não for anônimo.'
   }
 
-  if (!avaliadoId) {
-    errors.avaliadoId = 'avaliadoId é obrigatório.'
-  }
-
-  if (!descricao) {
-    errors.descricao = 'descricao é obrigatória.'
-  }
-
+  // 🔒 REGRA: avaliadoId é OPCIONAL, mas se existir precisa ser UUID
   if (avaliadoId && !isUuid(avaliadoId)) {
     errors.avaliadoId = 'avaliadoId inválido.'
   } else if (avaliadoIdRaw !== undefined && !avaliadoId) {
     errors.avaliadoId = 'avaliadoId inválido.'
   }
 
-  const ratingsInput = body.ratings
+  const ratingsInput = body.ratings ?? body.criterios
   const ratingsObject = isPlainObject(ratingsInput) ? ratingsInput : null
 
   if (ratingsInput !== undefined && !ratingsObject) {
@@ -141,14 +127,14 @@ export const validateAvaliacaoPayload = (
       body.respeito,
       body.carater,
       body.confianca,
-    ].some((value) => value !== undefined)
+    ].some((v) => v !== undefined)
 
     if (!hasLegacyRatings) {
       errors.ratings = 'ratings é obrigatório.'
     }
   }
 
-  const ratings = {
+  const ratings: AvaliacaoRatings = {
     comportamento: parseRating(
       ratingsObject?.comportamento ?? body.comportamento,
       'comportamento',
@@ -177,7 +163,8 @@ export const validateAvaliacaoPayload = (
   }
 
   if (ratings.comportamento === 0) {
-    errors.comportamento = 'Preencha ao menos a avaliação de comportamento.'
+    errors.comportamento =
+      'Preencha ao menos a avaliação de comportamento.'
   }
 
   const greenFlags = normalizeStringArray(
@@ -190,9 +177,6 @@ export const validateAvaliacaoPayload = (
     'redFlags',
     errors
   )
-
-  const anonimoRaw = body.anonimo ?? body.is_anonymous
-  const anonimo = typeof anonimoRaw === 'boolean' ? anonimoRaw : true
 
   const cidade = normalizeString(body.cidade)
   const contato = normalizeString(body.contato)
@@ -210,7 +194,7 @@ export const validateAvaliacaoPayload = (
     success: true,
     data: {
       avaliadoId: avaliadoId || null,
-      nome: nome ?? '',
+      nome: nome ?? (anonimo ? 'Anônimo' : ''),
       descricao: descricao || null,
       cidade,
       contato,
