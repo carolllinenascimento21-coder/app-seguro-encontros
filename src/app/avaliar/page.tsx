@@ -1,111 +1,85 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags';
+import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags'
 
 export default function AvaliarPage() {
-  const [anonimo, setAnonimo] = useState(false);
-  const [nome, setNome] = useState('');
-  const [cidade, setCidade] = useState('');
-  const [contato, setContato] = useState('');
-  const [relato, setRelato] = useState('');
-  const [comportamento, setComportamento] = useState(0);
-  const [segurancaEmocional, setSegurancaEmocional] = useState(0);
-  const [respeito, setRespeito] = useState(0);
-  const [carater, setCarater] = useState(0);
-  const [confianca, setConfianca] = useState(0);
-  const [greenFlags, setGreenFlags] = useState<string[]>([]);
-  const [redFlags, setRedFlags] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams()
+  const avaliadoId = searchParams.get('avaliadoId') // 🔴 OBRIGATÓRIO
 
-  const criterios = [
-    { label: 'Comportamento', value: comportamento, set: setComportamento },
-    { label: 'Segurança emocional', value: segurancaEmocional, set: setSegurancaEmocional },
-    { label: 'Respeito', value: respeito, set: setRespeito },
-    { label: 'Caráter', value: carater, set: setCarater },
-    { label: 'Confiança', value: confianca, set: setConfianca },
-  ];
+  const [anonimo, setAnonimo] = useState(false)
+  const [nome, setNome] = useState('')
+  const [cidade, setCidade] = useState('')
+  const [contato, setContato] = useState('')
+  const [descricao, setDescricao] = useState('')
+
+  const [comportamento, setComportamento] = useState(0)
+  const [segurancaEmocional, setSegurancaEmocional] = useState(0)
+  const [respeito, setRespeito] = useState(0)
+  const [carater, setCarater] = useState(0)
+  const [confianca, setConfianca] = useState(0)
+
+  const [greenFlags, setGreenFlags] = useState<string[]>([])
+  const [redFlags, setRedFlags] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
 
   function toggleFlag(flag: string, list: string[], setList: (v: string[]) => void) {
-    setList(list.includes(flag) ? list.filter(f => f !== flag) : [...list, flag]);
+    setList(list.includes(flag) ? list.filter(f => f !== flag) : [...list, flag])
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
+    e.preventDefault()
+    setLoading(true)
 
-    if (!cidade || criterios.some(c => c.value === 0)) {
-      alert('Cidade e todos os critérios são obrigatórios');
-      setLoading(false);
-      return;
+    if (!avaliadoId) {
+      alert('ID do perfil avaliado não encontrado.')
+      setLoading(false)
+      return
     }
 
     if (!anonimo && !nome) {
-      alert('Nome é obrigatório quando não for anônimo');
-      setLoading(false);
-      return;
+      alert('Nome é obrigatório quando não for anônimo')
+      setLoading(false)
+      return
     }
 
     const payload = {
-      male: {
-        displayName: anonimo ? 'Anônimo' : nome,
-        city: cidade,
-        state: null,
-        socialContext: contato || null,
-        aliases: contato
-          ? [{ platform: 'contact', handle: contato }]
-          : [],
-      },
-      rating: (
-        comportamento +
-        segurancaEmocional +
-        respeito +
-        carater +
-        confianca
-      ) / 5,
-      comment: relato || null,
-      flags: {
-        green: greenFlags,
-        red: redFlags,
-      },
-      criterios: {
+      avaliadoId,
+      nome: anonimo ? 'Anônimo' : nome,
+      descricao: descricao || null,
+      cidade: cidade || null,
+      contato: contato || null,
+      anonimo,
+
+      ratings: {
         comportamento,
         seguranca_emocional: segurancaEmocional,
         respeito,
         carater,
         confianca,
       },
-      anonimo,
-    };
+
+      greenFlags,
+      redFlags,
+    }
 
     const res = await fetch('/api/avaliacoes/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
+    })
 
-    setLoading(false);
+    setLoading(false)
 
     if (!res.ok) {
-      const { error } = await res.json();
-      alert(error || 'Erro ao publicar avaliação');
-      return;
+      const data = await res.json()
+      console.error(data)
+      alert(data?.message || 'Erro ao publicar avaliação')
+      return
     }
 
-    alert('Avaliação publicada com sucesso');
-
-    setNome('');
-    setCidade('');
-    setContato('');
-    setRelato('');
-    setGreenFlags([]);
-    setRedFlags([]);
-    setComportamento(0);
-    setSegurancaEmocional(0);
-    setRespeito(0);
-    setCarater(0);
-    setConfianca(0);
-    setAnonimo(false);
+    alert('Avaliação publicada com sucesso')
   }
 
   return (
@@ -113,6 +87,7 @@ export default function AvaliarPage() {
       <h1 className="text-xl font-semibold mb-6">Fazer avaliação</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+
         {!anonimo && (
           <input
             placeholder="Nome"
@@ -124,7 +99,6 @@ export default function AvaliarPage() {
 
         <input
           placeholder="Cidade"
-          required
           value={cidade}
           onChange={(e) => setCidade(e.target.value)}
           className="w-full bg-zinc-900 p-3 rounded"
@@ -137,26 +111,12 @@ export default function AvaliarPage() {
           className="w-full bg-zinc-900 p-3 rounded"
         />
 
-        {/* CRITÉRIOS */}
-        <div className="space-y-4">
-          {criterios.map((c) => (
-            <div key={c.label}>
-              <p className="text-sm text-zinc-300">{c.label}</p>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    type="button"
-                    key={n}
-                    onClick={() => c.set(n)}
-                    className={`text-2xl ${c.value >= n ? 'text-yellow-400' : 'text-zinc-600'}`}
-                  >
-                    ★
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <textarea
+          placeholder="Relato"
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
+        />
 
         {/* FLAGS */}
         <div>
@@ -195,20 +155,13 @@ export default function AvaliarPage() {
           </div>
         </div>
 
-        <textarea
-          placeholder="Relato (opcional)"
-          value={relato}
-          onChange={(e) => setRelato(e.target.value)}
-          className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
-        />
-
         <label className="flex gap-2 items-center">
           <input
             type="checkbox"
             checked={anonimo}
             onChange={(e) => {
-              setAnonimo(e.target.checked);
-              if (e.target.checked) setNome('');
+              setAnonimo(e.target.checked)
+              if (e.target.checked) setNome('')
             }}
           />
           Avaliar de forma anônima
@@ -222,5 +175,5 @@ export default function AvaliarPage() {
         </button>
       </form>
     </main>
-  );
+  )
 }
