@@ -78,7 +78,7 @@ export default function AvaliarPage() {
       anonimo,
     };
 
-    const res = await fetch('/api/avaliar', {
+    const res = await fetch('/api/avaliacoes/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
