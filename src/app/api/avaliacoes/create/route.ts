@@ -1,162 +1,88 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-
-import { normalizeNegativeFlags, normalizePositiveFlags } from '@/lib/flags'
-import { getMissingSupabaseEnvDetails } from '@/lib/env'
-import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
-import { validateAvaliacaoPayload } from '@/lib/avaliacoes'
-
-const createErrorResponse = (
-  status: number,
-  message: string,
-  details?: Record<string, unknown>
-) =>
-  NextResponse.json(
-    {
-      success: false,
-      error: message,
-      ...details,
-    },
-    { status }
-  )
+import { v4 as uuidv4 } from 'uuid'
 
 export async function POST(req: Request) {
-  let supabaseAdmin
-  try {
-    supabaseAdmin = getSupabaseAdminClient()
-  } catch (error) {
-    const envError = getMissingSupabaseEnvDetails(error)
-    if (envError) {
-      console.error(envError.message)
-      return createErrorResponse(envError.status, envError.message)
-    }
-    throw error
-  }
+  const body = await req.json()
+  const cookieStore = cookies()
 
-  if (!supabaseAdmin) {
-    return createErrorResponse(503, 'Supabase admin não configurado')
-  }
-
-  const supabase = createRouteHandlerClient({ cookies })
-  const { data: userData, error: userError } = await supabase.auth.getUser()
-
-  if (userError) {
-    console.error('Erro ao carregar usuário para avaliação', userError)
-  }
-
-  let body: unknown
-  try {
-    body = await req.json()
-  } catch (error) {
-    console.error('Erro ao ler payload de avaliação', error)
-    return createErrorResponse(400, 'Payload inválido')
-  }
-
-  const validation = validateAvaliacaoPayload(body)
-  if (!validation.success) {
-    return createErrorResponse(validation.status, validation.message, {
-      errors: validation.errors,
-    })
-  }
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll() } }
+  )
 
   const {
+    avaliadoId,
     nome,
-    descricao,
     cidade,
     contato,
     anonimo,
+    descricao,
     ratings,
     greenFlags,
     redFlags,
-  } = validation.data
+  } = body
 
-  const isAnonymous = anonimo
-  const userId = userData?.user?.id ?? null
-
-  if (!isAnonymous && !userId) {
-    return createErrorResponse(401, 'Usuário não autenticado.')
+  if (!ratings) {
+    return NextResponse.json(
+      { message: 'Ratings obrigatórios' },
+      { status: 400 }
+    )
   }
 
-  const userIdToInsert = isAnonymous ? null : userId
-  const normalizedPositiveFlags = normalizePositiveFlags(greenFlags)
-  const normalizedNegativeFlags = normalizeNegativeFlags(redFlags)
+  let finalAvaliadoId = avaliadoId
 
-  try {
-    // Usa service role para evitar dependência de cookies/sessão e garantir inserts com RLS.
-    const { data, error } = await supabaseAdmin
-      .from('avaliacoes')
+  /**
+   * 🔹 CASO 1: Perfil ainda não existe → criar
+   */
+  if (!finalAvaliadoId) {
+    const { data: novoPerfil, error: perfilError } = await supabase
+      .from('avaliados')
       .insert({
-        autor_id: userIdToInsert,
-        avaliado_id: validation.data.avaliadoId,
-        nome,
-        cidade,
-        contato,
-        comportamento: ratings.comportamento,
-        seguranca_emocional: ratings.seguranca_emocional,
-        respeito: ratings.respeito,
-        carater: ratings.carater,
-        confianca: ratings.confianca,
-        flags_positive: normalizedPositiveFlags,
-        flags_negative: normalizedNegativeFlags,
-        relato: descricao,
-        anonimo: isAnonymous,
-        is_anonymous: isAnonymous,
-        publica: !isAnonymous,
+        nome: anonimo ? null : nome,
+        cidade: cidade ?? null,
+        contato: contato ?? null,
       })
       .select('id')
       .single()
 
-    if (error) {
-      const message = error.message ?? ''
-      if (message.includes('PAYWALL')) {
-        return createErrorResponse(
-          403,
-          'Sem créditos ou plano ativo para enviar avaliação.'
-        )
-      }
-      if (
-        message.toLowerCase().includes('row-level security')
-        || error.code === '42501'
-      ) {
-        return createErrorResponse(403, 'Sem permissão para enviar avaliação.')
-      }
-      if (['22P02', '23502', '23503', '42703'].includes(error.code ?? '')) {
-        return createErrorResponse(400, 'Payload inválido.', {
-          code: error.code,
-        })
-      }
-      console.error('Erro ao inserir avaliação', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      })
-      return createErrorResponse(
-        500,
-        'Erro ao enviar avaliação',
-        process.env.NODE_ENV !== 'production'
-          ? { code: error.code, details: error.details, hint: error.hint }
-          : undefined
+    if (perfilError) {
+      console.error(perfilError)
+      return NextResponse.json(
+        { message: 'Erro ao criar perfil avaliado' },
+        { status: 500 }
       )
     }
 
+    finalAvaliadoId = novoPerfil.id
+  }
+
+  /**
+   * 🔹 CASO 2: Perfil existe → só insere avaliação
+   */
+  const { error: avaliacaoError } = await supabase
+    .from('avaliacoes')
+    .insert({
+      avaliado_id: finalAvaliadoId,
+      descricao: descricao ?? null,
+      anonimo,
+      ratings,
+      green_flags: greenFlags ?? [],
+      red_flags: redFlags ?? [],
+    })
+
+  if (avaliacaoError) {
+    console.error(avaliacaoError)
     return NextResponse.json(
-      {
-        success: true,
-        message: 'Avaliação criada com sucesso',
-        avaliacao_id: data?.id,
-      },
-      { status: 201 }
-    )
-  } catch (error) {
-    console.error('Erro inesperado ao criar avaliação', error)
-    return createErrorResponse(
-      500,
-      'Erro ao enviar avaliação',
-      process.env.NODE_ENV !== 'production' && error instanceof Error
-        ? { stack: error.stack }
-        : undefined
+      { message: 'Erro ao publicar avaliação' },
+      { status: 500 }
     )
   }
+
+  return NextResponse.json({
+    success: true,
+    avaliadoId: finalAvaliadoId,
+  })
 }
