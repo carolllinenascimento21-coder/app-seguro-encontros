@@ -116,19 +116,17 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 7️⃣ Busca na VIEW reputacao_agregada
+   * 7️⃣ Busca na VIEW reputacao_agregada (CORRETA)
    * ──────────────────────────────────────────────── */
   let query = supabaseAdmin
     .from('reputacao_agregada')
     .select(`
-      id,
+      male_profile_id,
       nome,
       cidade,
       total_avaliacoes,
       media_geral,
-      confiabilidade_percentual,
-      flags_negative,
-      flags_positive
+      confiabilidade_percentual
     `)
 
   if (nome) query = query.ilike('nome', `%${nome}%`)
@@ -168,10 +166,17 @@ export async function GET(req: Request) {
   })
 
   /* ────────────────────────────────────────────────
-   * 🔟 Retorno
+   * 🔟 Retorno (NORMALIZADO PARA O FRONT)
    * ──────────────────────────────────────────────── */
   return NextResponse.json({
     allowed: true,
-    results: data ?? [],
+    results: (data ?? []).map(r => ({
+      id: r.male_profile_id,
+      nome: r.nome,
+      cidade: r.cidade,
+      total_avaliacoes: r.total_avaliacoes,
+      media_geral: r.media_geral,
+      confiabilidade_percentual: r.confiabilidade_percentual,
+    })),
   })
 }
