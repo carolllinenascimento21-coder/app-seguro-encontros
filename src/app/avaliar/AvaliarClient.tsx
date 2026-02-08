@@ -1,25 +1,33 @@
 'use client'
 
 import { useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { Star } from 'lucide-react'
 import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags'
 
-type AvaliarFormProps = {
-  avaliadoId: string | null
-}
+const CRITERIOS = [
+  { key: 'comportamento', label: 'Comportamento' },
+  { key: 'seguranca_emocional', label: 'Segurança Emocional' },
+  { key: 'respeito', label: 'Respeito' },
+  { key: 'carater', label: 'Caráter' },
+  { key: 'confianca', label: 'Confiança' },
+] as const
 
-function AvaliarForm({ avaliadoId }: AvaliarFormProps) {
+type CriterioKey = (typeof CRITERIOS)[number]['key']
+
+function AvaliarForm() {
   const [anonimo, setAnonimo] = useState(false)
   const [nome, setNome] = useState('')
   const [cidade, setCidade] = useState('')
   const [contato, setContato] = useState('')
   const [descricao, setDescricao] = useState('')
 
-  const [comportamento, setComportamento] = useState(0)
-  const [segurancaEmocional, setSegurancaEmocional] = useState(0)
-  const [respeito, setRespeito] = useState(0)
-  const [carater, setCarater] = useState(0)
-  const [confianca, setConfianca] = useState(0)
+  const [ratings, setRatings] = useState<Record<CriterioKey, number>>({
+    comportamento: 0,
+    seguranca_emocional: 0,
+    respeito: 0,
+    carater: 0,
+    confianca: 0,
+  })
 
   const [greenFlags, setGreenFlags] = useState<string[]>([])
   const [redFlags, setRedFlags] = useState<string[]>([])
@@ -33,34 +41,24 @@ function AvaliarForm({ avaliadoId }: AvaliarFormProps) {
     e.preventDefault()
     setLoading(true)
 
-    if (!avaliadoId) {
-      alert('ID do perfil avaliado não encontrado.')
+    if (!nome.trim()) {
+      alert('Nome é obrigatório')
       setLoading(false)
       return
     }
-
-    if (!anonimo && !nome.trim()) {
-      alert('Nome é obrigatório quando não for anônimo')
+    if (!cidade.trim()) {
+      alert('Cidade é obrigatória')
       setLoading(false)
       return
     }
 
     const payload = {
-      avaliadoId,
-      nome: anonimo ? null : nome.trim(),
-      descricao: descricao || null,
-      cidade: cidade || null,
-      contato: contato || null,
+      nome: nome.trim(),
+      cidade: cidade.trim(),
+      contato: contato?.trim() || null,
+      descricao: descricao?.trim() || null,
       anonimo,
-
-      ratings: {
-        comportamento,
-        seguranca_emocional: segurancaEmocional,
-        respeito,
-        carater,
-        confianca,
-      },
-
+      ratings,
       greenFlags,
       redFlags,
     }
@@ -89,14 +87,12 @@ function AvaliarForm({ avaliadoId }: AvaliarFormProps) {
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {!anonimo && (
-          <input
-            placeholder="Nome"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            className="w-full bg-zinc-900 p-3 rounded"
-          />
-        )}
+        <input
+          placeholder="Nome"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          className="w-full bg-zinc-900 p-3 rounded"
+        />
 
         <input
           placeholder="Cidade"
@@ -118,6 +114,42 @@ function AvaliarForm({ avaliadoId }: AvaliarFormProps) {
           onChange={(e) => setDescricao(e.target.value)}
           className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
         />
+
+        <div className="space-y-4">
+          <p className="text-sm text-gray-300">Avalie por critério</p>
+          {CRITERIOS.map((criterio) => (
+            <div key={criterio.key}>
+              <p className="text-sm text-gray-200 mb-2">{criterio.label}</p>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map((valor) => {
+                  const isActive = ratings[criterio.key] >= valor
+                  return (
+                    <button
+                      key={valor}
+                      type="button"
+                      onClick={() =>
+                        setRatings((prev) => ({
+                          ...prev,
+                          [criterio.key]: valor,
+                        }))
+                      }
+                      className="transition-transform hover:scale-110"
+                      aria-label={`${criterio.label} ${valor} estrelas`}
+                    >
+                      <Star
+                        className={`w-7 h-7 ${
+                          isActive
+                            ? 'text-[#D4AF37] fill-[#D4AF37]'
+                            : 'text-gray-600'
+                        }`}
+                      />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
 
         {/* FLAGS */}
         <div>
@@ -162,7 +194,6 @@ function AvaliarForm({ avaliadoId }: AvaliarFormProps) {
             checked={anonimo}
             onChange={(e) => {
               setAnonimo(e.target.checked)
-              if (e.target.checked) setNome('')
             }}
           />
           Avaliar de forma anônima
@@ -180,8 +211,5 @@ function AvaliarForm({ avaliadoId }: AvaliarFormProps) {
 }
 
 export default function AvaliarClient() {
-  const searchParams = useSearchParams()
-  const avaliadoId = searchParams.get('avaliadoId')
-
-  return <AvaliarForm avaliadoId={avaliadoId} />
+  return <AvaliarForm />
 }
