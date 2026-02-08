@@ -23,11 +23,11 @@ export async function POST(req: Request) {
     nome,
     cidade,
     contato,
-    descricao,
     anonimo,
     ratings,
     greenFlags,
     redFlags,
+    descricao,
   } = body
 
   const nomeFormatado = typeof nome === 'string' ? nome.trim() : ''
