@@ -47,35 +47,21 @@ export default function AvaliarPage() {
     }
 
     const payload = {
-      male: {
-        displayName: anonimo ? 'Anônimo' : nome,
-        city: cidade,
-        state: null,
-        socialContext: contato || null,
-        aliases: contato
-          ? [{ platform: 'contact', handle: contato }]
-          : [],
-      },
-      rating: (
-        comportamento +
-        segurancaEmocional +
-        respeito +
-        carater +
-        confianca
-      ) / 5,
-      comment: relato || null,
-      flags: {
-        green: greenFlags,
-        red: redFlags,
-      },
-      criterios: {
+      nome: anonimo ? null : nome,
+      descricao: relato || null,
+      cidade,
+      contato: contato || null,
+      anonimo,
+      ratings: {
         comportamento,
         seguranca_emocional: segurancaEmocional,
         respeito,
         carater,
         confianca,
       },
-      anonimo,
+      greenFlags,
+      redFlags,
+      avaliadoId: null,
     };
 
     const res = await fetch('/api/avaliacoes/create', {
