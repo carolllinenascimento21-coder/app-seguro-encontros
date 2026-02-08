@@ -7,8 +7,8 @@ export type AvaliacaoRatings = {
 }
 
 export type AvaliacaoPayloadNormalizado = {
-  avaliadoId: string | null
-  nome: string
+  avaliadoId: string
+  nome: string | null
   descricao: string | null
   cidade: string | null
   contato: string | null
@@ -85,7 +85,10 @@ export const validateAvaliacaoPayload = (
   const body = isPlainObject(payload) ? payload : {}
 
   const anonimoRaw = body.anonimo ?? body.is_anonymous
-  const anonimo = typeof anonimoRaw === 'boolean' ? anonimoRaw : true
+  const anonimo = typeof anonimoRaw === 'boolean' ? anonimoRaw : null
+  if (anonimo === null) {
+    errors.anonimo = 'Campo anonimo é obrigatório.'
+  }
 
   const nome = normalizeString(body.nome)
   const descricao = normalizeString(
@@ -101,16 +104,19 @@ export const validateAvaliacaoPayload = (
         ? String(avaliadoIdRaw)
         : null
 
-  // 🔒 REGRA: nome só é obrigatório quando NÃO for anônimo
-  if (!anonimo && !nome) {
-    errors.nome = 'Nome é obrigatório quando não for anônimo.'
+  // 🔒 REGRA: avaliadoId é obrigatório e precisa ser UUID
+  if (!avaliadoId) {
+    errors.avaliadoId = 'avaliadoId é obrigatório.'
+  } else if (!isUuid(avaliadoId)) {
+    errors.avaliadoId = 'avaliadoId inválido.'
   }
 
-  // 🔒 REGRA: avaliadoId é OPCIONAL, mas se existir precisa ser UUID
-  if (avaliadoId && !isUuid(avaliadoId)) {
-    errors.avaliadoId = 'avaliadoId inválido.'
-  } else if (avaliadoIdRaw !== undefined && !avaliadoId) {
-    errors.avaliadoId = 'avaliadoId inválido.'
+  // 🔒 REGRA: nome deve ser null quando anônimo e obrigatório quando não for
+  if (anonimo === true && nome !== null) {
+    errors.nome = 'Nome deve ser nulo quando anônimo.'
+  }
+  if (anonimo === false && !nome) {
+    errors.nome = 'Nome é obrigatório quando não for anônimo.'
   }
 
   const ratingsInput = body.ratings ?? body.criterios
@@ -190,15 +196,17 @@ export const validateAvaliacaoPayload = (
     }
   }
 
+  const isAnonimo = anonimo === true
+
   return {
     success: true,
     data: {
-      avaliadoId: avaliadoId || null,
-      nome: nome ?? (anonimo ? 'Anônimo' : ''),
+      avaliadoId,
+      nome: isAnonimo ? null : nome,
       descricao: descricao || null,
       cidade,
       contato,
-      anonimo,
+      anonimo: isAnonimo,
       ratings,
       greenFlags,
       redFlags,
