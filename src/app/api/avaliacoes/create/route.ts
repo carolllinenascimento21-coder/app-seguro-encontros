@@ -9,7 +9,15 @@ export async function POST(req: Request) {
     { cookies }
   )
 
-  const body = await req.json()
+  let body: any
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json(
+      { message: 'Payload inválido' },
+      { status: 400 }
+    )
+  }
 
   const {
     nome,
@@ -22,6 +30,7 @@ export async function POST(req: Request) {
     redFlags,
   } = body
 
+  // 🔒 Validações mínimas
   if (!nome || !cidade) {
     return NextResponse.json(
       { message: 'Nome e cidade são obrigatórios' },
@@ -29,16 +38,26 @@ export async function POST(req: Request) {
     )
   }
 
-  /** 1️⃣ Buscar avaliado existente */
+  if (!ratings) {
+    return NextResponse.json(
+      { message: 'Avaliações por critério são obrigatórias' },
+      { status: 400 }
+    )
+  }
+
+  /** 1️⃣ Buscar avaliado existente (nome + cidade) */
   const { data: existente, error: findError } = await supabase
     .from('avaliados')
     .select('id')
-    .ilike('nome', nome)
-    .ilike('cidade', cidade)
+    .ilike('nome', nome.trim())
+    .ilike('cidade', cidade.trim())
     .maybeSingle()
 
   if (findError && findError.code !== 'PGRST116') {
-    return NextResponse.json({ message: findError.message }, { status: 500 })
+    return NextResponse.json(
+      { message: findError.message },
+      { status: 500 }
+    )
   }
 
   let avaliadoId = existente?.id
@@ -48,9 +67,9 @@ export async function POST(req: Request) {
     const { data: criado, error: createError } = await supabase
       .from('avaliados')
       .insert({
-        nome,
-        cidade,
-        contato: contato || null,
+        nome: nome.trim(),
+        cidade: cidade.trim(),
+        contato: contato?.trim() || null,
       })
       .select('id')
       .single()
@@ -71,10 +90,10 @@ export async function POST(req: Request) {
     .insert({
       avaliado_id: avaliadoId,
       descricao: descricao || null,
-      anonimo,
+      anonimo: !!anonimo,
       ratings,
-      green_flags: greenFlags,
-      red_flags: redFlags,
+      green_flags: greenFlags || [],
+      red_flags: redFlags || [],
     })
 
   if (avaliacaoError) {
@@ -84,5 +103,8 @@ export async function POST(req: Request) {
     )
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({
+    success: true,
+    avaliadoId,
+  })
 }
