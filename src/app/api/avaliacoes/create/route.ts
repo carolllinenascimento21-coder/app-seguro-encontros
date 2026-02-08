@@ -1,88 +1,88 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { v4 as uuidv4 } from 'uuid'
 
 export async function POST(req: Request) {
-  const body = await req.json()
-  const cookieStore = cookies()
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll() } }
+    { cookies }
   )
 
+  const body = await req.json()
+
   const {
-    avaliadoId,
     nome,
     cidade,
     contato,
-    anonimo,
     descricao,
+    anonimo,
     ratings,
     greenFlags,
     redFlags,
   } = body
 
-  if (!ratings) {
+  if (!nome || !cidade) {
     return NextResponse.json(
-      { message: 'Ratings obrigatórios' },
+      { message: 'Nome e cidade são obrigatórios' },
       { status: 400 }
     )
   }
 
-  let finalAvaliadoId = avaliadoId
+  /** 1️⃣ Buscar avaliado existente */
+  const { data: existente, error: findError } = await supabase
+    .from('avaliados')
+    .select('id')
+    .ilike('nome', nome)
+    .ilike('cidade', cidade)
+    .maybeSingle()
 
-  /**
-   * 🔹 CASO 1: Perfil ainda não existe → criar
-   */
-  if (!finalAvaliadoId) {
-    const { data: novoPerfil, error: perfilError } = await supabase
+  if (findError && findError.code !== 'PGRST116') {
+    return NextResponse.json({ message: findError.message }, { status: 500 })
+  }
+
+  let avaliadoId = existente?.id
+
+  /** 2️⃣ Criar avaliado se não existir */
+  if (!avaliadoId) {
+    const { data: criado, error: createError } = await supabase
       .from('avaliados')
       .insert({
-        nome: anonimo ? null : nome,
-        cidade: cidade ?? null,
-        contato: contato ?? null,
+        nome,
+        cidade,
+        contato: contato || null,
       })
       .select('id')
       .single()
 
-    if (perfilError) {
-      console.error(perfilError)
+    if (createError) {
       return NextResponse.json(
-        { message: 'Erro ao criar perfil avaliado' },
+        { message: createError.message },
         { status: 500 }
       )
     }
 
-    finalAvaliadoId = novoPerfil.id
+    avaliadoId = criado.id
   }
 
-  /**
-   * 🔹 CASO 2: Perfil existe → só insere avaliação
-   */
+  /** 3️⃣ Criar avaliação */
   const { error: avaliacaoError } = await supabase
     .from('avaliacoes')
     .insert({
-      avaliado_id: finalAvaliadoId,
-      descricao: descricao ?? null,
+      avaliado_id: avaliadoId,
+      descricao: descricao || null,
       anonimo,
       ratings,
-      green_flags: greenFlags ?? [],
-      red_flags: redFlags ?? [],
+      green_flags: greenFlags,
+      red_flags: redFlags,
     })
 
   if (avaliacaoError) {
-    console.error(avaliacaoError)
     return NextResponse.json(
-      { message: 'Erro ao publicar avaliação' },
+      { message: avaliacaoError.message },
       { status: 500 }
     )
   }
 
-  return NextResponse.json({
-    success: true,
-    avaliadoId: finalAvaliadoId,
-  })
+  return NextResponse.json({ success: true })
 }
