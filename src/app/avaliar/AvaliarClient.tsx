@@ -32,6 +32,7 @@ function AvaliarForm() {
   const [greenFlags, setGreenFlags] = useState<string[]>([])
   const [redFlags, setRedFlags] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const ratingsValid = Object.values(ratings).every((value) => value >= 1)
 
   function toggleFlag(flag: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(flag) ? list.filter(f => f !== flag) : [...list, flag])
@@ -39,25 +40,23 @@ function AvaliarForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
 
     if (!nome.trim()) {
       alert('Nome é obrigatório')
-      setLoading(false)
       return
     }
 
     if (!cidade.trim()) {
       alert('Cidade é obrigatória')
-      setLoading(false)
       return
     }
 
-    if (Object.values(ratings).some((value) => value < 1)) {
+    if (!ratingsValid) {
       alert('Avaliações por critério são obrigatórias')
-      setLoading(false)
       return
     }
+
+    setLoading(true)
 
     const payload = {
       nome: nome.trim(),
@@ -79,20 +78,22 @@ function AvaliarForm() {
         body: JSON.stringify(payload),
       })
     } catch (err) {
-      setLoading(false)
       alert('Erro de rede ao publicar avaliação')
       return
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
 
     if (!res.ok) {
       let message = 'Erro ao publicar avaliação'
-      try {
-        const data = await res.json()
-        message = data?.message || message
-      } catch {
-        // evita crash se não vier JSON
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        try {
+          const data = await res.json()
+          message = data?.message || message
+        } catch {
+          // evita crash se não vier JSON válido
+        }
       }
       alert(message)
       return
@@ -218,7 +219,7 @@ function AvaliarForm() {
         </label>
 
         <button
-          disabled={loading}
+          disabled={loading || !ratingsValid}
           className="w-full bg-yellow-500 text-black py-3 rounded font-semibold"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}

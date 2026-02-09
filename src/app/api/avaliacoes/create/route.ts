@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function POST(req: Request) {
+  let body: unknown
   try {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,7 +11,21 @@ export async function POST(req: Request) {
       { cookies }
     )
 
-    const body = await req.json()
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json(
+        { message: 'Payload inválido' },
+        { status: 400 }
+      )
+    }
+
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json(
+        { message: 'Payload inválido' },
+        { status: 400 }
+      )
+    }
 
     const {
       nome,
@@ -21,7 +36,7 @@ export async function POST(req: Request) {
       ratings,
       greenFlags,
       redFlags,
-    } = body
+    } = body as Record<string, unknown>
 
     const nomeNormalizado =
       typeof nome === 'string' ? nome.trim() : ''
@@ -39,9 +54,30 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!ratings || Object.values(ratings).some(v => !v || v < 1)) {
+    if (!ratings || typeof ratings !== 'object' || Array.isArray(ratings)) {
       return NextResponse.json(
         { message: 'Avaliações por critério são obrigatórias' },
+        { status: 400 }
+      )
+    }
+
+    const ratingValues = Object.values(ratings)
+
+    if (
+      ratingValues.length === 0 ||
+      ratingValues.some(
+        (value) => typeof value !== 'number' || Number.isNaN(value) || value < 1
+      )
+    ) {
+      return NextResponse.json(
+        { message: 'Avaliações por critério são obrigatórias' },
+        { status: 400 }
+      )
+    }
+
+    if (!Array.isArray(greenFlags) || !Array.isArray(redFlags)) {
+      return NextResponse.json(
+        { message: 'Flags inválidas' },
         { status: 400 }
       )
     }
@@ -104,8 +140,10 @@ export async function POST(req: Request) {
       )
     }
 
-    return NextResponse.json({ success: true })
-
+    return NextResponse.json(
+      { message: 'Avaliação publicada com sucesso', success: true },
+      { status: 201 }
+    )
   } catch (err: any) {
     return NextResponse.json(
       { message: 'Erro inesperado no servidor' },
