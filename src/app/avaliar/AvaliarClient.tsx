@@ -108,13 +108,6 @@ function AvaliarForm() {
           className="w-full bg-zinc-900 p-3 rounded"
         />
 
-        <textarea
-          placeholder="Relato"
-          value={descricao}
-          onChange={(e) => setDescricao(e.target.value)}
-          className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
-        />
-
         <div className="space-y-4">
           <p className="text-sm text-gray-300">Avalie por critério</p>
           {CRITERIOS.map((criterio) => (
@@ -187,7 +180,12 @@ function AvaliarForm() {
             ))}
           </div>
         </div>
-
+        <textarea
+          placeholder="Relato"
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
+        />
         <label className="flex gap-2 items-center">
           <input
             type="checkbox"
