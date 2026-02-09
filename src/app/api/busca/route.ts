@@ -117,18 +117,28 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 7️⃣ Busca na VIEW reputacao_agregada (CORRETA)
+   * 7️⃣ Busca na tabela avaliados + avaliações públicas
    * ──────────────────────────────────────────────── */
   let query = supabaseAdmin
-    .from('reputacao_agregada')
-    .select(`
-      male_profile_id,
+    .from('avaliados')
+    .select(
+      `
+      id,
       nome,
       cidade,
-      total_avaliacoes,
-      media_geral,
-      confiabilidade_percentual
-    `)
+      avaliacoes!inner (
+        comportamento,
+        seguranca_emocional,
+        respeito,
+        carater,
+        confianca,
+        flags_positive,
+        flags_negative,
+        publica
+      )
+    `
+    )
+    .eq('avaliacoes.publica', true)
 
   if (nome) query = query.ilike('nome', `%${nome}%`)
   if (cidade) query = query.ilike('cidade', `%${cidade}%`)
@@ -173,16 +183,46 @@ export async function GET(req: Request) {
   /* ────────────────────────────────────────────────
    * 🔟 Retorno (NORMALIZADO PARA O FRONT)
    * ──────────────────────────────────────────────── */
+  const results = (data ?? []).map((avaliado: any) => {
+    const avaliacoes = Array.isArray(avaliado.avaliacoes)
+      ? avaliado.avaliacoes
+      : []
+    const totalAvaliacoes = avaliacoes.length
+    const soma = avaliacoes.reduce((acc: number, a: any) => {
+      const media =
+        (a.comportamento +
+          a.seguranca_emocional +
+          a.respeito +
+          a.carater +
+          a.confianca) /
+        5
+      return acc + media
+    }, 0)
+    const flagsPositive = new Set<string>()
+    const flagsNegative = new Set<string>()
+    avaliacoes.forEach((a: any) => {
+      a.flags_positive?.forEach((f: string) => flagsPositive.add(f))
+      a.flags_negative?.forEach((f: string) => flagsNegative.add(f))
+    })
+
+    return {
+      id: avaliado.id,
+      nome: avaliado.nome,
+      cidade: avaliado.cidade,
+      total_avaliacoes: totalAvaliacoes,
+      media_geral:
+        totalAvaliacoes > 0
+          ? Number((soma / totalAvaliacoes).toFixed(1))
+          : 0,
+      confiabilidade_percentual: Math.min(100, totalAvaliacoes * 10),
+      flags_positive: Array.from(flagsPositive),
+      flags_negative: Array.from(flagsNegative),
+    }
+  })
+
   return NextResponse.json({
     success: true,
     allowed: true,
-    results: (data ?? []).map(r => ({
-      id: r.male_profile_id,
-      nome: r.nome,
-      cidade: r.cidade,
-      total_avaliacoes: r.total_avaliacoes,
-      media_geral: r.media_geral,
-      confiabilidade_percentual: r.confiabilidade_percentual,
-    })),
+    results,
   })
 }

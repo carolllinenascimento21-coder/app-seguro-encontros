@@ -10,9 +10,11 @@ const supabase = createSupabaseClient();
 
 interface Avaliacao {
   id: string;
-  nome: string | null;
-  cidade: string | null;
-  contato: string | null;
+  avaliado: {
+    nome: string | null;
+    cidade: string | null;
+    telefone: string | null;
+  } | null;
   flags_positive: string[];
   flags_negative: string[];
   relato: string | null;
@@ -80,9 +82,11 @@ export default function MinhasAvaliacoes() {
         .from('avaliacoes')
         .select(`
           id,
-          nome,
-          cidade,
-          contato,
+          avaliado:avaliados (
+            nome,
+            cidade,
+            telefone
+          ),
           flags_positive,
           flags_negative,
           relato,
@@ -202,7 +206,7 @@ export default function MinhasAvaliacoes() {
                 <div className="flex justify-between mb-2">
                   <div>
                     <h3 className="text-white font-bold">
-                      {a.nome || 'Avaliação Anônima'}
+                      {a.avaliado?.nome || 'Nome não informado'}
                     </h3>
                     <p className="text-gray-400 text-xs">
                       {formatDate(a.created_at)}

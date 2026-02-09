@@ -33,6 +33,8 @@ function AvaliarForm() {
   const [redFlags, setRedFlags] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const ratingsValid = Object.values(ratings).every((value) => value >= 1)
+  const nomeValid = nome.trim().length > 0
+  const cidadeValid = cidade.trim().length > 0
 
   function toggleFlag(flag: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(flag) ? list.filter(f => f !== flag) : [...list, flag])
@@ -41,12 +43,12 @@ function AvaliarForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!nome.trim()) {
+    if (!nomeValid) {
       alert('Nome é obrigatório')
       return
     }
 
-    if (!cidade.trim()) {
+    if (!cidadeValid) {
       alert('Cidade é obrigatória')
       return
     }
@@ -62,11 +64,11 @@ function AvaliarForm() {
       nome: nome.trim(),
       cidade: cidade.trim(),
       contato: contato?.trim() || null,
-      descricao: descricao?.trim() || null,
       anonimo,
       ratings,
       greenFlags,
       redFlags,
+      descricao: descricao?.trim() || null,
     }
 
     let res: Response
@@ -219,7 +221,7 @@ function AvaliarForm() {
         </label>
 
         <button
-          disabled={loading || !ratingsValid}
+          disabled={loading || !ratingsValid || !nomeValid || !cidadeValid}
           className="w-full bg-yellow-500 text-black py-3 rounded font-semibold"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}

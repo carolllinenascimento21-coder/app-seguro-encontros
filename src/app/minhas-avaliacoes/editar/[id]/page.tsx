@@ -15,25 +15,27 @@ export default function EditarAvaliacao() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [avaliadoId, setAvaliadoId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    nome_homem: '',
+    nome: '',
     telefone: '',
     cidade: '',
-    nota_comportamento: 0,
-    nota_seguranca_emocional: 0,
-    nota_respeito: 0,
-    nota_carater: 0,
-    nota_confianca: 0,
-    comentario: '',
-    red_flags: [] as string[],
+    comportamento: 0,
+    seguranca_emocional: 0,
+    respeito: 0,
+    carater: 0,
+    confianca: 0,
+    relato: '',
+    flags_negative: [] as string[],
+    flags_positive: [] as string[],
   });
 
   const categorias = [
-    { key: 'nota_comportamento', label: 'Comportamento' },
-    { key: 'nota_seguranca_emocional', label: 'Segurança Emocional' },
-    { key: 'nota_respeito', label: 'Respeito' },
-    { key: 'nota_carater', label: 'Caráter' },
-    { key: 'nota_confianca', label: 'Confiança' },
+    { key: 'comportamento', label: 'Comportamento' },
+    { key: 'seguranca_emocional', label: 'Segurança Emocional' },
+    { key: 'respeito', label: 'Respeito' },
+    { key: 'carater', label: 'Caráter' },
+    { key: 'confianca', label: 'Confiança' },
   ];
 
   const redFlagsOptions = [
@@ -90,7 +92,23 @@ export default function EditarAvaliacao() {
 
       const { data, error } = await supabase
         .from('avaliacoes')
-        .select('*')
+        .select(`
+          id,
+          avaliado_id,
+          relato,
+          flags_positive,
+          flags_negative,
+          comportamento,
+          seguranca_emocional,
+          respeito,
+          carater,
+          confianca,
+          avaliado:avaliados (
+            nome,
+            cidade,
+            telefone
+          )
+        `)
         .eq('id', avaliacaoId)
         .eq('autor_id', user.id) // Garantir que só edita próprias avaliações
         .single();
@@ -103,17 +121,19 @@ export default function EditarAvaliacao() {
         return;
       }
 
+      setAvaliadoId(data.avaliado_id ?? null);
       setFormData({
-        nome_homem: data.nome_homem,
-        telefone: data.telefone || '',
-        cidade: data.cidade || '',
-        nota_comportamento: data.nota_comportamento,
-        nota_seguranca_emocional: data.nota_seguranca_emocional,
-        nota_respeito: data.nota_respeito,
-        nota_carater: data.nota_carater,
-        nota_confianca: data.nota_confianca,
-        comentario: data.comentario || '',
-        red_flags: data.red_flags || [],
+        nome: data.avaliado?.nome || '',
+        telefone: data.avaliado?.telefone || '',
+        cidade: data.avaliado?.cidade || '',
+        comportamento: data.comportamento ?? 0,
+        seguranca_emocional: data.seguranca_emocional ?? 0,
+        respeito: data.respeito ?? 0,
+        carater: data.carater ?? 0,
+        confianca: data.confianca ?? 0,
+        relato: data.relato || '',
+        flags_negative: data.flags_negative || [],
+        flags_positive: data.flags_positive || [],
       });
     } catch (error) {
       console.error('Erro ao carregar avaliação:', error);
@@ -131,9 +151,9 @@ export default function EditarAvaliacao() {
   const toggleRedFlag = (flag: string) => {
     setFormData((prev) => ({
       ...prev,
-      red_flags: prev.red_flags.includes(flag)
-        ? prev.red_flags.filter((f) => f !== flag)
-        : [...prev.red_flags, flag],
+      flags_negative: prev.flags_negative.includes(flag)
+        ? prev.flags_negative.filter((f) => f !== flag)
+        : [...prev.flags_negative, flag],
     }));
   };
 
@@ -177,22 +197,32 @@ export default function EditarAvaliacao() {
       const { error } = await supabase
         .from('avaliacoes')
         .update({
-          nome_homem: formData.nome_homem,
-          telefone: formData.telefone,
-          cidade: formData.cidade,
-          nota_comportamento: formData.nota_comportamento,
-          nota_seguranca_emocional: formData.nota_seguranca_emocional,
-          nota_respeito: formData.nota_respeito,
-          nota_carater: formData.nota_carater,
-          nota_confianca: formData.nota_confianca,
-          comentario: formData.comentario,
-          red_flags: formData.red_flags,
-          updated_at: new Date().toISOString(),
+          relato: formData.relato || null,
+          flags_positive: formData.flags_positive,
+          flags_negative: formData.flags_negative,
+          comportamento: formData.comportamento,
+          seguranca_emocional: formData.seguranca_emocional,
+          respeito: formData.respeito,
+          carater: formData.carater,
+          confianca: formData.confianca,
         })
         .eq('id', avaliacaoId)
         .eq('autor_id', user.id);
 
       if (error) throw error;
+
+      if (avaliadoId) {
+        const { error: avaliadoError } = await supabase
+          .from('avaliados')
+          .update({
+            nome: formData.nome,
+            cidade: formData.cidade,
+            telefone: formData.telefone || null,
+          })
+          .eq('id', avaliadoId);
+
+        if (avaliadoError) throw avaliadoError;
+      }
 
       alert('Avaliação atualizada com sucesso!');
       router.push('/minhas-avaliacoes');
@@ -252,9 +282,9 @@ export default function EditarAvaliacao() {
                 <input
                   type="text"
                   required
-                  value={formData.nome_homem}
+                  value={formData.nome}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, nome_homem: e.target.value }))
+                    setFormData((prev) => ({ ...prev, nome: e.target.value }))
                   }
                   className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors"
                   placeholder="Digite o nome completo"
@@ -354,7 +384,7 @@ export default function EditarAvaliacao() {
                   type="button"
                   onClick={() => toggleRedFlag(flag)}
                   className={`px-3 py-2 rounded-full text-sm transition-colors ${
-                    formData.red_flags.includes(flag)
+                    formData.flags_negative.includes(flag)
                       ? 'bg-red-500 text-white'
                       : 'bg-white/5 text-gray-400 border border-gray-600 hover:border-red-500'
                   }`}
@@ -371,9 +401,9 @@ export default function EditarAvaliacao() {
               Relato Detalhado (opcional)
             </h2>
             <textarea
-              value={formData.comentario}
+              value={formData.relato}
               onChange={(e) =>
-                setFormData((prev) => ({ ...prev, comentario: e.target.value }))
+                setFormData((prev) => ({ ...prev, relato: e.target.value }))
               }
               rows={6}
               className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#D4AF37] transition-colors resize-none"
