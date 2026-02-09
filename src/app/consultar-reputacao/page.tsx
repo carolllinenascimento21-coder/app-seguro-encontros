@@ -18,11 +18,9 @@ interface Avaliacao {
   id: string
   nome: string | null
   cidade: string | null
-  comportamento: number | null
-  seguranca_emocional: number | null
-  respeito: number | null
-  carater: number | null
-  confianca: number | null
+  total_avaliacoes: number
+  media_geral: number
+  confiabilidade_percentual: number
   flags_positive: string[] | null
   flags_negative: string[] | null
 }
@@ -40,16 +38,8 @@ export default function ConsultarReputacao() {
    * ⭐ Média segura
    * ──────────────────────────────────────────────── */
   const media = (a: Avaliacao) => {
-    const valores = [
-      a.comportamento,
-      a.seguranca_emocional,
-      a.respeito,
-      a.carater,
-      a.confianca,
-    ].filter((v): v is number => typeof v === 'number')
-
-    if (valores.length === 0) return '—'
-    return (valores.reduce((acc, v) => acc + v, 0) / valores.length).toFixed(1)
+    if (typeof a.media_geral !== 'number') return '—'
+    return a.media_geral.toFixed(1)
   }
 
   /* ────────────────────────────────────────────────

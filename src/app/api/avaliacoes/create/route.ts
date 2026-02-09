@@ -53,27 +53,26 @@ export async function POST(req: Request) {
       )
     }
 
-    const {
-      nome,
-      cidade,
-      contato,
-      descricao,
-      anonimo,
-      ratings,
-      greenFlags,
-      redFlags,
-      green_flags: greenFlagsSnake,
-      red_flags: redFlagsSnake,
-    } = body as Record<string, unknown>
+    const payload = body as Record<string, unknown>
+    const nomeRaw = payload.nome
+    const cidadeRaw = payload.cidade
+    const contatoRaw = payload.contato
+    const descricaoRaw = payload.descricao ?? payload.relato
+    const anonimoRaw = payload.anonimo
+    const ratingsRaw = payload.ratings
+    const greenFlagsRaw = payload.greenFlags ?? payload.flags_positive
+    const redFlagsRaw = payload.redFlags ?? payload.flags_negative
 
     const nomeNormalizado =
-      typeof nome === 'string' ? nome.trim().toLowerCase() : ''
+      typeof nomeRaw === 'string' ? nomeRaw.trim() : ''
     const cidadeNormalizada =
-      typeof cidade === 'string' ? cidade.trim().toLowerCase() : ''
+      typeof cidadeRaw === 'string' ? cidadeRaw.trim() : ''
     const contatoNormalizado =
-      typeof contato === 'string' ? contato.trim() : null
+      typeof contatoRaw === 'string' ? contatoRaw.trim() : null
     const descricaoNormalizada =
-      typeof descricao === 'string' ? descricao.trim() : null
+      typeof descricaoRaw === 'string' ? descricaoRaw.trim() : null
+    const anonimoBool =
+      typeof anonimoRaw === 'boolean' ? anonimoRaw : false
 
     if (!nomeNormalizado || !cidadeNormalizada) {
       console.warn(`${logPrefix} validação falhou: nome/cidade`, {
@@ -86,9 +85,9 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!ratings || typeof ratings !== 'object' || Array.isArray(ratings)) {
+    if (!ratingsRaw || typeof ratingsRaw !== 'object' || Array.isArray(ratingsRaw)) {
       console.warn(`${logPrefix} validação falhou: ratings`, {
-        ratingsType: typeof ratings,
+        ratingsType: typeof ratingsRaw,
       })
       return NextResponse.json(
         { success: false, message: 'Avaliações por critério são obrigatórias' },
@@ -96,7 +95,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const ratingsPayload = ratings as Record<string, unknown>
+    const ratingsPayload = ratingsRaw as Record<string, unknown>
     const ratingValues = Object.values(ratingsPayload)
 
     if (
@@ -114,38 +113,31 @@ export async function POST(req: Request) {
       )
     }
 
-    const normalizedGreenFlags = Array.isArray(greenFlags)
-      ? greenFlags
-      : Array.isArray(greenFlagsSnake)
-        ? greenFlagsSnake
-        : null
-    const normalizedRedFlags = Array.isArray(redFlags)
-      ? redFlags
-      : Array.isArray(redFlagsSnake)
-        ? redFlagsSnake
-        : null
-
-    if (!normalizedGreenFlags || !normalizedRedFlags) {
-      console.warn(`${logPrefix} validação falhou: flags inválidas`, {
-        greenFlagsType: typeof greenFlags,
-        redFlagsType: typeof redFlags,
-      })
-      return NextResponse.json(
-        { success: false, message: 'Flags inválidas' },
-        { status: 400 }
-      )
+    const parseFlags = (value: unknown) => {
+      if (value == null) return []
+      if (Array.isArray(value)) return value
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value)
+          if (Array.isArray(parsed)) return parsed
+        } catch {
+          return value
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean)
+        }
+      }
+      return []
     }
 
-    if (
-      normalizedGreenFlags.some(flag => typeof flag !== 'string') ||
-      normalizedRedFlags.some(flag => typeof flag !== 'string')
-    ) {
-      console.warn(`${logPrefix} validação falhou: flags não textuais`)
-      return NextResponse.json(
-        { success: false, message: 'Flags inválidas' },
-        { status: 400 }
-      )
-    }
+    const normalizedGreenFlags = parseFlags(greenFlagsRaw)
+      .filter((flag): flag is string => typeof flag === 'string')
+      .map(flag => flag.trim())
+      .filter(Boolean)
+    const normalizedRedFlags = parseFlags(redFlagsRaw)
+      .filter((flag): flag is string => typeof flag === 'string')
+      .map(flag => flag.trim())
+      .filter(Boolean)
 
     const ratingMap = {
       comportamento: Number(ratingsPayload.comportamento ?? 0),
@@ -154,7 +146,6 @@ export async function POST(req: Request) {
       carater: Number(ratingsPayload.carater ?? 0),
       confianca: Number(ratingsPayload.confianca ?? 0),
     }
-    const anonimoBool = !!anonimo
 
     const ratingKeys = Object.keys(ratingMap)
     if (
@@ -178,28 +169,88 @@ export async function POST(req: Request) {
       redFlagsCount: normalizedRedFlags.length,
     })
 
+    let avaliadosQuery = supabaseAdmin
+      .from('avaliados')
+      .select('id')
+      .ilike('nome', nomeNormalizado)
+      .ilike('cidade', cidadeNormalizada)
+
+    if (contatoNormalizado) {
+      avaliadosQuery = avaliadosQuery.eq('telefone', contatoNormalizado)
+    }
+
+    const { data: avaliadosExistentes, error: avaliadoBuscaError } =
+      await avaliadosQuery.limit(1)
+
+    if (avaliadoBuscaError) {
+      console.error(`${logPrefix} erro ao buscar avaliado`, avaliadoBuscaError)
+      return NextResponse.json(
+        { success: false, message: 'Erro ao validar avaliado' },
+        { status: 500 }
+      )
+    }
+
+    let avaliadoId = avaliadosExistentes?.[0]?.id
+
+    if (!avaliadoId) {
+      const { data: avaliadoCriado, error: avaliadoError } =
+        await supabaseAdmin
+          .from('avaliados')
+          .insert({
+            nome: nomeNormalizado,
+            cidade: cidadeNormalizada,
+            telefone: contatoNormalizado,
+          })
+          .select('id')
+          .single()
+
+      if (avaliadoError || !avaliadoCriado) {
+        console.error(`${logPrefix} erro ao criar avaliado`, avaliadoError)
+        return NextResponse.json(
+          { success: false, message: 'Erro ao criar avaliado' },
+          { status: 500 }
+        )
+      }
+
+      avaliadoId = avaliadoCriado.id
+    }
+
     /** 📝 Criar avaliação */
-    const { error: avaliacaoError } = await supabaseAdmin
+    const { data: avaliacaoCriada, error: avaliacaoError } = await supabaseAdmin
       .from('avaliacoes')
       .insert({
         autor_id: user.id,
-        user_id: anonimoBool ? null : user.id,
-        nome: nomeNormalizado,
-        cidade: cidadeNormalizada,
-        contato: contatoNormalizado,
+        avaliado_id: avaliadoId,
         relato: descricaoNormalizada,
         anonimo: anonimoBool,
-        is_anonymous: anonimoBool,
-        publica: !anonimoBool,
+        publica: true,
         flags_positive: normalizedGreenFlags,
         flags_negative: normalizedRedFlags,
         ...ratingMap,
       })
+      .select('id')
+      .single()
 
-    if (avaliacaoError) {
+    if (avaliacaoError || !avaliacaoCriada) {
       console.error(`${logPrefix} erro ao inserir avaliação`, avaliacaoError)
       return NextResponse.json(
         { success: false, message: avaliacaoError.message },
+        { status: 500 }
+      )
+    }
+
+    const { error: autoraError } = await supabaseAdmin
+      .from('avaliacoes_autoras')
+      .insert({
+        avaliacao_id: avaliacaoCriada.id,
+        autora_id: user.id,
+      })
+
+    if (autoraError) {
+      console.error(`${logPrefix} erro ao inserir autora`, autoraError)
+      await supabaseAdmin.from('avaliacoes').delete().eq('id', avaliacaoCriada.id)
+      return NextResponse.json(
+        { success: false, message: 'Erro ao vincular autora' },
         { status: 500 }
       )
     }
@@ -208,7 +259,7 @@ export async function POST(req: Request) {
       elapsedMs: Date.now() - startedAt,
     })
     return NextResponse.json(
-      { success: true, message: 'Avaliação publicada com sucesso' },
+      { success: true, message: 'Avaliação publicada com sucesso', id: avaliacaoCriada.id },
       { status: 201 }
     )
   } catch (err: any) {

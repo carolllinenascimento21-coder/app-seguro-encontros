@@ -51,25 +51,63 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     redirect('/consultar-reputacao')
   }
 
-  const { data: avaliacao, error } = await supabaseAdmin
-    .from('reputacao_agregada')
-    .select(`
-      male_profile_id,
-      display_name,
-      city,
-      state,
-      country,
-      total_avaliacoes,
-      media_geral,
-      confiabilidade_percentual,
-      flags_positive,
-      flags_negative
-    `)
-    .eq('male_profile_id', params.id)
+  const { data: avaliado, error } = await supabaseAdmin
+    .from('avaliados')
+    .select(
+      `
+      id,
+      nome,
+      cidade,
+      avaliacoes!inner (
+        comportamento,
+        seguranca_emocional,
+        respeito,
+        carater,
+        confianca,
+        flags_positive,
+        flags_negative,
+        publica
+      )
+    `
+    )
+    .eq('id', params.id)
+    .eq('avaliacoes.publica', true)
     .single()
 
-  if (error || !avaliacao) {
+  if (error || !avaliado) {
     redirect('/consultar-reputacao')
+  }
+
+  const avaliacoes = Array.isArray(avaliado.avaliacoes)
+    ? avaliado.avaliacoes
+    : []
+  const totalAvaliacoes = avaliacoes.length
+  const soma = avaliacoes.reduce((acc: number, a: any) => {
+    const media =
+      (a.comportamento +
+        a.seguranca_emocional +
+        a.respeito +
+        a.carater +
+        a.confianca) /
+      5
+    return acc + media
+  }, 0)
+  const flagsPositive = new Set<string>()
+  const flagsNegative = new Set<string>()
+  avaliacoes.forEach((a: any) => {
+    a.flags_positive?.forEach((f: string) => flagsPositive.add(f))
+    a.flags_negative?.forEach((f: string) => flagsNegative.add(f))
+  })
+
+  const avaliacao = {
+    display_name: avaliado.nome,
+    city: avaliado.cidade,
+    total_avaliacoes: totalAvaliacoes,
+    media_geral:
+      totalAvaliacoes > 0 ? Number((soma / totalAvaliacoes).toFixed(1)) : 0,
+    confiabilidade_percentual: Math.min(100, totalAvaliacoes * 10),
+    flags_positive: Array.from(flagsPositive),
+    flags_negative: Array.from(flagsNegative),
   }
 
   const media =
