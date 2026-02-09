@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
       return NextResponse.json(
-        { error: envError.message },
+        { success: false, error: envError.message },
         { status: envError.status }
       )
     }
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
   const supabaseAdmin = getSupabaseAdminClient()
   if (!supabaseAdmin) {
     return NextResponse.json(
-      { error: 'Supabase admin não configurado' },
+      { success: false, error: 'Supabase admin não configurado' },
       { status: 503 }
     )
   }
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
 
   if (!user) {
     return NextResponse.json(
-      { error: 'Usuária não autenticada' },
+      { success: false, error: 'Usuária não autenticada' },
       { status: 401 }
     )
   }
@@ -52,12 +52,12 @@ export async function GET(req: Request) {
    * 3️⃣ Parâmetros
    * ──────────────────────────────────────────────── */
   const { searchParams } = new URL(req.url)
-  const nome = searchParams.get('nome')?.trim() ?? ''
-  const cidade = searchParams.get('cidade')?.trim() ?? ''
+  const nome = searchParams.get('nome')?.trim().toLowerCase() ?? ''
+  const cidade = searchParams.get('cidade')?.trim().toLowerCase() ?? ''
 
   if (!nome && !cidade) {
     return NextResponse.json(
-      { error: 'Informe nome ou cidade' },
+      { success: false, error: 'Informe nome ou cidade' },
       { status: 400 }
     )
   }
@@ -74,7 +74,7 @@ export async function GET(req: Request) {
   if (profileError || !profile) {
     console.error('Erro ao carregar perfil', profileError)
     return NextResponse.json(
-      { error: 'Erro ao validar perfil' },
+      { success: false, error: 'Erro ao validar perfil' },
       { status: 500 }
     )
   }
@@ -107,6 +107,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json(
       {
+        success: false,
         allowed: false,
         code: 'FREE_LIMIT_REACHED',
         message: 'Consulta gratuita já utilizada',
@@ -137,7 +138,11 @@ export async function GET(req: Request) {
   if (error) {
     console.error('Erro ao buscar reputação', error)
     return NextResponse.json(
-      { error: 'Erro ao buscar reputação', details: error.message },
+      {
+        success: false,
+        error: 'Erro ao buscar reputação',
+        details: error.message,
+      },
       { status: 500 }
     )
   }
@@ -169,6 +174,7 @@ export async function GET(req: Request) {
    * 🔟 Retorno (NORMALIZADO PARA O FRONT)
    * ──────────────────────────────────────────────── */
   return NextResponse.json({
+    success: true,
     allowed: true,
     results: (data ?? []).map(r => ({
       id: r.male_profile_id,
