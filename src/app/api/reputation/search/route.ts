@@ -6,10 +6,12 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const nome = searchParams.get('nome')
     const cidade = searchParams.get('cidade')
+    const nomeNormalizado = nome?.trim().toLowerCase() ?? ''
+    const cidadeNormalizada = cidade?.trim().toLowerCase() ?? ''
 
-    if (!nome && !cidade) {
+    if (!nomeNormalizado && !cidadeNormalizada) {
       return NextResponse.json(
-        { error: 'Informe nome ou cidade para buscar' },
+        { success: false, message: 'Informe nome ou cidade para buscar' },
         { status: 400 }
       )
     }
@@ -31,12 +33,12 @@ export async function GET(req: Request) {
       `)
       .eq('publica', true)
 
-    if (nome) {
-      query = query.ilike('nome', `%${nome}%`)
+    if (nomeNormalizado) {
+      query = query.ilike('nome', `%${nomeNormalizado}%`)
     }
 
-    if (cidade) {
-      query = query.ilike('cidade', `%${cidade}%`)
+    if (cidadeNormalizada) {
+      query = query.ilike('cidade', `%${cidadeNormalizada}%`)
     }
 
     const { data, error } = await query
@@ -44,7 +46,7 @@ export async function GET(req: Request) {
     if (error) {
       console.error(error)
       return NextResponse.json(
-        { error: 'Erro ao buscar reputação' },
+        { success: false, message: 'Erro ao buscar reputação' },
         { status: 500 }
       )
     }
@@ -88,11 +90,11 @@ export async function GET(req: Request) {
       flags_negative: Array.from(r.flags_negative),
     }))
 
-    return NextResponse.json({ results })
+    return NextResponse.json({ success: true, results })
   } catch (err) {
     console.error(err)
     return NextResponse.json(
-      { error: 'Erro interno' },
+      { success: false, message: 'Erro interno' },
       { status: 500 }
     )
   }
