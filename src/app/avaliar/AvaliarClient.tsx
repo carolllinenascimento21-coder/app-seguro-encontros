@@ -38,48 +38,62 @@ function AvaliarForm() {
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
+  e.preventDefault()
+  setLoading(true)
 
-    if (!nome.trim()) {
-      alert('Nome é obrigatório')
-      setLoading(false)
-      return
-    }
-    if (!cidade.trim()) {
-      alert('Cidade é obrigatória')
-      setLoading(false)
-      return
-    }
+  if (!nome.trim()) {
+    alert('Nome é obrigatório')
+    setLoading(false)
+    return
+  }
 
-    const payload = {
-      nome: nome.trim(),
-      cidade: cidade.trim(),
-      contato: contato?.trim() || null,
-      descricao: descricao?.trim() || null,
-      anonimo,
-      ratings,
-      greenFlags,
-      redFlags,
-    }
+  if (!cidade.trim()) {
+    alert('Cidade é obrigatória')
+    setLoading(false)
+    return
+  }
 
-    const res = await fetch('/api/avaliacoes/create', {
+  const payload = {
+    nome: nome.trim(),
+    cidade: cidade.trim(),
+    contato: contato?.trim() || null,
+    descricao: descricao?.trim() || null,
+    anonimo,
+    ratings,
+    greenFlags,
+    redFlags,
+  }
+
+  let res: Response
+
+  try {
+    res = await fetch('/api/avaliacoes/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-
+  } catch (err) {
     setLoading(false)
-
-    if (!res.ok) {
-      const data = await res.json()
-      console.error(data)
-      alert(data?.message || 'Erro ao publicar avaliação')
-      return
-    }
-
-    alert('Avaliação publicada com sucesso')
+    alert('Erro de rede ao publicar avaliação')
+    return
   }
+
+  setLoading(false)
+
+  if (!res.ok) {
+    let message = 'Erro ao publicar avaliação'
+    try {
+      const data = await res.json()
+      message = data?.message || message
+    } catch {
+      // evita crash se não vier JSON
+    }
+    alert(message)
+    return
+  }
+
+  alert('Avaliação publicada com sucesso')
+}
 
   return (
     <main className="min-h-screen bg-black text-white px-4 py-6">
