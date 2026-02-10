@@ -8,6 +8,13 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 const DEFAULT_LIMIT = 20
 const FREE_LIMIT = 1
 
+const normalize = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
 export async function GET(req: Request) {
   /* ────────────────────────────────────────────────
    * 1️⃣ Ambiente público
@@ -49,13 +56,16 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 3️⃣ Parâmetros
+   * 3️⃣ Parâmetros (NORMALIZAÇÃO – PASSO 1)
    * ──────────────────────────────────────────────── */
   const { searchParams } = new URL(req.url)
-  const nome = searchParams.get('nome')?.trim().toLowerCase() ?? ''
-  const cidade = searchParams.get('cidade')?.trim().toLowerCase() ?? ''
+  const nomeRaw = searchParams.get('nome') ?? ''
+  const cidadeRaw = searchParams.get('cidade') ?? ''
 
-  if (!nome && !cidade) {
+  const normalizedName = nomeRaw ? normalize(nomeRaw) : ''
+  const normalizedCity = cidadeRaw ? normalize(cidadeRaw) : ''
+
+  if (!normalizedName && !normalizedCity) {
     return NextResponse.json(
       { success: false, error: 'Informe nome ou cidade' },
       { status: 400 }
@@ -89,8 +99,8 @@ export async function GET(req: Request) {
     user_id: user.id,
     event_name: 'consult_basic',
     metadata: {
-      nome: !!nome,
-      cidade: !!cidade,
+      nome: !!normalizedName,
+      cidade: !!normalizedCity,
       plan: profile.current_plan_id ?? 'free',
     },
   })
@@ -117,15 +127,15 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 7️⃣ Busca na tabela avaliados + avaliações públicas
+   * 7️⃣ BUSCA EM male_profiles + avaliacoes (PASSO 2)
    * ──────────────────────────────────────────────── */
   let query = supabaseAdmin
-    .from('avaliados')
+    .from('male_profiles')
     .select(
       `
       id,
-      nome,
-      cidade,
+      display_name,
+      city,
       avaliacoes!inner (
         comportamento,
         seguranca_emocional,
@@ -140,19 +150,18 @@ export async function GET(req: Request) {
     )
     .eq('avaliacoes.publica', true)
 
-  if (nome) query = query.ilike('nome', `%${nome}%`)
-  if (cidade) query = query.ilike('cidade', `%${cidade}%`)
+  if (normalizedName)
+    query = query.eq('normalized_name', normalizedName)
+
+  if (normalizedCity)
+    query = query.eq('normalized_city', normalizedCity)
 
   const { data, error } = await query.limit(DEFAULT_LIMIT)
 
   if (error) {
     console.error('Erro ao buscar reputação', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Erro ao buscar reputação',
-        details: error.message,
-      },
+      { success: false, error: 'Erro ao buscar reputação' },
       { status: 500 }
     )
   }
@@ -170,56 +179,49 @@ export async function GET(req: Request) {
   }
 
   /* ────────────────────────────────────────────────
-   * 9️⃣ Tracking: resultado
+   * 9️⃣ Normalização de resultado
    * ──────────────────────────────────────────────── */
-  await supabaseAdmin.from('analytics_events').insert({
-    user_id: user.id,
-    event_name: 'view_result_summary',
-    metadata: {
-      results_count: data?.length ?? 0,
-    },
-  })
-
-  /* ────────────────────────────────────────────────
-   * 🔟 Retorno (NORMALIZADO PARA O FRONT)
-   * ──────────────────────────────────────────────── */
-  const results = (data ?? []).map((avaliado: any) => {
-    const avaliacoes = Array.isArray(avaliado.avaliacoes)
-      ? avaliado.avaliacoes
+  const results = (data ?? []).map((profile: any) => {
+    const avaliacoes = Array.isArray(profile.avaliacoes)
+      ? profile.avaliacoes
       : []
-    const totalAvaliacoes = avaliacoes.length
+
+    const total = avaliacoes.length
     const soma = avaliacoes.reduce((acc: number, a: any) => {
-      const media =
+      return (
+        acc +
         (a.comportamento +
           a.seguranca_emocional +
           a.respeito +
           a.carater +
           a.confianca) /
-        5
-      return acc + media
+          5
+      )
     }, 0)
+
     const flagsPositive = new Set<string>()
     const flagsNegative = new Set<string>()
+
     avaliacoes.forEach((a: any) => {
       a.flags_positive?.forEach((f: string) => flagsPositive.add(f))
       a.flags_negative?.forEach((f: string) => flagsNegative.add(f))
     })
 
     return {
-      id: avaliado.id,
-      nome: avaliado.nome,
-      cidade: avaliado.cidade,
-      total_avaliacoes: totalAvaliacoes,
-      media_geral:
-        totalAvaliacoes > 0
-          ? Number((soma / totalAvaliacoes).toFixed(1))
-          : 0,
-      confiabilidade_percentual: Math.min(100, totalAvaliacoes * 10),
+      id: profile.id,
+      nome: profile.display_name,
+      cidade: profile.city,
+      total_avaliacoes: total,
+      media_geral: total > 0 ? Number((soma / total).toFixed(1)) : 0,
+      confiabilidade_percentual: Math.min(100, total * 10),
       flags_positive: Array.from(flagsPositive),
       flags_negative: Array.from(flagsNegative),
     }
   })
 
+  /* ────────────────────────────────────────────────
+   * 🔟 Retorno
+   * ──────────────────────────────────────────────── */
   return NextResponse.json({
     success: true,
     allowed: true,
