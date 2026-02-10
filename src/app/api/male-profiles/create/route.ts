@@ -59,26 +59,27 @@ export async function POST(req: Request) {
       })
     }
 
-    // ➕ cria novo perfil
-    const { data: created, error } = await supabaseAdmin
-      .from('male_profiles')
-      .insert({
-        display_name: nome,
-        city: cidade,
-        normalized_name,
-        normalized_city,
-        is_active: true,
-      })
-      .select('id')
-      .single()
+    if (error) {
+  console.error('Erro ao criar male_profile', {
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    code: error.code,
+  })
 
-    if (error || !created) {
-      console.error('Erro ao criar male_profile', error)
-      return NextResponse.json(
-        { success: false, message: 'Erro ao criar perfil' },
-        { status: 500 }
-      )
-    }
+  return NextResponse.json(
+    {
+      success: false,
+      supabaseError: {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      },
+    },
+    { status: 500 }
+  )
+}
 
     return NextResponse.json(
       { success: true, id: created.id, reused: false },
