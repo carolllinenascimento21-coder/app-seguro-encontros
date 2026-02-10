@@ -145,7 +145,7 @@ export async function POST(req: Request) {
     if (findError) {
       console.error(logPrefix, findError)
       return NextResponse.json(
-        { success: false, message: 'Erro ao validar perfil avaliado' },
+        { success: false, message: `Erro ao validar perfil avaliado: ${findError.message}` },
         { status: 500 }
       )
     }
@@ -155,20 +155,23 @@ export async function POST(req: Request) {
     if (!maleProfileId) {
       const { data: createdProfile, error: createError } = await supabaseAdmin
         .from('male_profiles')
-        .insert({
+        .upsert({
           display_name: nome,
           city: cidade,
           normalized_name: normalizedName,
           normalized_city: normalizedCity,
           is_active: true,
-        })
+        }, { onConflict: 'normalized_name,normalized_city', ignoreDuplicates: false })
         .select('id')
         .single()
 
       if (createError || !createdProfile) {
         console.error(logPrefix, createError)
         return NextResponse.json(
-          { success: false, message: 'Erro ao criar perfil avaliado' },
+          {
+            success: false,
+            message: `Erro ao criar perfil avaliado: ${createError?.message ?? 'unknown error'}`,
+          },
           { status: 500 }
         )
       }
@@ -219,7 +222,10 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error('[api/avaliacoes/create] erro inesperado', err)
     return NextResponse.json(
-      { success: false, message: 'Erro inesperado no servidor' },
+      {
+        success: false,
+        message: err instanceof Error ? err.message : 'Erro inesperado no servidor',
+      },
       { status: 500 }
     )
   }

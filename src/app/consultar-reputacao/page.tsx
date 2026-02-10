@@ -28,25 +28,20 @@ interface Avaliacao {
 export default function ConsultarReputacao() {
   const router = useRouter()
 
-  const [nome, setNome] = useState('')
-  const [cidade, setCidade] = useState('')
+  const [termo, setTermo] = useState('')
   const [results, setResults] = useState<Avaliacao[]>([])
   const [loading, setLoading] = useState(false)
-  const [blocked, setBlocked] = useState(false) // 🔒 paywall backend
+  const [blocked, setBlocked] = useState(false)
 
-  /* ────────────────────────────────────────────────
-   * ⭐ Média segura
-   * ──────────────────────────────────────────────── */
   const media = (a: Avaliacao) => {
     if (typeof a.media_geral !== 'number') return '—'
     return a.media_geral.toFixed(1)
   }
 
-  /* ────────────────────────────────────────────────
-   * 🔍 Busca (backend decide tudo)
-   * ──────────────────────────────────────────────── */
   const buscar = async () => {
-    if (!nome.trim() && !cidade.trim()) {
+    const normalizedTerm = termo.trim().toLowerCase()
+
+    if (!normalizedTerm) {
       alert('Digite um nome ou cidade para buscar.')
       return
     }
@@ -54,35 +49,30 @@ export default function ConsultarReputacao() {
     try {
       setLoading(true)
 
-      trackEvent('search_attempt', 'frontend', {
-        nome: !!nome,
-        cidade: !!cidade,
+      trackEvent('search_attempt', {
+        has_term: true,
+        term_length: normalizedTerm.length,
       })
 
-      const params = new URLSearchParams()
-      if (nome.trim()) params.set('nome', nome.trim())
-      if (cidade.trim()) params.set('cidade', cidade.trim())
-
+      const params = new URLSearchParams({ termo: normalizedTerm })
       const res = await fetch(`/api/busca?${params.toString()}`)
       const payload = await res.json()
 
       if (!res.ok && payload?.code === 'FREE_LIMIT_REACHED') {
         setBlocked(true)
-
-        trackEvent('search_blocked_free_limit', 'backend')
-
+        trackEvent('search_blocked_free_limit')
         return
       }
 
       if (!res.ok) {
-        alert('Erro ao buscar reputação.')
+        alert(payload?.error ?? 'Erro ao buscar reputação.')
         return
       }
 
       setBlocked(false)
       setResults(payload.results ?? [])
 
-      trackEvent('search_success', 'backend', {
+      trackEvent('search_success', {
         results_count: payload.results?.length ?? 0,
       })
     } catch {
@@ -92,45 +82,32 @@ export default function ConsultarReputacao() {
     }
   }
 
-  /* ────────────────────────────────────────────────
-   * 🔗 Clique em resultado
-   * ──────────────────────────────────────────────── */
   const handleOpen = (id: string) => {
     if (blocked) {
-      trackEvent('click_result_blocked', 'frontend')
+      trackEvent('click_result_blocked')
       router.push('/planos')
       return
     }
 
-    trackEvent('open_reputation_detail', 'frontend', { id })
+    trackEvent('open_reputation_detail', { id })
     router.push(`/consultar-reputacao/${id}`)
   }
 
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-2">
-          Consultar Reputação
-        </h1>
+        <h1 className="text-2xl font-bold text-white mb-2">Consultar Reputação</h1>
 
         <p className="text-gray-400 text-sm mb-6">
           Uma consulta gratuita disponível. Detalhes completos exigem plano.
         </p>
 
-        {/* 🔎 Filtro */}
         <div className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800 mb-6">
           <input
-            value={nome}
-            onChange={e => setNome(e.target.value)}
-            placeholder="Nome (opcional)"
-            className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white mb-3"
-          />
-
-          <input
-            value={cidade}
-            onChange={e => setCidade(e.target.value)}
-            placeholder="Cidade (opcional)"
-            className="w-full bg-black border border-gray-700 rounded-lg px-4 py-2 text-white mb-4"
+            value={termo}
+            onChange={(e) => setTermo(e.target.value)}
+            placeholder="Buscar por nome ou cidade"
+            className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white mb-4"
           />
 
           <button
@@ -143,22 +120,19 @@ export default function ConsultarReputacao() {
           </button>
         </div>
 
-        {/* 🔒 PAYWALL */}
         {blocked && (
           <div className="border border-[#D4AF37] rounded-xl p-5 mb-6 bg-black/60">
             <div className="flex gap-3 items-start">
               <Lock className="w-6 h-6 text-[#D4AF37]" />
               <div>
-                <p className="text-sm text-[#EFD9A7]">
-                  Você já utilizou sua consulta gratuita.
-                </p>
+                <p className="text-sm text-[#EFD9A7]">Você já utilizou sua consulta gratuita.</p>
                 <p className="text-xs text-gray-400 mt-1">
                   Para continuar e ver detalhes completos, ative um plano.
                 </p>
 
                 <button
                   onClick={() => {
-                    trackEvent('cta_upgrade_from_search', 'frontend')
+                    trackEvent('cta_upgrade_from_search')
                     router.push('/planos')
                   }}
                   className="mt-4 flex items-center gap-2 bg-[#D4AF37] text-black font-bold px-4 py-2 rounded-lg"
@@ -171,9 +145,8 @@ export default function ConsultarReputacao() {
           </div>
         )}
 
-        {/* 📊 Resultados */}
         <div className="space-y-4">
-          {results.map(r => (
+          {results.map((r) => (
             <div
               key={r.id}
               className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5 cursor-pointer"
@@ -181,9 +154,7 @@ export default function ConsultarReputacao() {
             >
               <div className="flex justify-between mb-2">
                 <div>
-                  <h3 className="text-white font-bold">
-                    {r.nome ?? 'Avaliação anônima'}
-                  </h3>
+                  <h3 className="text-white font-bold">{r.nome ?? 'Avaliação anônima'}</h3>
 
                   {r.cidade && (
                     <p className="text-gray-400 text-xs flex items-center gap-1">
@@ -221,9 +192,7 @@ export default function ConsultarReputacao() {
           ))}
 
           {!loading && results.length === 0 && !blocked && (
-            <p className="text-gray-500 text-center text-sm">
-              Nenhum resultado encontrado.
-            </p>
+            <p className="text-gray-500 text-center text-sm">Nenhum resultado encontrado.</p>
           )}
         </div>
       </div>

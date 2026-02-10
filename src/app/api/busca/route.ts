@@ -56,12 +56,11 @@ export async function GET(req: Request) {
    * 3️⃣ Parâmetros
    * ──────────────────────────────────────────────── */
   const { searchParams } = new URL(req.url)
-  const nome = norm(searchParams.get('nome') ?? '')
-  const cidade = norm(searchParams.get('cidade') ?? '')
+  const termo = norm(searchParams.get('termo') ?? '')
 
-  if (!nome && !cidade) {
+  if (!termo) {
     return NextResponse.json(
-      { success: false, error: 'Informe nome ou cidade' },
+      { success: false, error: 'Informe um nome ou cidade para buscar' },
       { status: 400 }
     )
   }
@@ -93,8 +92,7 @@ export async function GET(req: Request) {
     user_id: user.id,
     event_name: 'consult_basic',
     metadata: {
-      nome: !!nome,
-      cidade: !!cidade,
+      termo: !!termo,
       plan: profile.current_plan_id ?? 'free',
     },
   })
@@ -123,25 +121,19 @@ export async function GET(req: Request) {
   /* ────────────────────────────────────────────────
    * 7️⃣ Busca em male_profiles (SEM JOIN)
    * ──────────────────────────────────────────────── */
-  let mpQuery = supabaseAdmin
+  const searchFilter = [
+    `normalized_name.ilike.%${termo}%`,
+    `normalized_city.ilike.%${termo}%`,
+    `display_name.ilike.%${termo}%`,
+    `city.ilike.%${termo}%`,
+  ].join(',')
+
+  const { data: maleProfiles, error: mpError } = await supabaseAdmin
     .from('male_profiles')
     .select('id, display_name, city')
     .eq('is_active', true)
-
-  // preferir normalized_* se existirem e estiverem populados
-  // (se não estiverem, ainda funciona com display_name/city)
-  if (nome) {
-    mpQuery = mpQuery.or(
-      `normalized_name.ilike.%${nome}%,display_name.ilike.%${nome}%`
-    )
-  }
-  if (cidade) {
-    mpQuery = mpQuery.or(
-      `normalized_city.ilike.%${cidade}%,city.ilike.%${cidade}%`
-    )
-  }
-
-  const { data: maleProfiles, error: mpError } = await mpQuery.limit(DEFAULT_LIMIT)
+    .or(searchFilter)
+    .limit(DEFAULT_LIMIT)
 
   if (mpError) {
     console.error('Erro ao buscar male_profiles', mpError)
