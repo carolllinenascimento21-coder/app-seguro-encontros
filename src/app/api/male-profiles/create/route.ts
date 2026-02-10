@@ -59,24 +59,16 @@ export async function POST(req: Request) {
       })
     }
 
-    if (error) {
-  console.error('Erro ao criar male_profile', {
-    message: error.message,
-    details: error.details,
-    hint: error.hint,
-    code: error.code,
-  })
+  const { data: created, error } = await supabaseAdmin
+  .from('male_profiles')
+  .insert({ ... })
+  .select('id')
+  .single()
 
+if (error || !created) {
+  console.error('Erro ao criar male_profile', error)
   return NextResponse.json(
-    {
-      success: false,
-      supabaseError: {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      },
-    },
+    { success: false, message: 'Erro ao criar perfil' },
     { status: 500 }
   )
 }
