@@ -32,54 +32,67 @@ function AvaliarForm() {
   const [greenFlags, setGreenFlags] = useState<string[]>([])
   const [redFlags, setRedFlags] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+
   const ratingsValid = Object.values(ratings).every((value) => value >= 1)
   const nomeValid = nome.trim().length > 0
   const cidadeValid = cidade.trim().length > 0
 
   function toggleFlag(flag: string, list: string[], setList: (v: string[]) => void) {
-    setList(list.includes(flag) ? list.filter(f => f !== flag) : [...list, flag])
-  }
-async function handleSubmit(e: React.FormEvent) {
-  e.preventDefault()
-
-  if (!nomeValid || !cidadeValid) {
-    alert('Nome e cidade são obrigatórios')
-    return
+    setList(list.includes(flag) ? list.filter((f) => f !== flag) : [...list, flag])
   }
 
-  setLoading(true)
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
 
-  try {
-    const res = await fetch('/api/male-profiles/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nome: nome.trim(),
-        cidade: cidade.trim(),
-      }),
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) {
-      alert(data?.message || 'Erro ao criar perfil')
+    if (!nomeValid || !cidadeValid) {
+      alert('Nome e cidade são obrigatórios')
       return
     }
 
-    // 🔁 redireciona para o perfil já no modo avaliação
-    window.location.href = `/profile/${data.id}?avaliar=1`
-  } catch {
-    alert('Erro de rede ao criar perfil')
-  } finally {
-    setLoading(false)
+    if (!ratingsValid) {
+      alert('Avalie todos os critérios com notas de 1 a 5')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/avaliacoes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: nome.trim(),
+          cidade: cidade.trim(),
+          contato: contato.trim() || null,
+          descricao: descricao.trim() || null,
+          anonimo,
+          ratings,
+          greenFlags,
+          redFlags,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data?.message || 'Erro ao publicar avaliação')
+        return
+      }
+
+      alert('Avaliação publicada com sucesso!')
+      window.location.href = '/consultar-reputacao'
+    } catch {
+      alert('Erro de rede ao publicar avaliação')
+    } finally {
+      setLoading(false)
+    }
   }
-}
+
   return (
     <main className="min-h-screen bg-black text-white px-4 py-6">
       <h1 className="text-xl font-semibold mb-6">Fazer avaliação</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-
         <input
           placeholder="Nome"
           value={nome}
@@ -137,11 +150,10 @@ async function handleSubmit(e: React.FormEvent) {
           ))}
         </div>
 
-        {/* FLAGS */}
         <div>
           <p className="text-green-400 mb-2">Green Flags</p>
           <div className="flex flex-wrap gap-2">
-            {GREEN_FLAGS.map(f => (
+            {GREEN_FLAGS.map((f) => (
               <button
                 type="button"
                 key={f.slug}
@@ -159,7 +171,7 @@ async function handleSubmit(e: React.FormEvent) {
         <div>
           <p className="text-red-400 mb-2">Red Flags</p>
           <div className="flex flex-wrap gap-2">
-            {RED_FLAGS.map(f => (
+            {RED_FLAGS.map((f) => (
               <button
                 type="button"
                 key={f.slug}
@@ -173,12 +185,14 @@ async function handleSubmit(e: React.FormEvent) {
             ))}
           </div>
         </div>
+
         <textarea
           placeholder="Relato"
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
           className="w-full bg-zinc-900 p-3 rounded min-h-[120px]"
         />
+
         <label className="flex gap-2 items-center">
           <input
             type="checkbox"

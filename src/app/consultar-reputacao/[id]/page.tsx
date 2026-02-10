@@ -51,36 +51,39 @@ export default async function DetalhesReputacao({ params }: PageProps) {
     redirect('/consultar-reputacao')
   }
 
-  const { data: avaliado, error } = await supabaseAdmin
-    .from('avaliados')
-    .select(
-      `
-      id,
-      nome,
-      cidade,
-      avaliacoes!inner (
-        comportamento,
-        seguranca_emocional,
-        respeito,
-        carater,
-        confianca,
-        flags_positive,
-        flags_negative,
-        publica
-      )
-    `
-    )
+  const { data: profileTarget, error } = await supabaseAdmin
+    .from('male_profiles')
+    .select('id, display_name, city')
     .eq('id', params.id)
-    .eq('avaliacoes.publica', true)
+    .eq('is_active', true)
     .single()
 
-  if (error || !avaliado) {
+  if (error || !profileTarget) {
     redirect('/consultar-reputacao')
   }
 
-  const avaliacoes = Array.isArray(avaliado.avaliacoes)
-    ? avaliado.avaliacoes
-    : []
+  const { data: avaliacoesData, error: avaliacoesError } = await supabaseAdmin
+    .from('avaliacoes')
+    .select(
+      `
+      comportamento,
+      seguranca_emocional,
+      respeito,
+      carater,
+      confianca,
+      flags_positive,
+      flags_negative,
+      publica
+    `
+    )
+    .eq('male_profile_id', params.id)
+    .eq('publica', true)
+
+  if (avaliacoesError) {
+    redirect('/consultar-reputacao')
+  }
+
+  const avaliacoes = Array.isArray(avaliacoesData) ? avaliacoesData : []
   const totalAvaliacoes = avaliacoes.length
   const soma = avaliacoes.reduce((acc: number, a: any) => {
     const media =
@@ -100,8 +103,8 @@ export default async function DetalhesReputacao({ params }: PageProps) {
   })
 
   const avaliacao = {
-    display_name: avaliado.nome,
-    city: avaliado.cidade,
+    display_name: profileTarget.display_name,
+    city: profileTarget.city,
     total_avaliacoes: totalAvaliacoes,
     media_geral:
       totalAvaliacoes > 0 ? Number((soma / totalAvaliacoes).toFixed(1)) : 0,
