@@ -8,12 +8,14 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 const DEFAULT_LIMIT = 20
 const FREE_LIMIT = 1
 
-function norm(value: string) {
-  return value.trim().toLowerCase()
+function norm(s: string) {
+  return (s ?? '').trim().toLowerCase()
 }
 
 export async function GET(req: Request) {
-  // 1) Ambiente público
+  /* ────────────────────────────────────────────────
+   * 1️⃣ Ambiente público
+   * ──────────────────────────────────────────────── */
   try {
     getSupabasePublicEnv('api/busca')
   } catch (error) {
@@ -27,7 +29,9 @@ export async function GET(req: Request) {
     throw error
   }
 
-  // 2) Supabase
+  /* ────────────────────────────────────────────────
+   * 2️⃣ Supabase
+   * ──────────────────────────────────────────────── */
   const supabaseAdmin = getSupabaseAdminClient()
   if (!supabaseAdmin) {
     return NextResponse.json(
@@ -37,18 +41,20 @@ export async function GET(req: Request) {
   }
 
   const supabase = createRouteHandlerClient({ cookies })
-  const { data: authData, error: authError } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (authError || !authData?.user) {
+  if (!user) {
     return NextResponse.json(
       { success: false, error: 'Usuária não autenticada' },
       { status: 401 }
     )
   }
 
-  const user = authData.user
-
-  // 3) Parâmetros
+  /* ────────────────────────────────────────────────
+   * 3️⃣ Parâmetros
+   * ──────────────────────────────────────────────── */
   const { searchParams } = new URL(req.url)
   const nome = norm(searchParams.get('nome') ?? '')
   const cidade = norm(searchParams.get('cidade') ?? '')
@@ -60,7 +66,9 @@ export async function GET(req: Request) {
     )
   }
 
-  // 4) Perfil da usuária (paywall)
+  /* ────────────────────────────────────────────────
+   * 4️⃣ Perfil da usuária
+   * ──────────────────────────────────────────────── */
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('has_active_plan, current_plan_id, free_queries_used')
@@ -75,10 +83,13 @@ export async function GET(req: Request) {
     )
   }
 
-  const isFree = !profile.has_active_plan || profile.current_plan_id === 'free'
+  const isFree =
+    !profile.has_active_plan || profile.current_plan_id === 'free'
 
-  // 5) Tracking tentativa (não quebra request se falhar)
-  supabaseAdmin.from('analytics_events').insert({
+  /* ────────────────────────────────────────────────
+   * 5️⃣ Tracking: tentativa
+   * ──────────────────────────────────────────────── */
+  await supabaseAdmin.from('analytics_events').insert({
     user_id: user.id,
     event_name: 'consult_basic',
     metadata: {
@@ -86,15 +97,17 @@ export async function GET(req: Request) {
       cidade: !!cidade,
       plan: profile.current_plan_id ?? 'free',
     },
-  }).catch(() => {})
+  })
 
-  // 6) Paywall FREE
+  /* ────────────────────────────────────────────────
+   * 6️⃣ Paywall FREE
+   * ──────────────────────────────────────────────── */
   if (isFree && (profile.free_queries_used ?? 0) >= FREE_LIMIT) {
-    supabaseAdmin.from('analytics_events').insert({
+    await supabaseAdmin.from('analytics_events').insert({
       user_id: user.id,
       event_name: 'free_limit_reached',
       metadata: { location: 'api/busca' },
-    }).catch(() => {})
+    })
 
     return NextResponse.json(
       {
@@ -107,22 +120,28 @@ export async function GET(req: Request) {
     )
   }
 
-  // 7) Busca perfis masculinos
+  /* ────────────────────────────────────────────────
+   * 7️⃣ Busca em male_profiles (SEM JOIN)
+   * ──────────────────────────────────────────────── */
   let mpQuery = supabaseAdmin
     .from('male_profiles')
     .select('id, display_name, city')
-    .limit(DEFAULT_LIMIT)
+    .eq('is_active', true)
 
-  // Preferir buscar pelos normalizados quando der
+  // preferir normalized_* se existirem e estiverem populados
+  // (se não estiverem, ainda funciona com display_name/city)
   if (nome) {
-    // busca por normalized_name contendo termo
-    mpQuery = mpQuery.ilike('normalized_name', `%${nome}%`)
+    mpQuery = mpQuery.or(
+      `normalized_name.ilike.%${nome}%,display_name.ilike.%${nome}%`
+    )
   }
   if (cidade) {
-    mpQuery = mpQuery.ilike('normalized_city', `%${cidade}%`)
+    mpQuery = mpQuery.or(
+      `normalized_city.ilike.%${cidade}%,city.ilike.%${cidade}%`
+    )
   }
 
-  const { data: maleProfiles, error: mpError } = await mpQuery
+  const { data: maleProfiles, error: mpError } = await mpQuery.limit(DEFAULT_LIMIT)
 
   if (mpError) {
     console.error('Erro ao buscar male_profiles', mpError)
@@ -134,103 +153,101 @@ export async function GET(req: Request) {
 
   const ids = (maleProfiles ?? []).map((p) => p.id)
 
-  if (ids.length === 0) {
-    // incrementa FREE mesmo sem resultado (decisão de produto; se não quiser, remova)
-    if (isFree) {
-      await supabaseAdmin
-        .from('profiles')
-        .update({ free_queries_used: (profile.free_queries_used ?? 0) + 1 })
-        .eq('id', user.id)
+  /* ────────────────────────────────────────────────
+   * 8️⃣ Busca avaliações públicas desses perfis (SEM JOIN)
+   * ──────────────────────────────────────────────── */
+  let avaliacoesByProfile: Record<string, any[]> = {}
+
+  if (ids.length > 0) {
+    const { data: avaliacoes, error: avError } = await supabaseAdmin
+      .from('avaliacoes')
+      .select(
+        `
+        male_profile_id,
+        comportamento,
+        seguranca_emocional,
+        respeito,
+        carater,
+        confianca,
+        flags_positive,
+        flags_negative,
+        publica
+      `
+      )
+      .eq('publica', true)
+      .in('male_profile_id', ids)
+
+    if (avError) {
+      console.error('Erro ao buscar avaliacoes', avError)
+      return NextResponse.json(
+        { success: false, error: 'Erro ao buscar reputação', details: avError.message },
+        { status: 500 }
+      )
     }
 
-    return NextResponse.json({
-      success: true,
-      allowed: true,
-      results: [],
-    })
+    avaliacoesByProfile = (avaliacoes ?? []).reduce((acc: any, a: any) => {
+      const k = a.male_profile_id
+      if (!k) return acc
+      if (!acc[k]) acc[k] = []
+      acc[k].push(a)
+      return acc
+    }, {})
   }
 
-  // 8) Busca avaliações públicas para esses perfis
-  const { data: avaliacoes, error: avError } = await supabaseAdmin
-    .from('avaliacoes')
-    .select(
-      'id, male_profile_id, comportamento, seguranca_emocional, respeito, carater, confianca, flags_positive, flags_negative'
-    )
-    .in('male_profile_id', ids)
-    .eq('publica', true)
-
-  if (avError) {
-    console.error('Erro ao buscar avaliacoes', avError)
-    return NextResponse.json(
-      { success: false, error: 'Erro ao buscar reputação', details: avError.message },
-      { status: 500 }
-    )
+  /* ────────────────────────────────────────────────
+   * 9️⃣ Incrementa uso FREE
+   * ──────────────────────────────────────────────── */
+  if (isFree) {
+    await supabaseAdmin
+      .from('profiles')
+      .update({
+        free_queries_used: (profile.free_queries_used ?? 0) + 1,
+      })
+      .eq('id', user.id)
   }
 
-  // 9) Agrega
-  const byProfile = new Map<string, any[]>()
-  for (const a of avaliacoes ?? []) {
-    const key = a.male_profile_id
-    if (!byProfile.has(key)) byProfile.set(key, [])
-    byProfile.get(key)!.push(a)
-  }
+  /* ────────────────────────────────────────────────
+   * 🔟 Normaliza retorno
+   * ──────────────────────────────────────────────── */
+  const results = (maleProfiles ?? []).map((p: any) => {
+    const avaliacoes = avaliacoesByProfile[p.id] ?? []
+    const totalAvaliacoes = avaliacoes.length
 
-  const results = (maleProfiles ?? []).map((p) => {
-    const list = byProfile.get(p.id) ?? []
-    const total = list.length
-
-    const flagsPositive = new Set<string>()
-    const flagsNegative = new Set<string>()
-
-    let sum = 0
-    for (const a of list) {
+    const soma = avaliacoes.reduce((acc: number, a: any) => {
       const media =
         (Number(a.comportamento ?? 0) +
           Number(a.seguranca_emocional ?? 0) +
           Number(a.respeito ?? 0) +
           Number(a.carater ?? 0) +
           Number(a.confianca ?? 0)) / 5
+      return acc + media
+    }, 0)
 
-      sum += media
-
-      if (Array.isArray(a.flags_positive)) {
-        for (const f of a.flags_positive) if (typeof f === 'string') flagsPositive.add(f)
-      }
-      if (Array.isArray(a.flags_negative)) {
-        for (const f of a.flags_negative) if (typeof f === 'string') flagsNegative.add(f)
-      }
-    }
+    const flagsPositive = new Set<string>()
+    const flagsNegative = new Set<string>()
+    avaliacoes.forEach((a: any) => {
+      a.flags_positive?.forEach((f: string) => flagsPositive.add(f))
+      a.flags_negative?.forEach((f: string) => flagsNegative.add(f))
+    })
 
     return {
       id: p.id,
-      nome: p.display_name ?? '',
-      cidade: p.city ?? '',
-      total_avaliacoes: total,
-      media_geral: total > 0 ? Number((sum / total).toFixed(1)) : 0,
-      confiabilidade_percentual: Math.min(100, total * 10),
+      nome: p.display_name,
+      cidade: p.city,
+      total_avaliacoes: totalAvaliacoes,
+      media_geral:
+        totalAvaliacoes > 0 ? Number((soma / totalAvaliacoes).toFixed(1)) : 0,
+      confiabilidade_percentual: Math.min(100, totalAvaliacoes * 10),
       flags_positive: Array.from(flagsPositive),
       flags_negative: Array.from(flagsNegative),
     }
   })
 
-  // 10) Incrementa FREE
-  if (isFree) {
-    await supabaseAdmin
-      .from('profiles')
-      .update({ free_queries_used: (profile.free_queries_used ?? 0) + 1 })
-      .eq('id', user.id)
-  }
-
-  // 11) Tracking resultado (não quebra request se falhar)
-  supabaseAdmin.from('analytics_events').insert({
+  await supabaseAdmin.from('analytics_events').insert({
     user_id: user.id,
     event_name: 'view_result_summary',
     metadata: { results_count: results.length },
-  }).catch(() => {})
-
-  return NextResponse.json({
-    success: true,
-    allowed: true,
-    results,
   })
+
+  return NextResponse.json({ success: true, allowed: true, results })
 }
