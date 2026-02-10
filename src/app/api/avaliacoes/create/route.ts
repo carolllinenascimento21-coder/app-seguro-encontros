@@ -4,6 +4,9 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
+/* ──────────────────────────────────────────────── */
+/* Helpers */
+/* ──────────────────────────────────────────────── */
 function normalizeText(value: unknown) {
   if (typeof value !== 'string') return ''
   return value.trim().toLowerCase()
@@ -35,50 +38,47 @@ function parseFlags(value: unknown): string[] {
           .filter(Boolean)
       }
     } catch {
-      // fallback CSV
-      return raw
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
+      return raw.split(',').map((s) => s.trim()).filter(Boolean)
     }
   }
   return []
 }
 
+/* ──────────────────────────────────────────────── */
+/* Route */
+/* ──────────────────────────────────────────────── */
 export async function POST(req: Request) {
-  const startedAt = Date.now()
   const logPrefix = '[api/avaliacoes/create]'
+  const startedAt = Date.now()
 
   try {
+    /* 1️⃣ Supabase admin */
     const supabaseAdmin = getSupabaseAdminClient()
     if (!supabaseAdmin) {
-      console.error(`${logPrefix} supabase admin não configurado`)
       return NextResponse.json(
         { success: false, message: 'Supabase admin não configurado' },
         { status: 503 }
       )
     }
 
+    /* 2️⃣ Usuária autenticada */
     const supabase = createRouteHandlerClient({ cookies })
     const {
       data: { user },
-      error: userError,
+      error: authError,
     } = await supabase.auth.getUser()
 
-    if (userError || !user) {
-      console.warn(`${logPrefix} usuária não autenticada`, {
-        hasUser: !!user,
-        error: userError?.message,
-      })
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, message: 'Usuária não autenticada' },
         { status: 401 }
       )
     }
 
-    let body: unknown
+    /* 3️⃣ Payload */
+    let payload: Record<string, unknown>
     try {
-      body = await req.json()
+      payload = (await req.json()) as Record<string, unknown>
     } catch {
       return NextResponse.json(
         { success: false, message: 'Payload inválido' },
@@ -86,37 +86,8 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!body || typeof body !== 'object') {
-      return NextResponse.json(
-        { success: false, message: 'Payload inválido' },
-        { status: 400 }
-      )
-    }
-
-    const payload = body as Record<string, unknown>
-
-    // Front costuma mandar: nome, cidade, contato, descricao/relato, anonimo, ratings, greenFlags, redFlags
-    const nomeRaw = payload.nome
-    const cidadeRaw = payload.cidade
-    const contatoRaw = payload.contato
-    const descricaoRaw = payload.descricao ?? payload.relato ?? payload.notas
-    const anonimoRaw = payload.anonimo ?? payload.is_anonymous
-    const ratingsRaw = payload.ratings
-
-    const greenFlagsRaw = payload.greenFlags ?? payload.flags_positive
-    const redFlagsRaw = payload.redFlags ?? payload.flags_negative
-
-    const nome = typeof nomeRaw === 'string' ? nomeRaw.trim() : ''
-    const cidade = typeof cidadeRaw === 'string' ? cidadeRaw.trim() : ''
-
-    const normalizedName = normalizeText(nomeRaw)
-    const normalizedCity = normalizeText(cidadeRaw)
-
-    const contato = safeString(contatoRaw)
-    const notas = safeString(descricaoRaw)
-
-    const isAnonymous =
-      typeof anonimoRaw === 'boolean' ? anonimoRaw : Boolean(anonimoRaw)
+    const nome = typeof payload.nome === 'string' ? payload.nome.trim() : ''
+    const cidade = typeof payload.cidade === 'string' ? payload.cidade.trim() : ''
 
     if (!nome || !cidade) {
       return NextResponse.json(
@@ -125,57 +96,64 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!ratingsRaw || typeof ratingsRaw !== 'object' || Array.isArray(ratingsRaw)) {
+    const normalizedName = normalizeText(nome)
+    const normalizedCity = normalizeText(cidade)
+
+    const ratings = payload.ratings as Record<string, unknown>
+    if (!ratings || typeof ratings !== 'object') {
       return NextResponse.json(
         { success: false, message: 'Avaliações por critério são obrigatórias' },
         { status: 400 }
       )
     }
 
-    const ratings = ratingsRaw as Record<string, unknown>
-
     const ratingMap = {
-      comportamento: Number(ratings.comportamento ?? 0),
-      seguranca_emocional: Number(ratings.seguranca_emocional ?? 0),
-      respeito: Number(ratings.respeito ?? 0),
-      carater: Number(ratings.carater ?? 0),
-      confianca: Number(ratings.confianca ?? 0),
+      comportamento: Number(ratings.comportamento),
+      seguranca_emocional: Number(ratings.seguranca_emocional),
+      respeito: Number(ratings.respeito),
+      carater: Number(ratings.carater),
+      confianca: Number(ratings.confianca),
     }
 
     if (
       Object.values(ratingMap).some(
-        (v) => typeof v !== 'number' || Number.isNaN(v) || v < 1 || v > 5
+        (v) => Number.isNaN(v) || v < 1 || v > 5
       )
     ) {
       return NextResponse.json(
-        { success: false, message: 'Avaliações por critério são obrigatórias (1 a 5)' },
+        { success: false, message: 'Avaliações devem ser de 1 a 5' },
         { status: 400 }
       )
     }
 
-    const flagsPositive = parseFlags(greenFlagsRaw)
-    const flagsNegative = parseFlags(redFlagsRaw)
+    const flagsPositive = parseFlags(payload.greenFlags ?? payload.flags_positive)
+    const flagsNegative = parseFlags(payload.redFlags ?? payload.flags_negative)
 
-    // 1) Achar ou criar o male_profile
-    const { data: existingProfiles, error: findProfileError } = await supabaseAdmin
+    const contato = safeString(payload.contato)
+    const notas = safeString(payload.descricao ?? payload.relato)
+    const isAnonymous = Boolean(payload.anonimo ?? payload.is_anonymous)
+
+    /* 4️⃣ Buscar ou criar male_profile (SEM JOIN) */
+    const { data: existingProfile, error: findError } = await supabaseAdmin
       .from('male_profiles')
       .select('id')
       .eq('normalized_name', normalizedName)
       .eq('normalized_city', normalizedCity)
       .limit(1)
+      .maybeSingle()
 
-    if (findProfileError) {
-      console.error(`${logPrefix} erro ao buscar male_profile`, findProfileError)
+    if (findError) {
+      console.error(logPrefix, findError)
       return NextResponse.json(
         { success: false, message: 'Erro ao validar perfil avaliado' },
         { status: 500 }
       )
     }
 
-    let maleProfileId = existingProfiles?.[0]?.id as string | undefined
+    let maleProfileId = existingProfile?.id as string | undefined
 
     if (!maleProfileId) {
-      const { data: createdProfile, error: createProfileError } = await supabaseAdmin
+      const { data: createdProfile, error: createError } = await supabaseAdmin
         .from('male_profiles')
         .insert({
           display_name: nome,
@@ -187,8 +165,8 @@ export async function POST(req: Request) {
         .select('id')
         .single()
 
-      if (createProfileError || !createdProfile) {
-        console.error(`${logPrefix} erro ao criar male_profile`, createProfileError)
+      if (createError || !createdProfile) {
+        console.error(logPrefix, createError)
         return NextResponse.json(
           { success: false, message: 'Erro ao criar perfil avaliado' },
           { status: 500 }
@@ -198,50 +176,47 @@ export async function POST(req: Request) {
       maleProfileId = createdProfile.id
     }
 
-    // 2) Criar avaliação apontando para male_profile_id
-    const { data: avaliacaoCriada, error: avaliacaoError } = await supabaseAdmin
+    /* 5️⃣ Criar avaliação (FK VALIDADA) */
+    const { data: avaliacao, error: insertError } = await supabaseAdmin
       .from('avaliacoes')
       .insert({
         autor_id: user.id,
         male_profile_id: maleProfileId,
         is_anonymous: isAnonymous,
         publica: true,
-
         contato,
         notas,
-
         flags_positive: flagsPositive,
         flags_negative: flagsNegative,
-
         ...ratingMap,
       })
       .select('id')
       .single()
 
-    if (avaliacaoError || !avaliacaoCriada) {
-      console.error(`${logPrefix} erro ao inserir avaliação`, avaliacaoError)
+    if (insertError || !avaliacao) {
+      console.error(logPrefix, insertError)
       return NextResponse.json(
-        { success: false, message: avaliacaoError?.message ?? 'Erro ao publicar avaliação' },
+        { success: false, message: insertError?.message ?? 'Erro ao publicar avaliação' },
         { status: 500 }
       )
     }
 
-    console.info(`${logPrefix} ok`, {
+    console.info(logPrefix, 'OK', {
       elapsedMs: Date.now() - startedAt,
       maleProfileId,
-      avaliacaoId: avaliacaoCriada.id,
+      avaliacaoId: avaliacao.id,
     })
 
     return NextResponse.json(
       {
         success: true,
         message: 'Avaliação publicada com sucesso',
-        id: avaliacaoCriada.id,
+        id: avaliacao.id,
         male_profile_id: maleProfileId,
       },
       { status: 201 }
     )
-  } catch (err: any) {
+  } catch (err) {
     console.error('[api/avaliacoes/create] erro inesperado', err)
     return NextResponse.json(
       { success: false, message: 'Erro inesperado no servidor' },
