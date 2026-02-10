@@ -39,71 +39,41 @@ function AvaliarForm() {
   function toggleFlag(flag: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(flag) ? list.filter(f => f !== flag) : [...list, flag])
   }
+async function handleSubmit(e: React.FormEvent) {
+  e.preventDefault()
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    if (!nomeValid) {
-      alert('Nome é obrigatório')
-      return
-    }
-
-    if (!cidadeValid) {
-      alert('Cidade é obrigatória')
-      return
-    }
-
-    if (!ratingsValid) {
-      alert('Avaliações por critério são obrigatórias')
-      return
-    }
-
-    setLoading(true)
-
-    const payload = {
-      nome: nome.trim(),
-      cidade: cidade.trim(),
-      contato: contato?.trim() || null,
-      anonimo,
-      ratings,
-      greenFlags,
-      redFlags,
-      descricao: descricao?.trim() || null,
-    }
-
-    let res: Response
-
-    try {
-      res = await fetch('/api/avaliacoes/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-    } catch (err) {
-      alert('Erro de rede ao publicar avaliação')
-      return
-    } finally {
-      setLoading(false)
-    }
-
-    if (!res.ok) {
-      let message = 'Erro ao publicar avaliação'
-      const contentType = res.headers.get('content-type') || ''
-      if (contentType.includes('application/json')) {
-        try {
-          const data = await res.json()
-          message = data?.message || message
-        } catch {
-          // evita crash se não vier JSON válido
-        }
-      }
-      alert(message)
-      return
-    }
-
-    alert('Avaliação publicada com sucesso')
+  if (!nomeValid || !cidadeValid) {
+    alert('Nome e cidade são obrigatórios')
+    return
   }
 
+  setLoading(true)
+
+  try {
+    const res = await fetch('/api/male-profiles/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: nome.trim(),
+        cidade: cidade.trim(),
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      alert(data?.message || 'Erro ao criar perfil')
+      return
+    }
+
+    // 🔁 redireciona para o perfil já no modo avaliação
+    window.location.href = `/profile/${data.id}?avaliar=1`
+  } catch {
+    alert('Erro de rede ao criar perfil')
+  } finally {
+    setLoading(false)
+  }
+}
   return (
     <main className="min-h-screen bg-black text-white px-4 py-6">
       <h1 className="text-xl font-semibold mb-6">Fazer avaliação</h1>
