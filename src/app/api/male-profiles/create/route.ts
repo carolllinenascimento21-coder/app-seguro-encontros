@@ -3,16 +3,12 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
-function normalize(value: string) {
-  return value.trim().toLowerCase()
-}
-
 export async function POST(req: Request) {
   const logPrefix = '[api/male-profiles/create]'
 
   try {
     /**
-     * 1) Autenticação da usuária
+     * 1) Autenticação
      */
     const supabaseAuth = createRouteHandlerClient({ cookies })
     const {
@@ -27,7 +23,7 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 2) Validação do body
+     * 2) Body
      */
     const body = await req.json()
     const nome = body?.nome?.trim()
@@ -40,11 +36,8 @@ export async function POST(req: Request) {
       )
     }
 
-    const normalized_name = normalize(nome)
-    const normalized_city = normalize(cidade)
-
     /**
-     * 3) Supabase Admin (service_role)
+     * 3) Supabase Admin
      */
     const supabaseAdmin = getSupabaseAdminClient()
     if (!supabaseAdmin) {
@@ -55,20 +48,21 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 4) Verifica se já existe perfil (usando colunas GENERATED no WHERE)
+     * 4) Verificar duplicidade
+     * ⚠️ Usa as colunas GERADAS apenas para consulta
      */
     const { data: existing, error: selectError } = await supabaseAdmin
       .from('male_profiles')
       .select('id')
-      .eq('normalized_name', normalized_name)
-      .eq('normalized_city', normalized_city)
+      .ilike('normalized_name', nome.trim().toLowerCase())
+      .ilike('normalized_city', cidade.trim().toLowerCase())
       .limit(1)
       .maybeSingle()
 
     if (selectError) {
-      console.error(logPrefix, 'erro ao verificar duplicidade', selectError)
+      console.error(logPrefix, selectError)
       return NextResponse.json(
-        { success: false, message: 'Erro ao verificar perfil existente' },
+        { success: false, message: selectError.message },
         { status: 500 }
       )
     }
@@ -81,8 +75,8 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 5) Cria novo perfil
-     * ⚠️ NÃO inserir normalized_* (são GENERATED ALWAYS)
+     * 5) Inserção
+     * ❌ NÃO envia normalized_name / normalized_city
      */
     const { data: created, error: insertError } = await supabaseAdmin
       .from('male_profiles')
@@ -95,9 +89,9 @@ export async function POST(req: Request) {
       .single()
 
     if (insertError || !created) {
-      console.error(logPrefix, 'erro ao criar male_profile', insertError)
+      console.error(logPrefix, insertError)
       return NextResponse.json(
-        { success: false, message: 'Erro ao criar perfil' },
+        { success: false, message: insertError?.message ?? 'Erro ao criar perfil' },
         { status: 500 }
       )
     }
@@ -110,10 +104,9 @@ export async function POST(req: Request) {
       { status: 201 }
     )
   } catch (err) {
-    console.error(logPrefix, 'erro inesperado', err)
-    const message = err instanceof Error ? err.message : 'Erro inesperado'
+    console.error(logPrefix, err)
     return NextResponse.json(
-      { success: false, message },
+      { success: false, message: 'Erro inesperado' },
       { status: 500 }
     )
   }
