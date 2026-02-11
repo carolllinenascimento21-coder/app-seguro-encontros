@@ -14,10 +14,10 @@ import {
 import Navbar from '@/components/custom/navbar'
 import { useRouter } from 'next/navigation'
 
-interface Avaliacao {
+interface PerfilResultado {
   id: string
-  nome: string | null
-  cidade: string | null
+  display_name: string
+  city: string | null
   total_avaliacoes: number
   media_geral: number
   confiabilidade_percentual: number
@@ -30,13 +30,13 @@ export default function ConsultarReputacao() {
 
   const [nome, setNome] = useState('')
   const [cidade, setCidade] = useState('')
-  const [results, setResults] = useState<Avaliacao[]>([])
+  const [results, setResults] = useState<PerfilResultado[]>([])
   const [loading, setLoading] = useState(false)
   const [blocked, setBlocked] = useState(false)
 
-  const media = (a: Avaliacao) => {
-    if (typeof a.media_geral !== 'number') return '—'
-    return a.media_geral.toFixed(1)
+  const media = (p: PerfilResultado) => {
+    if (typeof p.media_geral !== 'number') return '—'
+    return p.media_geral.toFixed(1)
   }
 
   const buscar = async () => {
@@ -51,34 +51,19 @@ export default function ConsultarReputacao() {
     try {
       setLoading(true)
 
-      trackEvent('search_attempt', {
-        has_nome: Boolean(normalizedNome),
-        has_cidade: Boolean(normalizedCidade),
-      })
-
       const params = new URLSearchParams()
       if (normalizedNome) params.set('nome', normalizedNome)
       if (normalizedCidade) params.set('cidade', normalizedCidade)
+
       const res = await fetch(`/api/busca?${params.toString()}`)
       const payload = await res.json()
-
-      if (!res.ok && payload?.code === 'FREE_LIMIT_REACHED') {
-        setBlocked(true)
-        trackEvent('search_blocked_free_limit')
-        return
-      }
 
       if (!res.ok) {
         alert(payload?.error ?? 'Erro ao buscar reputação.')
         return
       }
 
-      setBlocked(false)
       setResults(payload.results ?? [])
-
-      trackEvent('search_success', {
-        results_count: payload.results?.length ?? 0,
-      })
     } catch {
       alert('Erro ao buscar reputação.')
     } finally {
@@ -88,19 +73,19 @@ export default function ConsultarReputacao() {
 
   const handleOpen = (id: string) => {
     if (blocked) {
-      trackEvent('click_result_blocked')
       router.push('/planos')
       return
     }
 
-    trackEvent('open_reputation_detail', { id })
     router.push(`/consultar-reputacao/${id}`)
   }
 
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-2">Consultar Reputação</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">
+          Consultar Reputação
+        </h1>
 
         <p className="text-gray-400 text-sm mb-6">
           Uma consulta gratuita disponível. Detalhes completos exigem plano.
@@ -133,46 +118,23 @@ export default function ConsultarReputacao() {
           </button>
         </div>
 
-        {blocked && (
-          <div className="border border-[#D4AF37] rounded-xl p-5 mb-6 bg-black/60">
-            <div className="flex gap-3 items-start">
-              <Lock className="w-6 h-6 text-[#D4AF37]" />
-              <div>
-                <p className="text-sm text-[#EFD9A7]">Você já utilizou sua consulta gratuita.</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Para continuar e ver detalhes completos, ative um plano.
-                </p>
-
-                <button
-                  onClick={() => {
-                    trackEvent('cta_upgrade_from_search')
-                    router.push('/planos')
-                  }}
-                  className="mt-4 flex items-center gap-2 bg-[#D4AF37] text-black font-bold px-4 py-2 rounded-lg"
-                >
-                  <Crown className="w-4 h-4" />
-                  Ver planos Premium
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="space-y-4">
           {results.map((r) => (
             <div
               key={r.id}
-              className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5 cursor-pointer"
+              className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5 cursor-pointer hover:border-[#D4AF37] transition"
               onClick={() => handleOpen(r.id)}
             >
               <div className="flex justify-between mb-2">
                 <div>
-                  <h3 className="text-white font-bold">{r.nome ?? 'Avaliação anônima'}</h3>
+                  <h3 className="text-white font-bold">
+                    {r.display_name}
+                  </h3>
 
-                  {r.cidade && (
+                  {r.city && (
                     <p className="text-gray-400 text-xs flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
-                      {r.cidade}
+                      {r.city}
                     </p>
                   )}
                 </div>
@@ -183,12 +145,9 @@ export default function ConsultarReputacao() {
                 </div>
               </div>
 
-              {blocked && (
-                <div className="flex items-center gap-2 text-xs text-[#D4AF37] mt-2">
-                  <Lock className="w-4 h-4" />
-                  Detalhes completos protegidos
-                </div>
-              )}
+              <div className="text-xs text-gray-400">
+                {r.total_avaliacoes} avaliações • {r.confiabilidade_percentual}% confiável
+              </div>
 
               {r.flags_negative?.length ? (
                 <div className="flex items-center gap-2 text-red-400 text-xs mt-2">
@@ -204,8 +163,10 @@ export default function ConsultarReputacao() {
             </div>
           ))}
 
-          {!loading && results.length === 0 && !blocked && (
-            <p className="text-gray-500 text-center text-sm">Nenhum resultado encontrado.</p>
+          {!loading && results.length === 0 && (
+            <p className="text-gray-500 text-center text-sm">
+              Nenhum resultado encontrado.
+            </p>
           )}
         </div>
       </div>
