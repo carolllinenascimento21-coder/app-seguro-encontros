@@ -1,271 +1,108 @@
-import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { Star, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react'
+import { cookies } from 'next/headers'
+import { Star, AlertTriangle } from 'lucide-react'
+import Link from 'next/link'
 
-import Navbar from '@/components/custom/navbar'
-import { canAccessFeature } from '@/lib/permissions'
-import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
-import { getNegativeFlagLabel, getPositiveFlagLabel } from '@/lib/flags'
-
-interface PageProps {
+export default async function PerfilPage({
+  params,
+}: {
   params: { id: string }
-}
-
-export default async function DetalhesReputacao({ params }: PageProps) {
+}) {
   const supabase = createServerComponentClient({ cookies })
 
-  /* ────────────────────────────────────────────────
-   * 1️⃣ Usuária autenticada
-   * ──────────────────────────────────────────────── */
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
-
-  /* ────────────────────────────────────────────────
-   * 2️⃣ Perfil da usuária
-   * ──────────────────────────────────────────────── */
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('has_active_plan, current_plan_id')
-    .eq('id', user.id)
-    .single()
-
-  if (profileError || !profile) {
-    redirect('/login')
-  }
-
-  const isPremium = canAccessFeature(profile, 'VIEW_RESULT_FULL')
-  const isFree = !isPremium
-
-  /* ────────────────────────────────────────────────
-   * 3️⃣ Buscar reputação agregada (ADMIN)
-   * ──────────────────────────────────────────────── */
-  const supabaseAdmin = getSupabaseAdminClient()
-
-  if (!supabaseAdmin) {
-    redirect('/consultar-reputacao')
-  }
-
-  const { data: profileTarget, error } = await supabaseAdmin
+  const { data: perfil } = await supabase
     .from('male_profiles')
-    .select('id, display_name, city')
+    .select('*')
     .eq('id', params.id)
-    .eq('is_active', true)
     .single()
 
-  if (error || !profileTarget) {
-    redirect('/consultar-reputacao')
-  }
-
-  const { data: avaliacoesData, error: avaliacoesError } = await supabaseAdmin
+  const { data: avaliacoes } = await supabase
     .from('avaliacoes')
-    .select(
-      `
-      comportamento,
-      seguranca_emocional,
-      respeito,
-      carater,
-      confianca,
-      flags_positive,
-      flags_negative,
-      publica
-    `
-    )
+    .select('*')
     .eq('male_profile_id', params.id)
-    .eq('publica', true)
+    .order('created_at', { ascending: false })
 
-  if (avaliacoesError) {
-    redirect('/consultar-reputacao')
-  }
+  if (!perfil) return <div className="text-white">Perfil não encontrado</div>
 
-  const avaliacoes = Array.isArray(avaliacoesData) ? avaliacoesData : []
-  const totalAvaliacoes = avaliacoes.length
-  const soma = avaliacoes.reduce((acc: number, a: any) => {
-    const media =
-      (a.comportamento +
-        a.seguranca_emocional +
-        a.respeito +
-        a.carater +
-        a.confianca) /
-      5
-    return acc + media
-  }, 0)
-  const flagsPositive = new Set<string>()
-  const flagsNegative = new Set<string>()
-  avaliacoes.forEach((a: any) => {
-    a.flags_positive?.forEach((f: string) => flagsPositive.add(f))
-    a.flags_negative?.forEach((f: string) => flagsNegative.add(f))
-  })
+  return (
+    <div className="min-h-screen bg-black text-white pb-24">
 
-  const avaliacao = {
-    display_name: profileTarget.display_name,
-    city: profileTarget.city,
-    total_avaliacoes: totalAvaliacoes,
-    media_geral:
-      totalAvaliacoes > 0 ? Number((soma / totalAvaliacoes).toFixed(1)) : 0,
-    confiabilidade_percentual: Math.min(100, totalAvaliacoes * 10),
-    flags_positive: Array.from(flagsPositive),
-    flags_negative: Array.from(flagsNegative),
-  }
+      <div className="max-w-md mx-auto px-4 pt-6">
 
-  const media =
-    typeof avaliacao.media_geral === 'number'
-      ? avaliacao.media_geral.toFixed(1)
-      : '—'
+        <Link href="/consultar-reputacao" className="text-sm text-gray-400">
+          ← Voltar
+        </Link>
 
-  /* =========================================================
-     🔒 FREE → SOMENTE RESUMO
-     ========================================================= */
-  if (isFree) {
-    return (
-      <div className="min-h-screen bg-black pb-20">
-        <div className="px-4 pt-8 max-w-md mx-auto text-white">
-          <a
-            href="/consultar-reputacao"
-            className="text-gray-400 flex items-center gap-2 mb-4"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar
-          </a>
+        <div className="mt-4 bg-[#1A1A1A] p-5 rounded-xl border border-gray-800">
 
-          <h1 className="text-2xl font-bold mb-1">
-            {avaliacao.display_name || 'Nome não informado'}
+          <h1 className="text-xl font-bold">
+            {perfil.display_name}
           </h1>
 
-          {avaliacao.city && (
-            <p className="text-gray-400 text-sm mb-4">
-              {avaliacao.city}
-            </p>
-          )}
+          <p className="text-gray-400 text-sm">
+            {perfil.city}
+          </p>
 
-          <div className="bg-[#1A1A1A] border border-[#D4AF37]/40 rounded-xl p-6 mb-4">
-            <div className="flex justify-center items-center gap-2 text-[#D4AF37] mb-2">
-              <Star className="w-8 h-8 fill-current" />
-              <span className="text-4xl font-bold">{media}</span>
-            </div>
+        </div>
 
-            <p className="text-center text-gray-400 text-sm mt-2">
-              Este é um resumo público de segurança.
-              <br />
-              Informações detalhadas são exibidas apenas
-              para usuárias verificadas.
-            </p>
+        <div className="mt-6 bg-[#1A1A1A] p-6 rounded-xl border border-gray-800 text-center">
 
-            <p className="text-center text-[#EFD9A7] text-xs mt-3">
-              Mesmo quando o resumo parece neutro,
-              sinais importantes podem estar ocultos.
-            </p>
+          <div className="flex justify-center items-center gap-2 text-[#D4AF37]">
+            <Star size={28} fill="currentColor" />
+            <span className="text-4xl font-bold">
+              {perfil.media_geral?.toFixed(1) ?? '0.0'}
+            </span>
           </div>
 
-          <div className="border border-[#D4AF37] rounded-xl p-4 bg-black/40">
-            <p className="text-sm text-[#EFD9A7] mb-3">
-              Proteja-se antes de se envolver.
-              Desbloqueie alertas e informações completas.
-            </p>
+          <p className="text-gray-400 text-sm mt-2">
+            {perfil.total_avaliacoes} avaliações • {perfil.confiabilidade_percentual}% confiável
+          </p>
 
-            <a
-              href="/planos"
-              className="block text-center bg-[#D4AF37] text-black font-bold py-3 rounded-lg"
+        </div>
+
+        {perfil.flags_negative?.length > 0 && (
+          <div className="mt-6 bg-red-900/40 border border-red-600 p-5 rounded-xl">
+            <div className="flex items-center gap-2 text-red-400 font-bold">
+              <AlertTriangle size={16} />
+              Alertas de Segurança
+            </div>
+
+            <ul className="mt-3 text-sm text-red-300 space-y-2">
+              {perfil.flags_negative.map((f: string) => (
+                <li key={f}>• {f}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-8 space-y-4">
+
+          {avaliacoes?.map((a) => (
+            <div
+              key={a.id}
+              className="bg-[#1A1A1A] border border-gray-800 p-4 rounded-xl"
             >
-              Ativar acesso seguro
-            </a>
+              <div className="flex items-center gap-2 text-[#D4AF37] font-bold">
+                <Star size={14} fill="currentColor" />
+                {a.media_geral?.toFixed(1)}
+              </div>
 
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              Pagamento seguro • Cancele quando quiser
-            </p>
-          </div>
+              <p className="text-sm text-gray-300 mt-2">
+                {a.notas}
+              </p>
+            </div>
+          ))}
+
         </div>
 
-        <Navbar />
-      </div>
-    )
-  }
-
-  /* =========================================================
-     ⭐ PREMIUM → DETALHE COMPLETO
-     ========================================================= */
-  return (
-    <div className="min-h-screen bg-black pb-20">
-      <div className="px-4 pt-8 max-w-md mx-auto text-white">
-        <a
-          href="/consultar-reputacao"
-          className="text-gray-400 flex items-center gap-2 mb-4"
+        <Link
+          href={`/avaliar/${perfil.id}`}
+          className="mt-10 block text-center bg-[#D4AF37] text-black font-bold py-3 rounded-lg"
         >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar
-        </a>
+          Avaliar Este Perfil
+        </Link>
 
-        <h1 className="text-2xl font-bold mb-1">
-          {avaliacao.display_name || 'Nome não informado'}
-        </h1>
-
-        {avaliacao.city && (
-          <p className="text-gray-400 text-sm mb-4">
-            {avaliacao.city}
-          </p>
-        )}
-
-        <div className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-6 mb-4">
-          <div className="flex justify-center items-center gap-2 text-[#D4AF37] mb-2">
-            <Star className="w-8 h-8 fill-current" />
-            <span className="text-4xl font-bold">{media}</span>
-          </div>
-
-          <p className="text-center text-gray-400 text-sm">
-            Média geral das avaliações
-          </p>
-
-          <p className="text-center text-xs text-gray-500 mt-2">
-            {avaliacao.total_avaliacoes} avaliações •{' '}
-            {avaliacao.confiabilidade_percentual}% de confiabilidade
-          </p>
-        </div>
-
-        {avaliacao.flags_negative?.length > 0 && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-4">
-            <div className="flex gap-2 text-red-400 font-bold mb-2">
-              <AlertTriangle className="w-5 h-5" />
-              Pontos de atenção
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {avaliacao.flags_negative.map((f: string, i: number) => (
-                <span
-                  key={i}
-                  className="bg-red-500/20 text-red-300 px-3 py-1 rounded-full text-xs"
-                >
-                  {getNegativeFlagLabel(f)}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {avaliacao.flags_positive?.length > 0 && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
-            <div className="flex gap-2 text-green-400 font-bold mb-2">
-              <CheckCircle2 className="w-5 h-5" />
-              Pontos positivos
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {avaliacao.flags_positive.map((f: string, i: number) => (
-                <span
-                  key={i}
-                  className="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-xs"
-                >
-                  {getPositiveFlagLabel(f)}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
-
-      <Navbar />
     </div>
   )
 }
