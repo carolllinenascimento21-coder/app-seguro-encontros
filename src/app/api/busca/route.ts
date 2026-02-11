@@ -15,7 +15,7 @@ export async function GET(req: Request) {
 
     if (!nome && !cidade) {
       return NextResponse.json(
-        { error: 'Informe nome ou cidade' },
+        { error: 'Nome ou cidade obrigatórios' },
         { status: 400 }
       )
     }
@@ -26,18 +26,24 @@ export async function GET(req: Request) {
         id,
         display_name,
         city,
-        total_avaliacoes,
-        media_geral,
-        confiabilidade_percentual,
-        flags_positive,
-        flags_negative
+        reputacao_agregada (
+          total_avaliacoes,
+          media_geral,
+          confiabilidade_percentual,
+          flags_positive,
+          flags_negative
+        )
       `)
+      .eq('is_active', true)
 
-    if (nome) {
+    // 🔎 Filtro inteligente
+    if (nome && cidade) {
+      query = query
+        .ilike('normalized_name', `%${nome}%`)
+        .ilike('normalized_city', `%${cidade}%`)
+    } else if (nome) {
       query = query.ilike('normalized_name', `%${nome}%`)
-    }
-
-    if (cidade) {
+    } else if (cidade) {
       query = query.ilike('normalized_city', `%${cidade}%`)
     }
 
@@ -51,13 +57,24 @@ export async function GET(req: Request) {
       )
     }
 
-    return NextResponse.json({
-      results: data ?? [],
-    })
+    const results = (data || []).map((p: any) => ({
+      id: p.id,
+      display_name: p.display_name,
+      city: p.city,
+      total_avaliacoes: p.reputacao_agregada?.total_avaliacoes ?? 0,
+      media_geral: p.reputacao_agregada?.media_geral ?? 0,
+      confiabilidade_percentual:
+        p.reputacao_agregada?.confiabilidade_percentual ?? 0,
+      flags_positive: p.reputacao_agregada?.flags_positive ?? [],
+      flags_negative: p.reputacao_agregada?.flags_negative ?? [],
+    }))
+
+    return NextResponse.json({ results })
+
   } catch (err) {
     console.error('Erro inesperado:', err)
     return NextResponse.json(
-      { error: 'Erro inesperado' },
+      { error: 'Erro interno na busca' },
       { status: 500 }
     )
   }
