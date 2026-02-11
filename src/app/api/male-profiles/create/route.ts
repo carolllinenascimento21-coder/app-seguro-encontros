@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 export async function POST(req: Request) {
@@ -48,50 +49,29 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 4) Verificar duplicidade
-     * ⚠️ Usa as colunas GERADAS apenas para consulta
+     * 4) Upsert idempotente
+     * ❌ NÃO envia normalized_name / normalized_city (colunas GENERATED)
      */
-    const { data: existing, error: selectError } = await supabaseAdmin
+    const { data: upsertedProfile, error: upsertError } = await supabaseAdmin
       .from('male_profiles')
-      .select('id')
-      .ilike('normalized_name', nome.trim().toLowerCase())
-      .ilike('normalized_city', cidade.trim().toLowerCase())
-      .limit(1)
-      .maybeSingle()
-
-    if (selectError) {
-      console.error(logPrefix, selectError)
-      return NextResponse.json(
-        { success: false, message: selectError.message },
-        { status: 500 }
-      )
-    }
-
-    if (existing) {
-      return NextResponse.json(
-        { success: true, id: existing.id, reused: true },
-        { status: 200 }
-      )
-    }
-
-    /**
-     * 5) Inserção
-     * ❌ NÃO envia normalized_name / normalized_city
-     */
-    const { data: created, error: insertError } = await supabaseAdmin
-      .from('male_profiles')
-      .insert({
+      .upsert({
         display_name: nome,
         city: cidade,
         is_active: true,
+      }, {
+        onConflict: 'normalized_name,normalized_city',
+        ignoreDuplicates: false,
       })
       .select('id')
       .single()
 
-    if (insertError || !created) {
-      console.error(logPrefix, insertError)
+    if (upsertError || !upsertedProfile) {
+      console.error(`${logPrefix} upsert_error`, upsertError)
       return NextResponse.json(
-        { success: false, message: insertError?.message ?? 'Erro ao criar perfil' },
+        {
+          success: false,
+          message: upsertError?.message ?? 'Erro ao criar/reutilizar perfil avaliado',
+        },
         { status: 500 }
       )
     }
@@ -100,11 +80,11 @@ export async function POST(req: Request) {
      * 6) Sucesso
      */
     return NextResponse.json(
-      { success: true, id: created.id, reused: false },
-      { status: 201 }
+      { success: true, id: upsertedProfile.id },
+      { status: 200 }
     )
   } catch (err) {
-    console.error(logPrefix, err)
+    console.error(`${logPrefix} unexpected_error`, err)
     return NextResponse.json(
       { success: false, message: 'Erro inesperado' },
       { status: 500 }

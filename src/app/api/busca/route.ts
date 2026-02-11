@@ -12,6 +12,11 @@ function norm(s: string) {
   return (s ?? '').trim().toLowerCase()
 }
 
+function matchesField(value: string | null, query: string) {
+  if (!query) return true
+  return norm(value ?? '').includes(query)
+}
+
 export async function GET(req: Request) {
   /* ────────────────────────────────────────────────
    * 1️⃣ Ambiente público
@@ -56,11 +61,16 @@ export async function GET(req: Request) {
    * 3️⃣ Parâmetros
    * ──────────────────────────────────────────────── */
   const { searchParams } = new URL(req.url)
+  const nome = norm(searchParams.get('nome') ?? '')
+  const cidade = norm(searchParams.get('cidade') ?? '')
   const termo = norm(searchParams.get('termo') ?? '')
 
-  if (!termo) {
+  const nomeFiltro = nome || termo
+  const cidadeFiltro = cidade
+
+  if (!nomeFiltro && !cidadeFiltro) {
     return NextResponse.json(
-      { success: false, error: 'Informe um nome ou cidade para buscar' },
+      { success: false, error: 'Informe nome e/ou cidade para buscar' },
       { status: 400 }
     )
   }
@@ -75,7 +85,7 @@ export async function GET(req: Request) {
     .single()
 
   if (profileError || !profile) {
-    console.error('Erro ao carregar perfil', profileError)
+    console.error('[api/busca] profile_error', profileError)
     return NextResponse.json(
       { success: false, error: 'Erro ao validar perfil' },
       { status: 500 }
@@ -92,7 +102,8 @@ export async function GET(req: Request) {
     user_id: user.id,
     event_name: 'consult_basic',
     metadata: {
-      termo: !!termo,
+      nome: !!nomeFiltro,
+      cidade: !!cidadeFiltro,
       plan: profile.current_plan_id ?? 'free',
     },
   })
@@ -120,30 +131,47 @@ export async function GET(req: Request) {
 
   /* ────────────────────────────────────────────────
    * 7️⃣ Busca em male_profiles (SEM JOIN)
+   * - Quando vier nome e cidade, aplica AND final no backend
+   * - Usa normalized_* com fallback para display_name/city
    * ──────────────────────────────────────────────── */
-  const searchFilter = [
-    `normalized_name.ilike.%${termo}%`,
-    `normalized_city.ilike.%${termo}%`,
-    `display_name.ilike.%${termo}%`,
-    `city.ilike.%${termo}%`,
+  const nomeSearchFilter = [
+    `normalized_name.ilike.%${nomeFiltro}%`,
+    `display_name.ilike.%${nomeFiltro}%`,
   ].join(',')
 
-  const { data: maleProfiles, error: mpError } = await supabaseAdmin
+  const cidadeSearchFilter = [
+    `normalized_city.ilike.%${cidadeFiltro}%`,
+    `city.ilike.%${cidadeFiltro}%`,
+  ].join(',')
+
+  let maleProfilesQuery = supabaseAdmin
     .from('male_profiles')
-    .select('id, display_name, city')
+    .select('id, display_name, city, normalized_name, normalized_city')
     .eq('is_active', true)
-    .or(searchFilter)
-    .limit(DEFAULT_LIMIT)
+
+  if (nomeFiltro) {
+    maleProfilesQuery = maleProfilesQuery.or(nomeSearchFilter)
+  } else if (cidadeFiltro) {
+    maleProfilesQuery = maleProfilesQuery.or(cidadeSearchFilter)
+  }
+
+  const { data: maleProfilesRaw, error: mpError } = await maleProfilesQuery.limit(DEFAULT_LIMIT)
 
   if (mpError) {
-    console.error('Erro ao buscar male_profiles', mpError)
+    console.error('[api/busca] male_profiles_search_error', mpError)
     return NextResponse.json(
       { success: false, error: 'Erro ao buscar reputação', details: mpError.message },
       { status: 500 }
     )
   }
 
-  const ids = (maleProfiles ?? []).map((p) => p.id)
+  const maleProfiles = (maleProfilesRaw ?? []).filter((profile: any) => {
+    const nomeOk = matchesField(profile.normalized_name ?? profile.display_name, nomeFiltro)
+    const cidadeOk = matchesField(profile.normalized_city ?? profile.city, cidadeFiltro)
+    return nomeOk && cidadeOk
+  })
+
+  const ids = maleProfiles.map((p: any) => p.id)
 
   /* ────────────────────────────────────────────────
    * 8️⃣ Busca avaliações públicas desses perfis (SEM JOIN)
@@ -170,7 +198,7 @@ export async function GET(req: Request) {
       .in('male_profile_id', ids)
 
     if (avError) {
-      console.error('Erro ao buscar avaliacoes', avError)
+      console.error('[api/busca] avaliacoes_search_error', avError)
       return NextResponse.json(
         { success: false, error: 'Erro ao buscar reputação', details: avError.message },
         { status: 500 }
@@ -201,7 +229,7 @@ export async function GET(req: Request) {
   /* ────────────────────────────────────────────────
    * 🔟 Normaliza retorno
    * ──────────────────────────────────────────────── */
-  const results = (maleProfiles ?? []).map((p: any) => {
+  const results = maleProfiles.map((p: any) => {
     const avaliacoes = avaliacoesByProfile[p.id] ?? []
     const totalAvaliacoes = avaliacoes.length
 

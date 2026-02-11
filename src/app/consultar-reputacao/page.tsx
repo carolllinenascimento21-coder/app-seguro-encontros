@@ -28,7 +28,8 @@ interface Avaliacao {
 export default function ConsultarReputacao() {
   const router = useRouter()
 
-  const [termo, setTermo] = useState('')
+  const [nome, setNome] = useState('')
+  const [cidade, setCidade] = useState('')
   const [results, setResults] = useState<Avaliacao[]>([])
   const [loading, setLoading] = useState(false)
   const [blocked, setBlocked] = useState(false)
@@ -39,10 +40,11 @@ export default function ConsultarReputacao() {
   }
 
   const buscar = async () => {
-    const normalizedTerm = termo.trim().toLowerCase()
+    const normalizedNome = nome.trim().toLowerCase()
+    const normalizedCidade = cidade.trim().toLowerCase()
 
-    if (!normalizedTerm) {
-      alert('Digite um nome ou cidade para buscar.')
+    if (!normalizedNome && !normalizedCidade) {
+      alert('Digite um nome e/ou cidade para buscar.')
       return
     }
 
@@ -50,11 +52,13 @@ export default function ConsultarReputacao() {
       setLoading(true)
 
       trackEvent('search_attempt', {
-        has_term: true,
-        term_length: normalizedTerm.length,
+        has_nome: Boolean(normalizedNome),
+        has_cidade: Boolean(normalizedCidade),
       })
 
-      const params = new URLSearchParams({ termo: normalizedTerm })
+      const params = new URLSearchParams()
+      if (normalizedNome) params.set('nome', normalizedNome)
+      if (normalizedCidade) params.set('cidade', normalizedCidade)
       const res = await fetch(`/api/busca?${params.toString()}`)
       const payload = await res.json()
 
@@ -103,12 +107,21 @@ export default function ConsultarReputacao() {
         </p>
 
         <div className="bg-[#1A1A1A] rounded-xl p-5 border border-gray-800 mb-6">
-          <input
-            value={termo}
-            onChange={(e) => setTermo(e.target.value)}
-            placeholder="Buscar por nome ou cidade"
-            className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white mb-4"
-          />
+          <div className="space-y-3 mb-4">
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Nome"
+              className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white"
+            />
+
+            <input
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+              placeholder="Cidade"
+              className="w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-white"
+            />
+          </div>
 
           <button
             onClick={buscar}
