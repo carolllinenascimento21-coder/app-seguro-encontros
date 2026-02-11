@@ -9,9 +9,8 @@ const supabase = createClient(
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-
-    const nome = searchParams.get('nome')?.trim().toLowerCase() || null
-    const cidade = searchParams.get('cidade')?.trim().toLowerCase() || null
+    const nome = searchParams.get('nome')?.toLowerCase()
+    const cidade = searchParams.get('cidade')?.toLowerCase()
 
     if (!nome && !cidade) {
       return NextResponse.json(
@@ -29,52 +28,49 @@ export async function GET(req: Request) {
         reputacao_agregada (
           total_avaliacoes,
           media_geral,
-          confiabilidade_percentual,
-          flags_positive,
-          flags_negative
+          confiabilidade_percentual
         )
       `)
       .eq('is_active', true)
 
-    // 🔎 Filtro inteligente
-    if (nome && cidade) {
-      query = query
-        .ilike('normalized_name', `%${nome}%`)
-        .ilike('normalized_city', `%${cidade}%`)
-    } else if (nome) {
+    if (nome) {
       query = query.ilike('normalized_name', `%${nome}%`)
-    } else if (cidade) {
+    }
+
+    if (cidade) {
       query = query.ilike('normalized_city', `%${cidade}%`)
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.error('Erro Supabase:', error)
+      console.error('ERRO SUPABASE:', error)
       return NextResponse.json(
         { error: 'Erro interno na busca' },
         { status: 500 }
       )
     }
 
-    const results = (data || []).map((p: any) => ({
-      id: p.id,
-      display_name: p.display_name,
-      city: p.city,
-      total_avaliacoes: p.reputacao_agregada?.total_avaliacoes ?? 0,
-      media_geral: p.reputacao_agregada?.media_geral ?? 0,
-      confiabilidade_percentual:
-        p.reputacao_agregada?.confiabilidade_percentual ?? 0,
-      flags_positive: p.reputacao_agregada?.flags_positive ?? [],
-      flags_negative: p.reputacao_agregada?.flags_negative ?? [],
-    }))
+    const results =
+      data?.map((p) => ({
+        id: p.id,
+        display_name: p.display_name,
+        city: p.city,
+        total_avaliacoes:
+          p.reputacao_agregada?.[0]?.total_avaliacoes ?? 0,
+        media_geral:
+          p.reputacao_agregada?.[0]?.media_geral ?? 0,
+        confiabilidade_percentual:
+          p.reputacao_agregada?.[0]?.confiabilidade_percentual ?? 0,
+        flags_positive: [],
+        flags_negative: [],
+      })) ?? []
 
     return NextResponse.json({ results })
-
   } catch (err) {
-    console.error('Erro inesperado:', err)
+    console.error('ERRO GERAL:', err)
     return NextResponse.json(
-      { error: 'Erro interno na busca' },
+      { error: 'Erro inesperado' },
       { status: 500 }
     )
   }
