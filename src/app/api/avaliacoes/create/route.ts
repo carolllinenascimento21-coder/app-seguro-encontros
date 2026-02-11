@@ -143,7 +143,7 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (findError) {
-      console.error(logPrefix, findError)
+      console.error(`${logPrefix} male_profile_lookup_error`, findError)
       return NextResponse.json(
         { success: false, message: `Erro ao validar perfil avaliado: ${findError.message}` },
         { status: 500 }
@@ -158,15 +158,13 @@ export async function POST(req: Request) {
         .upsert({
           display_name: nome,
           city: cidade,
-          normalized_name: normalizedName,
-          normalized_city: normalizedCity,
           is_active: true,
         }, { onConflict: 'normalized_name,normalized_city', ignoreDuplicates: false })
         .select('id')
         .single()
 
       if (createError || !createdProfile) {
-        console.error(logPrefix, createError)
+        console.error(`${logPrefix} male_profile_upsert_error`, createError)
         return NextResponse.json(
           {
             success: false,
@@ -197,7 +195,7 @@ export async function POST(req: Request) {
       .single()
 
     if (insertError || !avaliacao) {
-      console.error(logPrefix, insertError)
+      console.error(`${logPrefix} avaliacao_insert_error`, insertError)
       return NextResponse.json(
         { success: false, message: insertError?.message ?? 'Erro ao publicar avaliação' },
         { status: 500 }
@@ -220,7 +218,7 @@ export async function POST(req: Request) {
       { status: 201 }
     )
   } catch (err) {
-    console.error('[api/avaliacoes/create] erro inesperado', err)
+    console.error('[api/avaliacoes/create] unexpected_error', err)
     return NextResponse.json(
       {
         success: false,
