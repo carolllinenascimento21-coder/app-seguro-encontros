@@ -9,12 +9,13 @@ const supabase = createClient(
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const nome = searchParams.get('nome')?.toLowerCase()
-    const cidade = searchParams.get('cidade')?.toLowerCase()
+
+    const nome = searchParams.get('nome')?.toLowerCase() || ''
+    const cidade = searchParams.get('cidade')?.toLowerCase() || ''
 
     if (!nome && !cidade) {
       return NextResponse.json(
-        { error: 'Nome ou cidade obrigatórios' },
+        { error: 'Nome ou cidade obrigatório' },
         { status: 400 }
       )
     }
@@ -44,33 +45,33 @@ export async function GET(req: Request) {
     const { data, error } = await query
 
     if (error) {
-      console.error('ERRO SUPABASE:', error)
+      console.error('Erro Supabase:', error)
       return NextResponse.json(
-        { error: 'Erro interno na busca' },
+        { error: 'Erro ao buscar dados' },
         { status: 500 }
       )
     }
 
-    const results =
-      data?.map((p) => ({
-        id: p.id,
-        display_name: p.display_name,
-        city: p.city,
-        total_avaliacoes:
-          p.reputacao_agregada?.[0]?.total_avaliacoes ?? 0,
-        media_geral:
-          p.reputacao_agregada?.[0]?.media_geral ?? 0,
-        confiabilidade_percentual:
-          p.reputacao_agregada?.[0]?.confiabilidade_percentual ?? 0,
-        flags_positive: [],
-        flags_negative: [],
-      })) ?? []
+    const formatted = (data || []).map((p: any) => ({
+      id: p.id,
+      display_name: p.display_name,
+      city: p.city,
+      total_avaliacoes:
+        p.reputacao_agregada?.[0]?.total_avaliacoes ?? 0,
+      media_geral:
+        p.reputacao_agregada?.[0]?.media_geral ?? 0,
+      confiabilidade_percentual:
+        p.reputacao_agregada?.[0]?.confiabilidade_percentual ?? 0,
+      flags_positive: null,
+      flags_negative: null,
+    }))
 
-    return NextResponse.json({ results })
+    return NextResponse.json({ results: formatted })
+
   } catch (err) {
-    console.error('ERRO GERAL:', err)
+    console.error('Erro interno:', err)
     return NextResponse.json(
-      { error: 'Erro inesperado' },
+      { error: 'Erro interno na busca' },
       { status: 500 }
     )
   }
