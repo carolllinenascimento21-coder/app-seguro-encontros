@@ -30,19 +30,26 @@ export default function ConsultarReputacao() {
   const [cidade, setCidade] = useState('')
   const [results, setResults] = useState<PerfilResultado[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const media = (p: PerfilResultado) =>
-    p.media_geral ? p.media_geral.toFixed(1) : '—'
+  /* ---------- MÉDIA FORMATADA ---------- */
+  const mediaFormatada = (p: PerfilResultado) => {
+    if (typeof p.media_geral !== 'number' || p.total_avaliacoes === 0)
+      return '—'
+    return p.media_geral.toFixed(1)
+  }
 
-
-  /* 🔥 SCORE COMPOSTO ENTERPRISE */
+  /* ---------- SCORE COMPOSTO ENTERPRISE ---------- */
   const getScore = (p: PerfilResultado) => {
     const media = p.media_geral ?? 0
     const total = p.total_avaliacoes ?? 0
-    return media * Math.log(total + 1)
+
+    if (!total || !media) return 0
+
+    return Number((media * Math.log(total + 1)).toFixed(4))
   }
 
-  /* 🔥 BADGE AUTOMÁTICO */
+  /* ---------- BADGE AUTOMÁTICO ---------- */
   const getBadge = (p: PerfilResultado) => {
     const media = p.media_geral ?? 0
     const conf = p.confiabilidade_percentual ?? 0
@@ -69,31 +76,45 @@ export default function ConsultarReputacao() {
     }
   }
 
+  /* ---------- BUSCA ---------- */
   const buscar = async () => {
-    if (!nome && !cidade) return alert('Digite nome ou cidade')
+    const nomeNormalizado = nome.trim().toLowerCase()
+    const cidadeNormalizada = cidade.trim().toLowerCase()
 
-    setLoading(true)
-
-    const params = new URLSearchParams()
-    if (nome) params.set('nome', nome)
-    if (cidade) params.set('cidade', cidade)
-
-    const res = await fetch(`/api/busca?${params}`)
-    const data = await res.json()
-
-    if (!res.ok) {
-      alert(data?.error ?? 'Erro na busca')
-      setLoading(false)
+    if (!nomeNormalizado && !cidadeNormalizada) {
+      alert('Digite nome ou cidade')
       return
     }
 
-    const sorted = (data.results ?? []).sort(
-      (a: PerfilResultado, b: PerfilResultado) =>
-        getScore(b) - getScore(a)
-    )
+    try {
+      setLoading(true)
+      setError(null)
 
-    setResults(sorted)
-    setLoading(false)
+      const params = new URLSearchParams()
+      if (nomeNormalizado) params.set('nome', nomeNormalizado)
+      if (cidadeNormalizada) params.set('cidade', cidadeNormalizada)
+
+      const res = await fetch(`/api/busca?${params.toString()}`)
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Erro na busca')
+      }
+
+      const lista: PerfilResultado[] = data.results ?? []
+
+      // 🔥 Ordenação enterprise
+      const ordenado = [...lista].sort(
+        (a, b) => getScore(b) - getScore(a)
+      )
+
+      setResults(ordenado)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -104,33 +125,47 @@ export default function ConsultarReputacao() {
           Consultar Reputação
         </h1>
 
+        {/* ---------- FORMULÁRIO ---------- */}
         <div className="bg-[#1A1A1A] p-5 rounded-xl border border-gray-800 mb-6">
 
           <input
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             placeholder="Nome"
-            className="w-full mb-3 bg-black border border-gray-700 rounded-lg px-4 py-3 text-white"
+            className="w-full mb-3 bg-black border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37]"
           />
 
           <input
             value={cidade}
             onChange={(e) => setCidade(e.target.value)}
             placeholder="Cidade"
-            className="w-full mb-4 bg-black border border-gray-700 rounded-lg px-4 py-3 text-white"
+            className="w-full mb-4 bg-black border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37]"
           />
 
           <button
             onClick={buscar}
             disabled={loading}
-            className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-lg flex justify-center gap-2"
+            className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-lg flex justify-center gap-2 hover:opacity-90 transition"
           >
             <Search size={18} />
             {loading ? 'Buscando...' : 'Consultar'}
           </button>
         </div>
 
+        {error && (
+          <div className="text-red-400 text-sm mb-4 text-center">
+            {error}
+          </div>
+        )}
+
+        {/* ---------- RESULTADOS ---------- */}
         <div className="space-y-4">
+
+          {!loading && results.length === 0 && !error && (
+            <p className="text-gray-500 text-center text-sm">
+              Nenhum resultado encontrado
+            </p>
+          )}
 
           {results.map((r) => {
             const badge = getBadge(r)
@@ -138,8 +173,10 @@ export default function ConsultarReputacao() {
             return (
               <div
                 key={r.id}
-                onClick={() => router.push(`/consultar-reputacao/${r.id}`)}
-                className="bg-[#1A1A1A] border border-gray-800 hover:border-[#D4AF37] transition rounded-xl p-5 cursor-pointer"
+                onClick={() =>
+                  router.push(`/consultar-reputacao/${r.id}`)
+                }
+                className="bg-[#1A1A1A] border border-gray-800 hover:border-[#D4AF37] hover:scale-[1.01] transition rounded-xl p-5 cursor-pointer"
               >
 
                 <div className="flex justify-between items-start mb-3">
@@ -157,34 +194,35 @@ export default function ConsultarReputacao() {
                     )}
                   </div>
 
-                  <div className={`flex items-center gap-1 text-white px-3 py-1 rounded-full text-xs font-bold ${badge.color} animate-fade-in`}>
+                  <div
+                    className={`flex items-center gap-1 text-white px-3 py-1 rounded-full text-xs font-bold ${badge.color}`}
+                  >
                     {badge.icon}
                     {badge.label}
                   </div>
-
                 </div>
 
                 <div className="flex items-center gap-2 text-[#D4AF37]">
                   <Star size={18} fill="currentColor" />
                   <span className="font-bold text-lg">
-                    {media(r)}
+                    {mediaFormatada(r)}
                   </span>
                 </div>
 
                 <div className="text-xs text-gray-400 mt-2">
-                  {r.total_avaliacoes} avaliações • {r.confiabilidade_percentual}% confiável
+                  {r.total_avaliacoes} avaliações •{' '}
+                  {r.confiabilidade_percentual}% confiável
                 </div>
 
                 {r.flags_negative?.length ? (
                   <div className="flex items-center gap-2 text-red-400 text-xs mt-3">
                     <AlertTriangle size={14} />
-                    Possui alertas
+                    {r.flags_negative.length} alerta(s) ativo(s)
                   </div>
                 ) : null}
               </div>
             )
           })}
-
         </div>
       </div>
 
