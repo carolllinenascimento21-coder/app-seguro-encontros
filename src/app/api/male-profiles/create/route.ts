@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
-
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 function normalize(value: string) {
@@ -13,7 +12,7 @@ export async function POST(req: Request) {
 
   try {
     /**
-     * 1) Autenticação da usuária (cookie/session)
+     * 1) Autenticação da usuária
      */
     const supabaseAuth = createRouteHandlerClient({ cookies })
     const {
@@ -56,7 +55,7 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 4) Verifica duplicidade (nome + cidade normalizados)
+     * 4) Verifica se já existe perfil (usando colunas GENERATED no WHERE)
      */
     const { data: existing, error: selectError } = await supabaseAdmin
       .from('male_profiles')
@@ -69,7 +68,7 @@ export async function POST(req: Request) {
     if (selectError) {
       console.error(logPrefix, 'erro ao verificar duplicidade', selectError)
       return NextResponse.json(
-        { success: false, message: `Erro ao verificar perfil: ${selectError.message}` },
+        { success: false, message: 'Erro ao verificar perfil existente' },
         { status: 500 }
       )
     }
@@ -82,24 +81,23 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 5) Criação do perfil masculino
+     * 5) Cria novo perfil
+     * ⚠️ NÃO inserir normalized_* (são GENERATED ALWAYS)
      */
     const { data: created, error: insertError } = await supabaseAdmin
       .from('male_profiles')
-      .upsert({
+      .insert({
         display_name: nome,
         city: cidade,
-        normalized_name,
-        normalized_city,
         is_active: true,
-      }, { onConflict: 'normalized_name,normalized_city', ignoreDuplicates: false })
+      })
       .select('id')
       .single()
 
     if (insertError || !created) {
       console.error(logPrefix, 'erro ao criar male_profile', insertError)
       return NextResponse.json(
-        { success: false, message: `Erro ao criar perfil: ${insertError?.message ?? 'unknown error'}` },
+        { success: false, message: 'Erro ao criar perfil' },
         { status: 500 }
       )
     }
