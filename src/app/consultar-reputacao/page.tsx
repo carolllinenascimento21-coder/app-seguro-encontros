@@ -34,6 +34,36 @@ export default function ConsultarReputacao() {
   const media = (p: PerfilResultado) =>
     p.media_geral ? p.media_geral.toFixed(1) : '—'
 
+const getBadge = (p: PerfilResultado) => {
+  const media = p.media_geral ?? 0
+  const conf = p.confiabilidade_percentual ?? 0
+  const total = p.total_avaliacoes ?? 0
+
+  if (media >= 4.2 && conf >= 85 && total >= 5) {
+    return {
+      label: 'Excelente',
+      color: 'bg-green-600 text-white',
+      icon: '🟢',
+    }
+  }
+
+  if (media >= 3.2 && conf >= 60) {
+    return {
+      label: 'Confiável',
+      color: 'bg-blue-600 text-white',
+      icon: '🔵',
+    }
+  }
+
+  return {
+    label: 'Perigo',
+    color: 'bg-red-600 text-white',
+    icon: '🔴',
+  }
+}
+
+  
+  
   /* 🔥 SCORE COMPOSTO ENTERPRISE */
   const getScore = (p: PerfilResultado) => {
     const media = p.media_geral ?? 0
