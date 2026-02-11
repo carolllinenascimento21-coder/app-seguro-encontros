@@ -1,85 +1,71 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url)
+    const nome = searchParams.get('nome')
+    const cidade = searchParams.get('cidade')
 
-  const nome = searchParams.get('nome')
-  const cidade = searchParams.get('cidade')
+    const cookieStore = cookies()
 
-  let query = supabase
-    .from('profiles')
-    .select(`
-      id,
-      display_name,
-      city,
-      reviews (
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll() {},
+        },
+      }
+    )
+
+    let query = supabase
+      .from('profiles') // ⚠️ CONFIRME o nome da sua tabela
+      .select(`
         id,
-        nota_geral,
-        confiavel,
+        display_name,
+        city,
+        total_avaliacoes,
+        media_geral,
+        confiabilidade_percentual,
         flags_positive,
         flags_negative
+      `)
+
+    /* 🔎 FILTROS DINÂMICOS SEGUROS */
+    if (nome && cidade) {
+      query = query.or(
+        `display_name.ilike.%${nome}%,city.ilike.%${cidade}%`
       )
-    `)
-
-  if (nome) {
-    query = query.ilike('display_name', `%${nome}%`)
-  }
-
-  if (cidade) {
-    query = query.ilike('city', `%${cidade}%`)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    return NextResponse.json({ error: 'Erro na busca' }, { status: 500 })
-  }
-
-  const results = data.map((p) => {
-    const reviews = p.reviews ?? []
-
-    const total = reviews.length
-
-    const media =
-      total > 0
-        ? reviews.reduce((acc, r) => acc + (r.nota_geral ?? 0), 0) / total
-        : 0
-
-    const positivos = reviews.filter((r) => r.confiavel === true).length
-
-    const confiabilidade =
-      total > 0 ? Math.round((positivos / total) * 100) : 0
-
-    const flags_negative = reviews.flatMap((r) => r.flags_negative ?? [])
-    const flags_positive = reviews.flatMap((r) => r.flags_positive ?? [])
-
-    // 🔥 SCORE ENTERPRISE
-    const score_final =
-      total > 0
-        ? Number((media * Math.log(total + 1)).toFixed(2))
-        : 0
-
-    return {
-      id: p.id,
-      display_name: p.display_name,
-      city: p.city,
-      total_avaliacoes: total,
-      media_geral: Number(media.toFixed(1)),
-      confiabilidade_percentual: confiabilidade,
-      flags_positive,
-      flags_negative,
-      score_final,
+    } else if (nome) {
+      query = query.ilike('display_name', `%${nome}%`)
+    } else if (cidade) {
+      query = query.ilike('city', `%${cidade}%`)
     }
-  })
 
-  // 🔥 Ordenação inteligente
-  results.sort((a, b) => b.score_final - a.score_final)
+    const { data, error } = await query
 
-  return NextResponse.json({ results })
+    if (error) {
+      console.error('Supabase error:', error)
+      return NextResponse.json(
+        { error: 'Erro na busca' },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({
+      results: data ?? [],
+    })
+  } catch (err) {
+    console.error('Internal error:', err)
+    return NextResponse.json(
+      { error: 'Erro interno no servidor' },
+      { status: 500 }
+    )
+  }
 }
