@@ -1,31 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-export async function GET(req: NextRequest) {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
 
-    const nome = searchParams.get('nome')
-    const cidade = searchParams.get('cidade')
+    const nome = searchParams.get('nome')?.trim().toLowerCase() || null
+    const cidade = searchParams.get('cidade')?.trim().toLowerCase() || null
 
-    const cookieStore = cookies()
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll() {},
-        },
-      }
-    )
+    if (!nome && !cidade) {
+      return NextResponse.json(
+        { error: 'Informe nome ou cidade' },
+        { status: 400 }
+      )
+    }
 
     let query = supabase
-      .from('profiles') // ⚠️ CONFIRME o nome da sua tabela
+      .from('male_profiles')
       .select(`
         id,
         display_name,
@@ -37,24 +33,21 @@ export async function GET(req: NextRequest) {
         flags_negative
       `)
 
-    /* 🔎 FILTROS DINÂMICOS SEGUROS */
-    if (nome && cidade) {
-      query = query.or(
-        `display_name.ilike.%${nome}%,city.ilike.%${cidade}%`
-      )
-    } else if (nome) {
-      query = query.ilike('display_name', `%${nome}%`)
-    } else if (cidade) {
-      query = query.ilike('city', `%${cidade}%`)
+    if (nome) {
+      query = query.ilike('normalized_name', `%${nome}%`)
+    }
+
+    if (cidade) {
+      query = query.ilike('normalized_city', `%${cidade}%`)
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.error('Supabase error:', error)
+      console.error('Erro Supabase:', error)
       return NextResponse.json(
-        { error: 'Erro na busca' },
-        { status: 400 }
+        { error: 'Erro interno na busca' },
+        { status: 500 }
       )
     }
 
@@ -62,9 +55,9 @@ export async function GET(req: NextRequest) {
       results: data ?? [],
     })
   } catch (err) {
-    console.error('Internal error:', err)
+    console.error('Erro inesperado:', err)
     return NextResponse.json(
-      { error: 'Erro interno no servidor' },
+      { error: 'Erro inesperado' },
       { status: 500 }
     )
   }
