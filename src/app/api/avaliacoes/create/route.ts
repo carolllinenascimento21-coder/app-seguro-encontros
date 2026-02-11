@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 /* ──────────────────────────────────────────────── */
@@ -19,26 +18,16 @@ function safeString(value: unknown) {
 }
 
 function parseFlags(value: unknown): string[] {
-  if (value == null) return []
+  if (!value) return []
   if (Array.isArray(value)) {
-    return value
-      .filter((v): v is string => typeof v === 'string')
-      .map((v) => v.trim())
-      .filter(Boolean)
+    return value.filter((v): v is string => typeof v === 'string')
   }
   if (typeof value === 'string') {
-    const raw = value.trim()
-    if (!raw) return []
     try {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((v): v is string => typeof v === 'string')
-          .map((v) => v.trim())
-          .filter(Boolean)
-      }
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed
     } catch {
-      return raw.split(',').map((s) => s.trim()).filter(Boolean)
+      return value.split(',').map(v => v.trim()).filter(Boolean)
     }
   }
   return []
@@ -49,10 +38,9 @@ function parseFlags(value: unknown): string[] {
 /* ──────────────────────────────────────────────── */
 export async function POST(req: Request) {
   const logPrefix = '[api/avaliacoes/create]'
-  const startedAt = Date.now()
 
   try {
-    /* 1️⃣ Supabase admin */
+    /* 1️⃣ Admin client */
     const supabaseAdmin = getSupabaseAdminClient()
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -76,18 +64,10 @@ export async function POST(req: Request) {
     }
 
     /* 3️⃣ Payload */
-    let payload: Record<string, unknown>
-    try {
-      payload = (await req.json()) as Record<string, unknown>
-    } catch {
-      return NextResponse.json(
-        { success: false, message: 'Payload inválido' },
-        { status: 400 }
-      )
-    }
+    const payload = await req.json()
 
-    const nome = typeof payload.nome === 'string' ? payload.nome.trim() : ''
-    const cidade = typeof payload.cidade === 'string' ? payload.cidade.trim() : ''
+    const nome = payload.nome?.trim()
+    const cidade = payload.cidade?.trim()
 
     if (!nome || !cidade) {
       return NextResponse.json(
@@ -99,10 +79,10 @@ export async function POST(req: Request) {
     const normalizedName = normalizeText(nome)
     const normalizedCity = normalizeText(cidade)
 
-    const ratings = payload.ratings as Record<string, unknown>
-    if (!ratings || typeof ratings !== 'object') {
+    const ratings = payload.ratings
+    if (!ratings) {
       return NextResponse.json(
-        { success: false, message: 'Avaliações por critério são obrigatórias' },
+        { success: false, message: 'Avaliações são obrigatórias' },
         { status: 400 }
       )
     }
@@ -115,61 +95,48 @@ export async function POST(req: Request) {
       confianca: Number(ratings.confianca),
     }
 
-    if (
-      Object.values(ratingMap).some(
-        (v) => Number.isNaN(v) || v < 1 || v > 5
-      )
-    ) {
+    if (Object.values(ratingMap).some(v => v < 1 || v > 5 || isNaN(v))) {
       return NextResponse.json(
-        { success: false, message: 'Avaliações devem ser de 1 a 5' },
+        { success: false, message: 'Notas devem ser entre 1 e 5' },
         { status: 400 }
       )
     }
 
-    const flagsPositive = parseFlags(payload.greenFlags ?? payload.flags_positive)
-    const flagsNegative = parseFlags(payload.redFlags ?? payload.flags_negative)
+    const flagsPositive = parseFlags(payload.greenFlags)
+    const flagsNegative = parseFlags(payload.redFlags)
 
     const contato = safeString(payload.contato)
-    const notas = safeString(payload.descricao ?? payload.relato)
-    const isAnonymous = Boolean(payload.anonimo ?? payload.is_anonymous)
+    const notas = safeString(payload.descricao)
+    const isAnonymous = Boolean(payload.anonimo)
 
-    /* 4️⃣ Buscar ou criar male_profile (SEM JOIN) */
-    const { data: existingProfile, error: findError } = await supabaseAdmin
+    /* 4️⃣ Buscar ou criar male_profile SEM upsert */
+    const { data: existingProfile } = await supabaseAdmin
       .from('male_profiles')
       .select('id')
       .eq('normalized_name', normalizedName)
       .eq('normalized_city', normalizedCity)
-      .limit(1)
       .maybeSingle()
 
-    if (findError) {
-      console.error(`${logPrefix} male_profile_lookup_error`, findError)
-      return NextResponse.json(
-        { success: false, message: `Erro ao validar perfil avaliado: ${findError.message}` },
-        { status: 500 }
-      )
-    }
-
-    let maleProfileId = existingProfile?.id as string | undefined
+    let maleProfileId = existingProfile?.id
 
     if (!maleProfileId) {
-      const { data: createdProfile, error: createError } = await supabaseAdmin
-        .from('male_profiles')
-        .upsert({
-          display_name: nome,
-          city: cidade,
-          is_active: true,
-        }, { onConflict: 'normalized_name,normalized_city', ignoreDuplicates: false })
-        .select('id')
-        .single()
+      const { data: createdProfile, error: createError } =
+        await supabaseAdmin
+          .from('male_profiles')
+          .insert({
+            display_name: nome,
+            city: cidade,
+            normalized_name: normalizedName,
+            normalized_city: normalizedCity,
+            is_active: true,
+          })
+          .select('id')
+          .single()
 
       if (createError || !createdProfile) {
-        console.error(`${logPrefix} male_profile_upsert_error`, createError)
+        console.error(logPrefix, createError)
         return NextResponse.json(
-          {
-            success: false,
-            message: `Erro ao criar perfil avaliado: ${createError?.message ?? 'unknown error'}`,
-          },
+          { success: false, message: createError?.message },
           { status: 500 }
         )
       }
@@ -177,53 +144,45 @@ export async function POST(req: Request) {
       maleProfileId = createdProfile.id
     }
 
-    /* 5️⃣ Criar avaliação (FK VALIDADA) */
-    const { data: avaliacao, error: insertError } = await supabaseAdmin
-      .from('avaliacoes')
-      .insert({
-        autor_id: user.id,
-        male_profile_id: maleProfileId,
-        is_anonymous: isAnonymous,
-        publica: true,
-        contato,
-        notas,
-        flags_positive: flagsPositive,
-        flags_negative: flagsNegative,
-        ...ratingMap,
-      })
-      .select('id')
-      .single()
+    /* 5️⃣ Criar avaliação */
+    const { data: avaliacao, error: insertError } =
+      await supabaseAdmin
+        .from('avaliacoes')
+        .insert({
+          autora_id: user.id, // ✅ CORRETO
+          male_profile_id: maleProfileId,
+          is_anonymous: isAnonymous,
+          publica: true,
+          contato,
+          notas,
+          flags_positive: flagsPositive,
+          flags_negative: flagsNegative,
+          ...ratingMap,
+        })
+        .select('id')
+        .single()
 
-    if (insertError || !avaliacao) {
-      console.error(`${logPrefix} avaliacao_insert_error`, insertError)
+    if (insertError) {
+      console.error(logPrefix, insertError)
       return NextResponse.json(
-        { success: false, message: insertError?.message ?? 'Erro ao publicar avaliação' },
+        { success: false, message: insertError.message },
         { status: 500 }
       )
     }
 
-    console.info(logPrefix, 'OK', {
-      elapsedMs: Date.now() - startedAt,
-      maleProfileId,
-      avaliacaoId: avaliacao.id,
-    })
-
     return NextResponse.json(
       {
         success: true,
-        message: 'Avaliação publicada com sucesso',
         id: avaliacao.id,
         male_profile_id: maleProfileId,
       },
       { status: 201 }
     )
+
   } catch (err) {
-    console.error('[api/avaliacoes/create] unexpected_error', err)
+    console.error('[api/avaliacoes/create] fatal', err)
     return NextResponse.json(
-      {
-        success: false,
-        message: err instanceof Error ? err.message : 'Erro inesperado no servidor',
-      },
+      { success: false, message: 'Erro interno' },
       { status: 500 }
     )
   }
