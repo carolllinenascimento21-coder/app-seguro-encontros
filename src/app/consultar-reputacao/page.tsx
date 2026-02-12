@@ -14,13 +14,12 @@ import Navbar from '@/components/custom/navbar'
 
 interface PerfilResultado {
   id: string
-  display_name: string
-  city: string | null
+  nome: string
+  cidade: string | null
   total_avaliacoes: number
   media_geral: number
-  confiabilidade_percentual: number
-  flags_positive: string[] | null
-  flags_negative: string[] | null
+  flags_positive: string[]
+  flags_negative: string[]
 }
 
 export default function ConsultarReputacao() {
@@ -34,8 +33,7 @@ export default function ConsultarReputacao() {
 
   /* ---------- MÉDIA FORMATADA ---------- */
   const mediaFormatada = (p: PerfilResultado) => {
-    if (typeof p.media_geral !== 'number' || p.total_avaliacoes === 0)
-      return '—'
+    if (!p.total_avaliacoes) return '—'
     return p.media_geral.toFixed(1)
   }
 
@@ -43,31 +41,31 @@ export default function ConsultarReputacao() {
   const getScore = (p: PerfilResultado) => {
     const media = p.media_geral ?? 0
     const total = p.total_avaliacoes ?? 0
-
-    if (!total || !media) return 0
-
+    if (!total) return 0
     return Number((media * Math.log(total + 1)).toFixed(4))
   }
 
   /* ---------- BADGE AUTOMÁTICO ---------- */
   const getBadge = (p: PerfilResultado) => {
     const media = p.media_geral ?? 0
-    const conf = p.confiabilidade_percentual ?? 0
     const total = p.total_avaliacoes ?? 0
+    const negativos = p.flags_negative?.length ?? 0
 
-    if (media >= 4.2 && conf >= 85 && total >= 5)
+    if (media >= 4.2 && total >= 5 && negativos === 0) {
       return {
         label: 'Excelente',
         color: 'bg-green-600',
         icon: <ShieldCheck size={14} />,
       }
+    }
 
-    if (media >= 3.2 && conf >= 60)
+    if (media >= 3.2 && negativos <= 2) {
       return {
         label: 'Confiável',
         color: 'bg-blue-600',
         icon: <ShieldCheck size={14} />,
       }
+    }
 
     return {
       label: 'Perigo',
@@ -76,7 +74,7 @@ export default function ConsultarReputacao() {
     }
   }
 
-  /* ---------- BUSCA ---------- */
+  /* ---------- BUSCA CORRIGIDA ---------- */
   const buscar = async () => {
     const nomeNormalizado = nome.trim().toLowerCase()
     const cidadeNormalizada = cidade.trim().toLowerCase()
@@ -90,21 +88,20 @@ export default function ConsultarReputacao() {
       setLoading(true)
       setError(null)
 
-      const params = new URLSearchParams()
-      if (nomeNormalizado) params.set('nome', nomeNormalizado)
-      if (cidadeNormalizada) params.set('cidade', cidadeNormalizada)
+      const termo = nomeNormalizado || cidadeNormalizada
 
-      const res = await fetch(`/api/busca?${params.toString()}`)
+      const res = await fetch(
+        `/api/reputation/search?termo=${encodeURIComponent(termo)}`
+      )
 
       const data = await res.json()
 
-      if (!res.ok) {
-        throw new Error(data?.error ?? 'Erro na busca')
+      if (!res.ok || !data.success) {
+        throw new Error(data?.message ?? 'Erro na busca')
       }
 
       const lista: PerfilResultado[] = data.results ?? []
 
-      // 🔥 Ordenação enterprise
       const ordenado = [...lista].sort(
         (a, b) => getScore(b) - getScore(a)
       )
@@ -183,13 +180,13 @@ export default function ConsultarReputacao() {
 
                   <div>
                     <h3 className="text-white font-bold text-lg">
-                      {r.display_name}
+                      {r.nome}
                     </h3>
 
-                    {r.city && (
+                    {r.cidade && (
                       <p className="text-gray-400 text-xs flex items-center gap-1 mt-1">
                         <MapPin size={12} />
-                        {r.city}
+                        {r.cidade}
                       </p>
                     )}
                   </div>
@@ -210,8 +207,7 @@ export default function ConsultarReputacao() {
                 </div>
 
                 <div className="text-xs text-gray-400 mt-2">
-                  {r.total_avaliacoes} avaliações •{' '}
-                  {r.confiabilidade_percentual}% confiável
+                  {r.total_avaliacoes} avaliações
                 </div>
 
                 {r.flags_negative?.length ? (
