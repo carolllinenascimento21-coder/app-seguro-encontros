@@ -10,25 +10,25 @@ const supabase = createSupabaseClient();
 
 interface Avaliacao {
   id: string;
-  avaliado: {
-    nome: string | null;
-    cidade: string | null;
-    telefone: string | null;
-  } | null;
+  male_profile_id: string | null;
+  relato: string | null;
   flags_positive: string[];
   flags_negative: string[];
-  relato: string | null;
   comportamento: number;
   seguranca_emocional: number;
   respeito: number;
   carater: number;
   confianca: number;
   created_at: string;
+  male_profiles: {
+    nome: string | null;
+    cidade: string | null;
+    telefone: string | null;
+  } | null;
 }
 
 export default function MinhasAvaliacoes() {
   const router = useRouter();
-
   const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -41,61 +41,35 @@ export default function MinhasAvaliacoes() {
   const carregarAvaliacoes = async () => {
     try {
       setLoading(true);
-      if (!supabase) {
-        console.error('Supabase client não inicializado nas avaliações.');
-        setLoading(false);
-        return;
-      }
-
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError && sessionError.code !== 'AuthSessionMissingError') {
-        console.error('Erro ao carregar sessão:', sessionError);
-        router.push('/login');
-        return;
-      }
-
-      if (!session) {
-        router.push('/login');
-        return;
-      }
 
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError?.code === 'AuthSessionMissingError' || !user) {
+      if (!user) {
         router.push('/login');
         return;
       }
 
-      /**
-       * 🔒 LISTAGEM SEGURA
-       * Somente avaliações vinculadas ao usuário logado
-       * via RLS na tabela avaliacoes
-       */
       const { data, error } = await supabase
         .from('avaliacoes')
         .select(`
           id,
-          avaliado:avaliados (
-            nome,
-            cidade,
-            telefone
-          ),
+          male_profile_id,
+          relato,
           flags_positive,
           flags_negative,
-          relato,
           comportamento,
           seguranca_emocional,
           respeito,
           carater,
           confianca,
-          created_at
+          created_at,
+          male_profiles (
+            nome,
+            cidade,
+            telefone
+          )
         `)
         .eq('autor_id', user.id)
         .order('created_at', { ascending: false });
@@ -103,7 +77,6 @@ export default function MinhasAvaliacoes() {
       if (error) throw error;
 
       setAvaliacoes(data ?? []);
-
     } catch (err) {
       console.error('Erro ao carregar avaliações:', err);
     } finally {
@@ -124,11 +97,6 @@ export default function MinhasAvaliacoes() {
     if (!avaliacaoToDelete) return;
 
     try {
-      if (!supabase) {
-        console.error('Supabase client não inicializado nas avaliações.');
-        return;
-      }
-
       const { error } = await supabase
         .from('avaliacoes')
         .delete()
@@ -142,7 +110,6 @@ export default function MinhasAvaliacoes() {
 
       setShowDeleteModal(false);
       setAvaliacaoToDelete(null);
-
     } catch (err) {
       console.error('Erro ao excluir avaliação:', err);
       alert('Erro ao excluir avaliação.');
@@ -206,12 +173,13 @@ export default function MinhasAvaliacoes() {
                 <div className="flex justify-between mb-2">
                   <div>
                     <h3 className="text-white font-bold">
-                      {a.avaliado?.nome || 'Nome não informado'}
+                      {a.male_profiles?.nome || 'Nome não informado'}
                     </h3>
                     <p className="text-gray-400 text-xs">
                       {formatDate(a.created_at)}
                     </p>
                   </div>
+
                   <div className="flex items-center gap-1">
                     <Star className="w-5 h-5 text-[#D4AF37] fill-current" />
                     <span className="text-[#D4AF37] font-bold">
