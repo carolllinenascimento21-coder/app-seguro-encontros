@@ -1,155 +1,135 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
-function normalizeTerm(value: string | null) {
+function normalize(value: string | null) {
   return (value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
 }
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const termo = normalizeTerm(searchParams.get('termo'))
+    const termoRaw = searchParams.get('termo')
+    const termo = normalize(termoRaw)
 
     if (!termo) {
       return NextResponse.json(
-        { success: false, message: 'Informe termo para busca' },
+        { success: false, message: 'Informe um termo para busca' },
         { status: 400 }
       )
     }
 
     const supabase = getSupabaseAdminClient()
-    if (!supabase) {
-      return NextResponse.json(
-        { success: false, message: 'Supabase admin não configurado' },
-        { status: 503 }
-      )
-    }
 
-    // 🔥 Busca unaccent manual (sem função SQL)
-    const { data: maleProfiles, error } = await supabase
+    const { data: profiles, error } = await supabase
       .from('male_profiles')
       .select('id, display_name, city')
       .eq('is_active', true)
+      .or(
+        `normalized_name.ilike.%${termo}%,normalized_city.ilike.%${termo}%`
+      )
+      .limit(30)
 
     if (error) throw error
 
-    const filtrados =
-      maleProfiles?.filter((p: any) => {
-        const nome = normalizeTerm(p.display_name)
-        const cidade = normalizeTerm(p.city)
-        return nome.includes(termo) || cidade.includes(termo)
-      }) ?? []
+    const ids = profiles?.map((p) => p.id) ?? []
 
-    const profileIds = filtrados.map((p) => p.id)
-
-    if (!profileIds.length)
-      return NextResponse.json({ success: true, results: [] })
-
-    const { data: avaliacoes, error: avaliacoesError } = await supabase
+    const { data: avaliacoes } = await supabase
       .from('avaliacoes')
-      .select(
-        `
-        male_profile_id,
-        comportamento,
-        seguranca_emocional,
-        respeito,
-        carater,
-        confianca,
-        flags_positive,
-        flags_negative,
-        publica
-      `
-      )
+      .select('*')
       .eq('publica', true)
-      .in('male_profile_id', profileIds)
-
-    if (avaliacoesError) throw avaliacoesError
+      .in('male_profile_id', ids.length ? ids : ['00000000-0000'])
 
     const grouped: Record<string, any[]> = {}
 
-    for (const a of avaliacoes ?? []) {
-      if (!grouped[a.male_profile_id])
+    avaliacoes?.forEach((a) => {
+      if (!grouped[a.male_profile_id]) {
         grouped[a.male_profile_id] = []
+      }
       grouped[a.male_profile_id].push(a)
-    }
+    })
 
-    const GLOBAL_MEAN = 3.5
-    const MIN_VOTES = 5
+    const results = profiles?.map((profile) => {
+      const list = grouped[profile.id] ?? []
+      const total = list.length
 
-    const results = filtrados.map((profile: any) => {
-      const related = grouped[profile.id] ?? []
-      const total = related.length
+      let somaMedia = 0
+      let somaComportamento = 0
+      let somaSeguranca = 0
+      let somaRespeito = 0
+      let somaCarater = 0
+      let somaConfianca = 0
 
-      if (!total)
-        return {
-          id: profile.id,
-          nome: profile.display_name,
-          cidade: profile.city,
-          total_avaliacoes: 0,
-          media_geral: 0,
-          confiabilidade_percentual: 0,
-          flags_positive: [],
-          flags_negative: [],
-        }
+      let redFlags = 0
 
-      const medias = related.map((a: any) =>
-        (
-          a.comportamento +
-          a.seguranca_emocional +
-          a.respeito +
-          a.carater +
-          a.confianca
-        ) / 5
-      )
+      list.forEach((a) => {
+        somaComportamento += a.comportamento ?? 0
+        somaSeguranca += a.seguranca_emocional ?? 0
+        somaRespeito += a.respeito ?? 0
+        somaCarater += a.carater ?? 0
+        somaConfianca += a.confianca ?? 0
 
-      const mediaSimples =
-        medias.reduce((acc: number, m: number) => acc + m, 0) / total
-
-      // 🔥 SCORE BAYESIANO
-      const score =
-        (total / (total + MIN_VOTES)) * mediaSimples +
-        (MIN_VOTES / (total + MIN_VOTES)) * GLOBAL_MEAN
-
-      // 🔥 Confiabilidade real
-      const confiabilidade = Math.min(
-        100,
-        Math.round((total / 10) * 100)
-      )
-
-      const flagsPositive = new Set<string>()
-      const flagsNegative = new Set<string>()
-
-      related.forEach((a: any) => {
-        a.flags_positive?.forEach((f: string) =>
-          flagsPositive.add(f)
-        )
-        a.flags_negative?.forEach((f: string) =>
-          flagsNegative.add(f)
-        )
+        redFlags += a.flags_negative?.length ?? 0
       })
+
+      const mediaGeral =
+        total > 0
+          ? (
+              (somaComportamento +
+                somaSeguranca +
+                somaRespeito +
+                somaCarater +
+                somaConfianca) /
+              (5 * total)
+            )
+          : 0
+
+      // SCORE enterprise
+      const score =
+        total > 0
+          ? mediaGeral * Math.log(total + 1) - redFlags * 0.1
+          : 0
 
       return {
         id: profile.id,
         nome: profile.display_name,
         cidade: profile.city,
         total_avaliacoes: total,
-        media_geral: Number(score.toFixed(2)),
-        confiabilidade_percentual: confiabilidade,
-        flags_positive: Array.from(flagsPositive),
-        flags_negative: Array.from(flagsNegative),
+        media_geral: Number(mediaGeral.toFixed(1)),
+        score: Number(score.toFixed(4)),
+
+        percentuais: {
+          comportamento:
+            total > 0
+              ? Number(((somaComportamento / (5 * total)) * 100).toFixed(0))
+              : 0,
+          seguranca:
+            total > 0
+              ? Number(((somaSeguranca / (5 * total)) * 100).toFixed(0))
+              : 0,
+          respeito:
+            total > 0
+              ? Number(((somaRespeito / (5 * total)) * 100).toFixed(0))
+              : 0,
+          carater:
+            total > 0
+              ? Number(((somaCarater / (5 * total)) * 100).toFixed(0))
+              : 0,
+          confianca:
+            total > 0
+              ? Number(((somaConfianca / (5 * total)) * 100).toFixed(0))
+              : 0,
+        },
       }
     })
 
-    // 🔥 Ordenação final enterprise
-    results.sort((a, b) => b.media_geral - a.media_geral)
+    const ordenado = results?.sort((a, b) => b.score - a.score)
 
-    return NextResponse.json({ success: true, results })
+    return NextResponse.json({ success: true, results: ordenado })
   } catch (err: any) {
-    console.error(err)
     return NextResponse.json(
       { success: false, message: err.message },
       { status: 500 }
