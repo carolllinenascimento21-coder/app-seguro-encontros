@@ -1,32 +1,63 @@
-import { notFound } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
+'use client'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useParams, useRouter } from 'next/navigation'
+import { useState } from 'react'
 
-export default async function AvaliarPerfil({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const { data: profile } = await supabase
-    .from('male_profiles')
-    .select('id, display_name, city')
-    .eq('id', params.id)
-    .single()
+export default function AvaliarPerfil() {
+  const { id } = useParams()
+  const router = useRouter()
 
-  if (!profile) return notFound()
+  const [criterios, setCriterios] = useState({
+    comportamento: 0,
+    seguranca_emocional: 0,
+    respeito: 0,
+    carater: 0,
+    confianca: 0,
+  })
+
+  const publicar = async () => {
+    const res = await fetch('/api/avaliacoes/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        male_profile_id: id,
+        ...criterios,
+      }),
+    })
+
+    if (res.ok) {
+      router.push(`/consultar-reputacao/${id}`)
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-black text-white p-6">
-      <h1 className="text-2xl font-bold mb-2">
-        Avaliar {profile.display_name}
-      </h1>
-      <p className="text-gray-400 mb-6">{profile.city}</p>
+    <div className="p-6 text-white">
+      <h1 className="text-xl font-bold mb-6">Avaliar Perfil</h1>
 
-      {/* Aqui você renderiza seu formulário de avaliação */}
+      {Object.keys(criterios).map((key) => (
+        <div key={key} className="mb-4">
+          <label>{key}</label>
+          <input
+            type="number"
+            min="1"
+            max="5"
+            onChange={(e) =>
+              setCriterios({
+                ...criterios,
+                [key]: Number(e.target.value),
+              })
+            }
+            className="w-full bg-black border p-2"
+          />
+        </div>
+      ))}
+
+      <button
+        onClick={publicar}
+        className="bg-yellow-500 text-black px-6 py-3 rounded"
+      >
+        Publicar avaliação
+      </button>
     </div>
   )
 }
