@@ -1,52 +1,58 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
-function normalize(value: string | null) {
-  return (value ?? '').trim().toLowerCase()
+function normalizeTerm(value: string | null) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
 }
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const termo = normalize(searchParams.get('termo'))
+    const termo = normalizeTerm(searchParams.get('termo'))
 
     if (!termo) {
       return NextResponse.json(
-        { success: false, message: 'Informe um termo para busca' },
+        { success: false, message: 'Informe termo para busca' },
         { status: 400 }
       )
     }
 
     const supabase = getSupabaseAdminClient()
-
     if (!supabase) {
       return NextResponse.json(
         { success: false, message: 'Supabase admin não configurado' },
-        { status: 500 }
+        { status: 503 }
       )
     }
 
-    // 🔎 Busca simples sem unaccent (não quebra nada)
-    const { data: profiles, error } = await supabase
+    // 🔥 Busca unaccent manual (sem função SQL)
+    const { data: maleProfiles, error } = await supabase
       .from('male_profiles')
       .select('id, display_name, city')
       .eq('is_active', true)
-      .or(`display_name.ilike.%${termo}%,city.ilike.%${termo}%`)
-      .limit(20)
 
-    if (error) {
-      console.error(error)
-      return NextResponse.json(
-        { success: false, message: error.message },
-        { status: 500 }
-      )
-    }
+    if (error) throw error
 
-    const profileIds = (profiles ?? []).map((p) => p.id)
+    const filtrados =
+      maleProfiles?.filter((p: any) => {
+        const nome = normalizeTerm(p.display_name)
+        const cidade = normalizeTerm(p.city)
+        return nome.includes(termo) || cidade.includes(termo)
+      }) ?? []
 
-    const { data: avaliacoes } = await supabase
+    const profileIds = filtrados.map((p) => p.id)
+
+    if (!profileIds.length)
+      return NextResponse.json({ success: true, results: [] })
+
+    const { data: avaliacoes, error: avaliacoesError } = await supabase
       .from('avaliacoes')
-      .select(`
+      .select(
+        `
         male_profile_id,
         comportamento,
         seguranca_emocional,
@@ -56,40 +62,74 @@ export async function GET(req: Request) {
         flags_positive,
         flags_negative,
         publica
-      `)
+      `
+      )
       .eq('publica', true)
-      .in('male_profile_id', profileIds.length ? profileIds : ['00000000-0000-0000-0000-000000000000'])
+      .in('male_profile_id', profileIds)
+
+    if (avaliacoesError) throw avaliacoesError
 
     const grouped: Record<string, any[]> = {}
 
-    ;(avaliacoes ?? []).forEach((a) => {
-      const id = String(a.male_profile_id)
-      if (!grouped[id]) grouped[id] = []
-      grouped[id].push(a)
-    })
+    for (const a of avaliacoes ?? []) {
+      if (!grouped[a.male_profile_id])
+        grouped[a.male_profile_id] = []
+      grouped[a.male_profile_id].push(a)
+    }
 
-    const results = (profiles ?? []).map((profile) => {
-      const related = grouped[String(profile.id)] ?? []
+    const GLOBAL_MEAN = 3.5
+    const MIN_VOTES = 5
 
+    const results = filtrados.map((profile: any) => {
+      const related = grouped[profile.id] ?? []
       const total = related.length
 
-      const soma = related.reduce((acc, a) => {
-        const media =
-          (Number(a.comportamento ?? 0) +
-            Number(a.seguranca_emocional ?? 0) +
-            Number(a.respeito ?? 0) +
-            Number(a.carater ?? 0) +
-            Number(a.confianca ?? 0)) / 5
+      if (!total)
+        return {
+          id: profile.id,
+          nome: profile.display_name,
+          cidade: profile.city,
+          total_avaliacoes: 0,
+          media_geral: 0,
+          confiabilidade_percentual: 0,
+          flags_positive: [],
+          flags_negative: [],
+        }
 
-        return acc + media
-      }, 0)
+      const medias = related.map((a: any) =>
+        (
+          a.comportamento +
+          a.seguranca_emocional +
+          a.respeito +
+          a.carater +
+          a.confianca
+        ) / 5
+      )
+
+      const mediaSimples =
+        medias.reduce((acc: number, m: number) => acc + m, 0) / total
+
+      // 🔥 SCORE BAYESIANO
+      const score =
+        (total / (total + MIN_VOTES)) * mediaSimples +
+        (MIN_VOTES / (total + MIN_VOTES)) * GLOBAL_MEAN
+
+      // 🔥 Confiabilidade real
+      const confiabilidade = Math.min(
+        100,
+        Math.round((total / 10) * 100)
+      )
 
       const flagsPositive = new Set<string>()
       const flagsNegative = new Set<string>()
 
-      related.forEach((a) => {
-        a.flags_positive?.forEach((f: string) => flagsPositive.add(f))
-        a.flags_negative?.forEach((f: string) => flagsNegative.add(f))
+      related.forEach((a: any) => {
+        a.flags_positive?.forEach((f: string) =>
+          flagsPositive.add(f)
+        )
+        a.flags_negative?.forEach((f: string) =>
+          flagsNegative.add(f)
+        )
       })
 
       return {
@@ -97,20 +137,21 @@ export async function GET(req: Request) {
         nome: profile.display_name,
         cidade: profile.city,
         total_avaliacoes: total,
-        media_geral: total ? Number((soma / total).toFixed(1)) : 0,
+        media_geral: Number(score.toFixed(2)),
+        confiabilidade_percentual: confiabilidade,
         flags_positive: Array.from(flagsPositive),
         flags_negative: Array.from(flagsNegative),
       }
     })
 
-    return NextResponse.json({
-      success: true,
-      results,
-    })
-  } catch (err) {
+    // 🔥 Ordenação final enterprise
+    results.sort((a, b) => b.media_geral - a.media_geral)
+
+    return NextResponse.json({ success: true, results })
+  } catch (err: any) {
     console.error(err)
     return NextResponse.json(
-      { success: false, message: 'Erro interno' },
+      { success: false, message: err.message },
       { status: 500 }
     )
   }
