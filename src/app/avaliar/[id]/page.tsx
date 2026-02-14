@@ -2,27 +2,18 @@
 
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Star, AlertTriangle } from 'lucide-react'
-import Navbar from '@/components/custom/navbar'
 import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags'
+import { Star } from 'lucide-react'
 
-const CRITERIOS = [
-  { key: 'comportamento', label: 'Comportamento' },
-  { key: 'seguranca_emocional', label: 'Segurança Emocional' },
-  { key: 'respeito', label: 'Respeito' },
-  { key: 'carater', label: 'Caráter' },
-  { key: 'confianca', label: 'Confiança' },
-] as const
-
-type CriterioKey = (typeof CRITERIOS)[number]['key']
-
-export default function AvaliarPerfilExistente() {
-  const params = useParams()
+export default function AvaliarPerfilPage() {
+  const { id } = useParams()
   const router = useRouter()
 
-  const maleProfileId = params?.id as string
+  const [loading, setLoading] = useState(false)
+  const [anonimo, setAnonimo] = useState(false)
+  const [relato, setRelato] = useState('')
 
-  const [ratings, setRatings] = useState<Record<CriterioKey, number>>({
+  const [ratings, setRatings] = useState({
     comportamento: 0,
     seguranca_emocional: 0,
     respeito: 0,
@@ -32,50 +23,46 @@ export default function AvaliarPerfilExistente() {
 
   const [greenFlags, setGreenFlags] = useState<string[]>([])
   const [redFlags, setRedFlags] = useState<string[]>([])
-  const [relato, setRelato] = useState('')
-  const [anonimo, setAnonimo] = useState(false)
 
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const toggleFlag = (
-    value: string,
-    list: string[],
-    setter: (v: string[]) => void
-  ) => {
-    if (list.includes(value)) {
-      setter(list.filter((x) => x !== value))
-    } else {
-      setter([...list, value])
-    }
+  function toggleGreenFlag(flag: string) {
+    setGreenFlags((prev) =>
+      prev.includes(flag)
+        ? prev.filter((f) => f !== flag)
+        : [...prev, flag]
+    )
   }
 
-  const handleStarClick = (criterio: CriterioKey, value: number) => {
-    setRatings((prev) => ({ ...prev, [criterio]: value }))
+  function toggleRedFlag(flag: string) {
+    setRedFlags((prev) =>
+      prev.includes(flag)
+        ? prev.filter((f) => f !== flag)
+        : [...prev, flag]
+    )
   }
 
-  const validarNotas = () => Object.values(ratings).every((n) => n >= 1 && n <= 5)
+  function setRating(key: keyof typeof ratings, value: number) {
+    setRatings((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
 
-  const publicar = async () => {
-    if (!maleProfileId) {
-      alert('Perfil inválido.')
-      return
-    }
+  async function publicar() {
+    if (!id) return
 
-    if (!validarNotas()) {
-      alert('Avalie todos os critérios de 1 a 5 estrelas.')
+    if (Object.values(ratings).some((r) => r < 1)) {
+      alert('Avalie todos os critérios')
       return
     }
 
     try {
       setLoading(true)
-      setError(null)
 
-      const res = await fetch('/api/avaliacoes/add', {
+      const res = await fetch('/api/avaliacoes/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          male_profile_id: maleProfileId,
+          male_profile_id: id,
           ratings,
           greenFlags,
           redFlags,
@@ -86,129 +73,121 @@ export default function AvaliarPerfilExistente() {
 
       const data = await res.json()
 
-      if (!res.ok || !data.success) {
-        throw new Error(data?.message ?? 'Erro ao publicar avaliação')
+      if (!res.ok) {
+        throw new Error(data?.message ?? 'Erro ao publicar')
       }
 
-      router.push(`/consultar-reputacao/${maleProfileId}`)
+      router.push(`/consultar-reputacao/${id}`)
     } catch (err: any) {
-      setError(err.message)
+      alert(err.message)
     } finally {
       setLoading(false)
     }
   }
 
+  const criterios = [
+    { key: 'comportamento', label: 'Comportamento' },
+    { key: 'seguranca_emocional', label: 'Segurança Emocional' },
+    { key: 'respeito', label: 'Respeito' },
+    { key: 'carater', label: 'Caráter' },
+    { key: 'confianca', label: 'Confiança' },
+  ] as const
+
   return (
-    <div className="min-h-screen bg-black pb-24">
-      <div className="max-w-md mx-auto px-4 pt-8">
-        <h1 className="text-2xl font-bold text-white mb-6">Avaliar Perfil</h1>
+    <div className="min-h-screen bg-black px-4 py-8 max-w-md mx-auto text-white">
 
-        {/* CRITÉRIOS */}
-        {CRITERIOS.map((c) => (
-          <div key={c.key} className="mb-6">
-            <p className="text-white mb-2">{c.label}</p>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star
-                  key={star}
-                  size={28}
-                  onClick={() => handleStarClick(c.key, star)}
-                  className={`cursor-pointer transition ${
-                    ratings[c.key] >= star
-                      ? 'text-yellow-400 fill-yellow-400'
-                      : 'text-gray-600'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+      <h1 className="text-2xl font-bold mb-6">
+        Avaliar Perfil
+      </h1>
 
-        {/* GREEN FLAGS */}
-        <div className="mt-6">
-          <p className="text-green-400 font-semibold mb-2">Green Flags</p>
-          <div className="flex flex-wrap gap-2">
-            {GREEN_FLAGS.map((f) => {
-              const active = greenFlags.includes(f)
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => toggleFlag(f, greenFlags, setGreenFlags)}
-                  className={`px-3 py-1 rounded-lg text-xs border transition ${
-                    active
-                      ? 'bg-green-500/20 border-green-500 text-green-300'
-                      : 'bg-[#1A1A1A] border-gray-800 text-gray-200 hover:border-green-500/40'
-                  }`}
-                >
-                  {f}
-                </button>
-              )
-            })}
+      {/* CRITÉRIOS */}
+      {criterios.map((c) => (
+        <div key={c.key} className="mb-4">
+          <p className="mb-2 text-sm text-gray-400">{c.label}</p>
+
+          <div className="flex gap-2">
+            {[1,2,3,4,5].map((star) => (
+              <Star
+                key={star}
+                size={24}
+                onClick={() => setRating(c.key, star)}
+                className="cursor-pointer"
+                fill={ratings[c.key] >= star ? '#D4AF37' : 'none'}
+                color="#D4AF37"
+              />
+            ))}
           </div>
         </div>
+      ))}
 
-        {/* RED FLAGS */}
-        <div className="mt-6">
-          <p className="text-red-400 font-semibold mb-2">Red Flags</p>
-          <div className="flex flex-wrap gap-2">
-            {RED_FLAGS.map((f) => {
-              const active = redFlags.includes(f)
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => toggleFlag(f, redFlags, setRedFlags)}
-                  className={`px-3 py-1 rounded-lg text-xs border transition ${
-                    active
-                      ? 'bg-red-500/20 border-red-500 text-red-300'
-                      : 'bg-[#1A1A1A] border-gray-800 text-gray-200 hover:border-red-500/40'
-                  }`}
-                >
-                  {f}
-                </button>
-              )
-            })}
-          </div>
+      {/* GREEN FLAGS */}
+      <div className="mt-6">
+        <h3 className="text-green-400 font-bold mb-2">Green Flags</h3>
+
+        <div className="flex flex-wrap gap-2">
+          {GREEN_FLAGS.map((flag) => (
+            <button
+              key={flag}
+              type="button"
+              onClick={() => toggleGreenFlag(flag)}
+              className={`px-3 py-1 text-xs rounded-lg border ${
+                greenFlags.includes(flag)
+                  ? 'bg-green-600 border-green-600 text-white'
+                  : 'bg-black border-gray-700 text-gray-400'
+              }`}
+            >
+              {flag}
+            </button>
+          ))}
         </div>
-
-        {/* RELATO */}
-        <div className="mt-6">
-          <textarea
-            value={relato}
-            onChange={(e) => setRelato(e.target.value)}
-            placeholder="Relato (opcional)"
-            className="w-full bg-[#1A1A1A] border border-gray-800 rounded-lg p-3 text-white min-h-[120px]"
-          />
-        </div>
-
-        {/* ANÔNIMO */}
-        <div className="mt-4 flex items-center gap-2 text-white">
-          <input
-            type="checkbox"
-            checked={anonimo}
-            onChange={(e) => setAnonimo(e.target.checked)}
-          />
-          Avaliar de forma anônima
-        </div>
-
-        {error && (
-          <div className="text-red-400 text-sm mt-4 flex items-center gap-2">
-            <AlertTriangle size={16} />
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={publicar}
-          disabled={loading}
-          className="w-full mt-6 bg-[#D4AF37] text-black font-bold py-3 rounded-lg hover:opacity-90 transition"
-        >
-          {loading ? 'Publicando...' : 'Publicar avaliação'}
-        </button>
       </div>
 
-      <Navbar />
+      {/* RED FLAGS */}
+      <div className="mt-6">
+        <h3 className="text-red-400 font-bold mb-2">Red Flags</h3>
+
+        <div className="flex flex-wrap gap-2">
+          {RED_FLAGS.map((flag) => (
+            <button
+              key={flag}
+              type="button"
+              onClick={() => toggleRedFlag(flag)}
+              className={`px-3 py-1 text-xs rounded-lg border ${
+                redFlags.includes(flag)
+                  ? 'bg-red-600 border-red-600 text-white'
+                  : 'bg-black border-gray-700 text-gray-400'
+              }`}
+            >
+              {flag}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* RELATO */}
+      <textarea
+        value={relato}
+        onChange={(e) => setRelato(e.target.value)}
+        placeholder="Relato"
+        className="w-full mt-6 bg-black border border-gray-700 rounded-lg px-4 py-3 text-white"
+      />
+
+      <div className="flex items-center gap-2 mt-4 text-sm">
+        <input
+          type="checkbox"
+          checked={anonimo}
+          onChange={() => setAnonimo(!anonimo)}
+        />
+        Avaliar de forma anônima
+      </div>
+
+      <button
+        onClick={publicar}
+        disabled={loading}
+        className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-lg mt-6"
+      >
+        {loading ? 'Publicando...' : 'Publicar avaliação'}
+      </button>
     </div>
   )
 }
