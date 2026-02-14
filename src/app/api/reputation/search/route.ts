@@ -26,12 +26,17 @@ export async function GET(req: Request) {
       )
     }
 
-    const searchFilter = [
-      `normalized_name.ilike.%${termo}%`,
-      `normalized_city.ilike.%${termo}%`,
-      `display_name.ilike.%${termo}%`,
-      `city.ilike.%${termo}%`,
-    ].join(',')
+   const { data: maleProfiles, error } = await supabase
+    .from('male_profiles')
+    .select('id, display_name, city')
+    .eq('is_active', true)
+    .or(
+    `
+      unaccent(display_name).ilike.unaccent.%${termo}%,
+      unaccent(city).ilike.unaccent.%${termo}%
+    `
+   )
+   .limit(20)
 
     const { data: maleProfiles, error } = await supabase
       .from('male_profiles')
