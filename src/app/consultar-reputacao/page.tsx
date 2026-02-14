@@ -31,6 +31,15 @@ export default function ConsultarReputacao() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  /* ---------- NORMALIZAÇÃO (REMOVE ACENTOS) ---------- */
+  const normalize = (value: string) => {
+    return value
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  }
+
   /* ---------- MÉDIA FORMATADA ---------- */
   const mediaFormatada = (p: PerfilResultado) => {
     if (!p.total_avaliacoes) return '—'
@@ -76,8 +85,8 @@ export default function ConsultarReputacao() {
 
   /* ---------- BUSCA CORRIGIDA ---------- */
   const buscar = async () => {
-    const nomeNormalizado = nome.trim().toLowerCase()
-    const cidadeNormalizada = cidade.trim().toLowerCase()
+    const nomeNormalizado = normalize(nome)
+    const cidadeNormalizada = normalize(cidade)
 
     if (!nomeNormalizado && !cidadeNormalizada) {
       alert('Digite nome ou cidade')
@@ -88,10 +97,14 @@ export default function ConsultarReputacao() {
       setLoading(true)
       setError(null)
 
-      const termo = nomeNormalizado || cidadeNormalizada
+      // junta nome + cidade se ambos existirem
+      const termo = [nomeNormalizado, cidadeNormalizada]
+        .filter(Boolean)
+        .join(' ')
 
       const res = await fetch(
-        `/api/reputation/search?termo=${encodeURIComponent(termo)}`
+        `/api/reputation/search?termo=${encodeURIComponent(termo)}`,
+        { cache: 'no-store' }
       )
 
       const data = await res.json()
