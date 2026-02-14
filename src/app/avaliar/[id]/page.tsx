@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Star } from 'lucide-react'
+import { Star, AlertTriangle } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
+import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags'
 
 const CRITERIOS = [
   { key: 'comportamento', label: 'Comportamento' },
@@ -29,26 +30,38 @@ export default function AvaliarPerfilExistente() {
     confianca: 0,
   })
 
-  const [flagsPositive, setFlagsPositive] = useState<string[]>([])
-  const [flagsNegative, setFlagsNegative] = useState<string[]>([])
+  const [greenFlags, setGreenFlags] = useState<string[]>([])
+  const [redFlags, setRedFlags] = useState<string[]>([])
   const [relato, setRelato] = useState('')
   const [anonimo, setAnonimo] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleStarClick = (criterio: CriterioKey, value: number) => {
-    setRatings((prev) => ({
-      ...prev,
-      [criterio]: value,
-    }))
+  const toggleFlag = (
+    value: string,
+    list: string[],
+    setter: (v: string[]) => void
+  ) => {
+    if (list.includes(value)) {
+      setter(list.filter((x) => x !== value))
+    } else {
+      setter([...list, value])
+    }
   }
 
-  const validarNotas = () => {
-    return Object.values(ratings).every((n) => n >= 1 && n <= 5)
+  const handleStarClick = (criterio: CriterioKey, value: number) => {
+    setRatings((prev) => ({ ...prev, [criterio]: value }))
   }
+
+  const validarNotas = () => Object.values(ratings).every((n) => n >= 1 && n <= 5)
 
   const publicar = async () => {
+    if (!maleProfileId) {
+      alert('Perfil inválido.')
+      return
+    }
+
     if (!validarNotas()) {
       alert('Avalie todos os critérios de 1 a 5 estrelas.')
       return
@@ -63,9 +76,9 @@ export default function AvaliarPerfilExistente() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           male_profile_id: maleProfileId,
-          ...ratings,
-          flags_positive: flagsPositive,
-          flags_negative: flagsNegative,
+          ratings,
+          greenFlags,
+          redFlags,
           relato,
           anonimo,
         }),
@@ -77,7 +90,6 @@ export default function AvaliarPerfilExistente() {
         throw new Error(data?.message ?? 'Erro ao publicar avaliação')
       }
 
-      // Após publicar, volta para perfil
       router.push(`/consultar-reputacao/${maleProfileId}`)
     } catch (err: any) {
       setError(err.message)
@@ -89,15 +101,12 @@ export default function AvaliarPerfilExistente() {
   return (
     <div className="min-h-screen bg-black pb-24">
       <div className="max-w-md mx-auto px-4 pt-8">
+        <h1 className="text-2xl font-bold text-white mb-6">Avaliar Perfil</h1>
 
-        <h1 className="text-2xl font-bold text-white mb-6">
-          Avaliar Perfil
-        </h1>
-
+        {/* CRITÉRIOS */}
         {CRITERIOS.map((c) => (
           <div key={c.key} className="mb-6">
             <p className="text-white mb-2">{c.label}</p>
-
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
                 <Star
@@ -115,18 +124,66 @@ export default function AvaliarPerfilExistente() {
           </div>
         ))}
 
-        {/* Relato */}
-        <div className="mb-6">
+        {/* GREEN FLAGS */}
+        <div className="mt-6">
+          <p className="text-green-400 font-semibold mb-2">Green Flags</p>
+          <div className="flex flex-wrap gap-2">
+            {GREEN_FLAGS.map((f) => {
+              const active = greenFlags.includes(f)
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => toggleFlag(f, greenFlags, setGreenFlags)}
+                  className={`px-3 py-1 rounded-lg text-xs border transition ${
+                    active
+                      ? 'bg-green-500/20 border-green-500 text-green-300'
+                      : 'bg-[#1A1A1A] border-gray-800 text-gray-200 hover:border-green-500/40'
+                  }`}
+                >
+                  {f}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* RED FLAGS */}
+        <div className="mt-6">
+          <p className="text-red-400 font-semibold mb-2">Red Flags</p>
+          <div className="flex flex-wrap gap-2">
+            {RED_FLAGS.map((f) => {
+              const active = redFlags.includes(f)
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => toggleFlag(f, redFlags, setRedFlags)}
+                  className={`px-3 py-1 rounded-lg text-xs border transition ${
+                    active
+                      ? 'bg-red-500/20 border-red-500 text-red-300'
+                      : 'bg-[#1A1A1A] border-gray-800 text-gray-200 hover:border-red-500/40'
+                  }`}
+                >
+                  {f}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* RELATO */}
+        <div className="mt-6">
           <textarea
             value={relato}
             onChange={(e) => setRelato(e.target.value)}
-            placeholder="Relate sua experiência (opcional)"
-            className="w-full bg-[#1A1A1A] border border-gray-800 rounded-lg p-3 text-white"
+            placeholder="Relato (opcional)"
+            className="w-full bg-[#1A1A1A] border border-gray-800 rounded-lg p-3 text-white min-h-[120px]"
           />
         </div>
 
-        {/* Anônimo */}
-        <div className="mb-6 flex items-center gap-2 text-white">
+        {/* ANÔNIMO */}
+        <div className="mt-4 flex items-center gap-2 text-white">
           <input
             type="checkbox"
             checked={anonimo}
@@ -136,7 +193,8 @@ export default function AvaliarPerfilExistente() {
         </div>
 
         {error && (
-          <div className="text-red-400 text-sm mb-4 text-center">
+          <div className="text-red-400 text-sm mt-4 flex items-center gap-2">
+            <AlertTriangle size={16} />
             {error}
           </div>
         )}
@@ -144,7 +202,7 @@ export default function AvaliarPerfilExistente() {
         <button
           onClick={publicar}
           disabled={loading}
-          className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-lg hover:opacity-90 transition"
+          className="w-full mt-6 bg-[#D4AF37] text-black font-bold py-3 rounded-lg hover:opacity-90 transition"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}
         </button>
