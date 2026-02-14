@@ -26,17 +26,10 @@ export async function GET(req: Request) {
       )
     }
 
-   const { data: maleProfiles, error } = await supabase
-    .from('male_profiles')
-    .select('id, display_name, city')
-    .eq('is_active', true)
-    .or(
-    `
-      unaccent(display_name).ilike.unaccent.%${termo}%,
-      unaccent(city).ilike.unaccent.%${termo}%
-    `
-   )
-   .limit(20)
+    const { data: maleProfiles, error } = await supabase.rpc(
+    'search_male_profiles',
+    { search_term: termo }
+    )
 
     const { data: maleProfiles, error } = await supabase
       .from('male_profiles')
