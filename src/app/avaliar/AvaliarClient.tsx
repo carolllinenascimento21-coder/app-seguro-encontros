@@ -30,9 +30,9 @@ const INITIAL_NOTAS: Notas = {
 }
 
 const inputClassName =
-  'w-full rounded-xl border border-[#D4AF37] bg-[#111111] px-4 py-3 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/50'
+  'w-full rounded-xl border border-[#D4AF37] bg-black px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/40'
 
-const sectionClassName = 'space-y-4 rounded-2xl border border-[#D4AF37]/60 bg-[#0A0A0A] p-5'
+const sectionClassName = 'space-y-4 rounded-2xl border border-[#D4AF37] bg-black p-5'
 
 export default function AvaliarClient() {
   const router = useRouter()
@@ -158,7 +158,7 @@ export default function AvaliarClient() {
   if (checkingSession) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black px-4">
-        <div className="w-full max-w-3xl rounded-2xl border border-[#D4AF37] bg-[#0A0A0A] p-8 text-white">
+        <div className="w-full max-w-3xl rounded-2xl border border-[#D4AF37] bg-black p-8 text-white">
           <p>Carregando avaliação...</p>
         </div>
       </div>
@@ -167,11 +167,11 @@ export default function AvaliarClient() {
 
   return (
     <div className="min-h-screen bg-black px-4 py-10">
-      <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-[#D4AF37] bg-[#050505] p-6 text-white md:p-8">
+      <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-[#D4AF37] bg-black p-6 text-white md:p-8">
         <h1 className="text-center text-3xl font-bold text-[#D4AF37]">Nova avaliação</h1>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-[#EFD9A7]">1. Identificação do homem avaliado</h2>
+          <h2 className="text-lg font-semibold text-white">1. Identificação do homem avaliado</h2>
           <div className="grid gap-3">
             <input
               placeholder="Nome *"
@@ -197,11 +197,11 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-[#EFD9A7]">2. Avaliação por estrelas</h2>
+          <h2 className="text-lg font-semibold text-white">2. Avaliação por estrelas</h2>
           <div className="space-y-4">
             {CRITERIOS.map((criterio) => (
               <div key={criterio.key} className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <p className="font-medium">{criterio.label}</p>
+                <p className="font-medium text-white">{criterio.label}</p>
                 <div className="flex gap-1">
                   {[1, 2, 3, 4, 5].map((n) => (
                     <button
@@ -210,7 +210,7 @@ export default function AvaliarClient() {
                       aria-label={`${criterio.label}: ${n} estrela${n > 1 ? 's' : ''}`}
                       onClick={() => setNota(criterio.key, n)}
                       className={`rounded-md px-1 text-2xl transition ${
-                        notas[criterio.key] >= n ? 'text-[#D4AF37]' : 'text-zinc-600 hover:text-[#D4AF37]/70'
+                        notas[criterio.key] >= n ? 'text-[#D4AF37]' : 'text-white/40 hover:text-[#D4AF37]/80'
                       }`}
                     >
                       ★
@@ -223,7 +223,7 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-green-400">3. Green Flags</h2>
+          <h2 className="text-lg font-semibold text-white">3. Green Flags</h2>
           <div className="flex flex-wrap gap-2">
             {GREEN_FLAGS.map((flag) => (
               <button
@@ -232,8 +232,8 @@ export default function AvaliarClient() {
                 onClick={() => toggleFlag(flag.slug, 'green')}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   greenFlags.includes(flag.slug)
-                    ? 'border-green-500 bg-green-600/30 text-green-200'
-                    : 'border-green-800 bg-transparent text-green-400 hover:border-green-500'
+                    ? 'border-[#D4AF37] bg-[#D4AF37] text-black'
+                    : 'border-[#D4AF37] bg-transparent text-white hover:bg-[#D4AF37]/20'
                 }`}
               >
                 {flag.label}
@@ -243,7 +243,7 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-red-400">4. Red Flags</h2>
+          <h2 className="text-lg font-semibold text-white">4. Red Flags</h2>
           <div className="flex flex-wrap gap-2">
             {RED_FLAGS.map((flag) => (
               <button
@@ -252,8 +252,8 @@ export default function AvaliarClient() {
                 onClick={() => toggleFlag(flag.slug, 'red')}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   redFlags.includes(flag.slug)
-                    ? 'border-red-500 bg-red-600/30 text-red-200'
-                    : 'border-red-900 bg-transparent text-red-400 hover:border-red-500'
+                    ? 'border-[#D4AF37] bg-[#D4AF37] text-black'
+                    : 'border-[#D4AF37] bg-transparent text-white hover:bg-[#D4AF37]/20'
                 }`}
               >
                 {flag.label}
@@ -263,7 +263,7 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-[#EFD9A7]">5. Relato</h2>
+          <h2 className="text-lg font-semibold text-white">5. Relato</h2>
           <textarea
             placeholder="Conte o relato com contexto e fatos importantes"
             value={relato}
@@ -273,13 +273,13 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-[#EFD9A7]">6. Anonimato</h2>
-          <label className="flex cursor-pointer items-start gap-3 text-sm text-zinc-200">
+          <h2 className="text-lg font-semibold text-white">6. Anonimato</h2>
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-white">
             <input
               type="checkbox"
               checked={anonimo}
               onChange={(e) => setAnonimo(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-[#D4AF37] bg-[#111111] text-[#D4AF37]"
+              className="mt-1 h-4 w-4 rounded border-[#D4AF37] bg-black text-[#D4AF37]"
             />
             <span>
               Avaliar de forma anônima. Seu vínculo com a conta permanece para segurança da plataforma.
@@ -291,7 +291,7 @@ export default function AvaliarClient() {
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full rounded-xl bg-[#D4AF37] py-3 font-bold text-black transition hover:bg-[#c7a233] disabled:opacity-60"
+          className="w-full bg-[#D4AF37] text-black font-semibold rounded-xl py-3 hover:bg-[#C9A227] transition disabled:opacity-60"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}
         </button>
