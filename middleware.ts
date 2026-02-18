@@ -1,32 +1,65 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 
-export function middleware(req: NextRequest) {
+const PUBLIC_PATHS = [
+  '/',
+  '/funil',
+  '/onboarding',
+  '/login',
+  '/signup',
+  '/register',
+  '/planos',
+  '/plans',
+  '/verification-pending',
+  '/auth/callback',
+  '/api',
+]
+
+const PROTECTED_PATHS = [
+  '/consultar-reputacao',
+  '/avaliar',
+  '/alertas',
+  '/perfil',
+  '/minhas-avaliacoes',
+  '/configuracoes',
+]
+
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  /* ======================================
-     ROTAS PÚBLICAS (NUNCA REDIRECIONAR)
-  ====================================== */
-  const PUBLIC_PATHS = [
-    '/',
-    '/funil',
-    '/onboarding',
-    '/login',
-    '/signup',
-    '/register',
-    '/planos',
-    '/plans',
-    '/verification-pending',
-    '/auth/callback',
-    '/api',
-  ]
-
   const isPublicRoute = PUBLIC_PATHS.some(
-    path => pathname === path || pathname.startsWith(`${path}/`)
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
   )
 
+  let response = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            req.cookies.set(name, value)
+            response.cookies.set(name, value, options)
+          })
+        },
+      },
+    }
+  )
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (isPublicRoute) {
-    const response = NextResponse.next()
     response.headers.set('x-middleware-active', 'true')
     response.headers.set('x-middleware-path', pathname)
 
@@ -37,35 +70,21 @@ export function middleware(req: NextRequest) {
     return response
   }
 
-  /* ======================================
-     ROTAS QUE EXIGEM LOGIN
-     (controle simples, sem Supabase ainda)
-  ====================================== */
-  const PROTECTED_PATHS = [
-    '/consultar-reputacao',
-    '/avaliar',
-    '/alertas',
-    '/perfil',
-    '/minhas-avaliacoes',
-    '/configuracoes',
-  ]
-
-  const isProtectedRoute = PROTECTED_PATHS.some(
-    path => pathname.startsWith(path)
+  const isProtectedRoute = PROTECTED_PATHS.some((path) =>
+    pathname.startsWith(path)
   )
 
-  if (isProtectedRoute) {
-    const response = NextResponse.redirect(new URL('/login', req.url))
-    response.headers.set('x-middleware-active', 'true')
-    response.headers.set('x-middleware-path', pathname)
-    response.headers.set('x-reason', 'login-required')
-    return response
+  if (isProtectedRoute && !user) {
+    const loginUrl = new URL('/login', req.url)
+    loginUrl.searchParams.set('next', pathname)
+
+    const redirectResponse = NextResponse.redirect(loginUrl)
+    redirectResponse.headers.set('x-middleware-active', 'true')
+    redirectResponse.headers.set('x-middleware-path', pathname)
+    redirectResponse.headers.set('x-reason', 'login-required')
+    return redirectResponse
   }
 
-  /* ======================================
-     DEFAULT: NÃO REDIRECIONA À FORÇA
-  ====================================== */
-  const response = NextResponse.next()
   response.headers.set('x-middleware-active', 'true')
   response.headers.set('x-middleware-path', pathname)
   return response
