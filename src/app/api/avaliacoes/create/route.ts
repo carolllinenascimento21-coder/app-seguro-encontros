@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
-const normalizeText = (value: string) =>
-  value
+function normalizeText(value: string) {
+  return value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase()
+}
 
 const getString = (value: unknown) => {
   if (typeof value !== 'string') {
@@ -73,54 +74,32 @@ export async function POST(request: Request) {
   const normalizedName = normalizeText(nome)
   const normalizedCity = normalizeText(cidade)
 
-  const { data: existingProfiles, error: existingProfilesError } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('male_profiles')
-    .select('id, city, normalized_city')
-    .eq('normalized_name', normalizedName)
+    .upsert(
+      {
+        normalized_name: normalizedName,
+        normalized_city: normalizedCity,
+        created_by: user.id,
+      },
+      {
+        onConflict: 'normalized_name,normalized_city',
+      }
+    )
+    .select('id')
+    .single()
 
-  if (existingProfilesError) {
+  if (profileError || !profile) {
     return NextResponse.json(
-      { error: existingProfilesError.message ?? 'Erro ao buscar perfil avaliado.' },
+      { error: profileError?.message ?? 'Erro ao criar ou localizar perfil avaliado.' },
       { status: 400 }
     )
-  }
-
-  const matchedProfile =
-    existingProfiles?.find((profile) => {
-      const profileNormalizedCity =
-        typeof profile.normalized_city === 'string' && profile.normalized_city
-          ? profile.normalized_city
-          : normalizeText(String(profile.city ?? ''))
-      return profileNormalizedCity === normalizedCity
-    }) ?? null
-
-  let maleProfileId = matchedProfile?.id ?? null
-
-  if (!maleProfileId) {
-    const { data: createdProfile, error: createdProfileError } = await supabase
-      .from('male_profiles')
-      .insert({
-        name: nome,
-        city: cidade,
-        created_by: user.id,
-      })
-      .select('id')
-      .single()
-
-    if (createdProfileError || !createdProfile) {
-      return NextResponse.json(
-        { error: createdProfileError?.message ?? 'Erro ao criar perfil avaliado.' },
-        { status: 400 }
-      )
-    }
-
-    maleProfileId = createdProfile.id
   }
 
   const { data: avaliacao, error: avaliacaoError } = await supabase
     .from('avaliacoes')
     .insert({
-      male_profile_id: maleProfileId,
+      male_profile_id: profile.id,
       autor_id: user.id,
       contato: contato || null,
       relato: relato || null,
@@ -145,7 +124,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    male_profile_id: maleProfileId,
+    male_profile_id: profile.id,
     avaliacao_id: avaliacao.id,
   })
 }
