@@ -70,36 +70,57 @@ export async function POST(request: Request) {
     )
   }
 
-  const normalized_name = normalizeText(nome)
-  const normalized_city = normalizeText(cidade)
-  const search_text = `${normalized_name} ${normalized_city}`.trim()
+  const normalizedName = normalizeText(nome)
+  const normalizedCity = normalizeText(cidade)
 
-  const { data: maleProfile, error: maleProfileError } = await supabase
+  const { data: existingProfiles, error: existingProfilesError } = await supabase
     .from('male_profiles')
-    .upsert(
-      {
-        nome,
-        normalized_name,
-        normalized_city,
-        search_text,
-        created_by: user.id,
-      },
-      { onConflict: 'normalized_name,normalized_city' }
-    )
-    .select('id')
-    .single()
+    .select('id, city, normalized_city')
+    .eq('normalized_name', normalizedName)
 
-  if (maleProfileError || !maleProfile) {
+  if (existingProfilesError) {
     return NextResponse.json(
-      { error: maleProfileError?.message ?? 'Erro ao criar perfil avaliado.' },
+      { error: existingProfilesError.message ?? 'Erro ao buscar perfil avaliado.' },
       { status: 400 }
     )
+  }
+
+  const matchedProfile =
+    existingProfiles?.find((profile) => {
+      const profileNormalizedCity =
+        typeof profile.normalized_city === 'string' && profile.normalized_city
+          ? profile.normalized_city
+          : normalizeText(String(profile.city ?? ''))
+      return profileNormalizedCity === normalizedCity
+    }) ?? null
+
+  let maleProfileId = matchedProfile?.id ?? null
+
+  if (!maleProfileId) {
+    const { data: createdProfile, error: createdProfileError } = await supabase
+      .from('male_profiles')
+      .insert({
+        name: nome,
+        city: cidade,
+        created_by: user.id,
+      })
+      .select('id')
+      .single()
+
+    if (createdProfileError || !createdProfile) {
+      return NextResponse.json(
+        { error: createdProfileError?.message ?? 'Erro ao criar perfil avaliado.' },
+        { status: 400 }
+      )
+    }
+
+    maleProfileId = createdProfile.id
   }
 
   const { data: avaliacao, error: avaliacaoError } = await supabase
     .from('avaliacoes')
     .insert({
-      male_profile_id: maleProfile.id,
+      male_profile_id: maleProfileId,
       autor_id: user.id,
       contato: contato || null,
       relato: relato || null,
@@ -124,7 +145,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    male_profile_id: maleProfile.id,
+    male_profile_id: maleProfileId,
     avaliacao_id: avaliacao.id,
   })
 }
