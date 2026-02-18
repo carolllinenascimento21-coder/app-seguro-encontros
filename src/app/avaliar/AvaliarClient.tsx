@@ -1,12 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Star } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase'
 import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags'
-
-const supabase = createSupabaseClient()
 
 const CRITERIOS = [
   { key: 'comportamento', label: 'Comportamento' },
@@ -18,63 +16,27 @@ const CRITERIOS = [
 
 type CriterioKey = (typeof CRITERIOS)[number]['key']
 
-function Stars({
-  value,
-  onChange,
-}: {
-  value: number
-  onChange: (v: number) => void
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3, 4, 5].map(n => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className="p-0.5"
-          aria-label={`Nota ${n}`}
-        >
-          <Star
-            className={[
-              'w-6 h-6',
-              n <= value ? 'text-[#D4AF37] fill-current' : 'text-gray-600',
-            ].join(' ')}
-          />
-        </button>
-      ))}
-    </div>
-  )
+type FlagItem =
+  | string
+  | {
+      slug: string
+      label: string
+    }
+
+const supabase = createSupabaseClient()
+
+function getFlagSlug(f: FlagItem) {
+  return typeof f === 'string' ? f : f.slug
 }
 
-function Chip({
-  label,
-  active,
-  onClick,
-  tone,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-  tone: 'green' | 'red'
-}) {
-  const base =
-    'px-3 py-1 rounded-lg text-xs border transition whitespace-nowrap'
-  const activeCls =
-    tone === 'green'
-      ? 'bg-green-500/15 text-green-200 border-green-500/30'
-      : 'bg-red-500/15 text-red-200 border-red-500/30'
-  const idleCls = 'bg-[#111] text-gray-300 border-gray-800 hover:border-gray-700'
-  return (
-    <button type="button" onClick={onClick} className={`${base} ${active ? activeCls : idleCls}`}>
-      {label}
-    </button>
-  )
+function getFlagLabel(f: FlagItem) {
+  return typeof f === 'string' ? f : f.label
 }
 
 export default function AvaliarClient() {
   const router = useRouter()
 
+  const [loading, setLoading] = useState(false)
   const [anonimo, setAnonimo] = useState(false)
 
   const [nome, setNome] = useState('')
@@ -90,82 +52,115 @@ export default function AvaliarClient() {
     confianca: 0,
   })
 
-  const [greens, setGreens] = useState<string[]>([])
-  const [reds, setReds] = useState<string[]>([])
+  const [greenSelected, setGreenSelected] = useState<string[]>([])
+  const [redSelected, setRedSelected] = useState<string[]>([])
 
-  const [loading, setLoading] = useState(false)
+  // Normaliza para garantir que mesmo se GREEN_FLAGS/RED_FLAGS vierem como objetos,
+  // a UI renderiza label e salva slug.
+  const greenFlags = useMemo(() => (GREEN_FLAGS as unknown as FlagItem[]) ?? [], [])
+  const redFlags = useMemo(() => (RED_FLAGS as unknown as FlagItem[]) ?? [], [])
 
-  const canSubmit = useMemo(() => {
-    const allRated = CRITERIOS.every(c => notas[c.key] >= 1 && notas[c.key] <= 5)
-    return allRated && nome.trim().length >= 2 && cidade.trim().length >= 2 && !loading
-  }, [notas, nome, cidade, loading])
+  useEffect(() => {
+    // Se quiser obrigar login ao abrir a tela:
+    // (mantém seu fluxo consistente com autor_id NOT NULL e evita 401)
+    ;(async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) router.push('/login')
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const toggleGreen = (f: string) => {
-    setGreens(prev => (prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]))
+  function toggle(list: string[], setList: (v: string[]) => void, value: string) {
+    if (list.includes(value)) setList(list.filter((x) => x !== value))
+    else setList([...list, value])
   }
 
-  const toggleRed = (f: string) => {
-    setReds(prev => (prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]))
+  function setNota(key: CriterioKey, value: number) {
+    setNotas((prev) => ({ ...prev, [key]: value }))
   }
 
-  const publicar = async () => {
+  function StarRow({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            className="p-0.5"
+            aria-label={`Nota ${n}`}
+          >
+            <Star
+              className={`w-6 h-6 ${
+                n <= value ? 'text-[#D4AF37] fill-current' : 'text-gray-600'
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  async function handleSubmit() {
     try {
       setLoading(true)
 
-      // 1) pega sessão no client (localStorage)
+      // validações básicas
+      if (!nome.trim()) return alert('Informe o nome.')
+      if (!cidade.trim()) return alert('Informe a cidade.')
+      // telefone pode ser opcional, se quiser exigir: if (!telefone.trim()) return alert('Informe o telefone.')
+
+      // garante sessão (evita 401)
       const {
         data: { session },
-        error: sessErr,
       } = await supabase.auth.getSession()
 
-      if (sessErr) throw sessErr
       if (!session) {
+        alert('Você precisa estar logada para publicar.')
         router.push('/login')
         return
       }
 
-      // 2) manda token no header (resolve 401 quando cookie não existe)
       const payload = {
-        anonimo,
         nome: nome.trim(),
         cidade: cidade.trim(),
         telefone: telefone.trim() || null,
-        relato: relato.trim() || null,
-
+        relato: relato?.trim() || null,
+        anonimo,
+        flags_positive: greenSelected,
+        flags_negative: redSelected,
         comportamento: notas.comportamento,
         seguranca_emocional: notas.seguranca_emocional,
         respeito: notas.respeito,
         carater: notas.carater,
         confianca: notas.confianca,
-
-        flags_positive: greens,
-        flags_negative: reds,
       }
 
       const res = await fetch('/api/avaliacoes/create', {
         method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // ✅ CORREÇÃO AQUI
         body: JSON.stringify(payload),
       })
 
+      const data = await res.json().catch(() => ({}))
+
       if (!res.ok) {
-        let msg = `Erro ao publicar (${res.status})`
-        try {
-          const j = await res.json()
-          msg = j?.error || j?.message || msg
-        } catch {}
-        throw new Error(msg)
+        if (res.status === 401) {
+          alert('Sessão inválida. Faça login novamente.')
+          router.push('/login')
+          return
+        }
+        console.error('Erro create:', res.status, data)
+        alert(data?.error || 'Erro ao publicar avaliação.')
+        return
       }
 
       // sucesso
       router.push('/minhas-avaliacoes')
-    } catch (e: any) {
-      alert(e?.message || 'Erro ao publicar avaliação.')
+    } catch (e) {
       console.error(e)
+      alert('Erro inesperado ao publicar.')
     } finally {
       setLoading(false)
     }
@@ -177,92 +172,106 @@ export default function AvaliarClient() {
         <h1 className="text-2xl font-bold text-white mb-6">Nova Avaliação</h1>
 
         <div className="space-y-5">
-          {CRITERIOS.map(c => (
-            <div key={c.key} className="space-y-2">
-              <p className="text-white text-sm font-semibold">{c.label}</p>
-              <Stars
-                value={notas[c.key]}
-                onChange={v => setNotas(prev => ({ ...prev, [c.key]: v }))}
-              />
+          {CRITERIOS.map((c) => (
+            <div key={c.key}>
+              <p className="text-white font-semibold mb-2">{c.label}</p>
+              <StarRow value={notas[c.key]} onChange={(n) => setNota(c.key, n)} />
             </div>
           ))}
 
           <input
+            className="w-full bg-[#1A1A1A] text-white rounded-xl px-4 py-3 outline-none border border-transparent focus:border-gray-700"
+            placeholder="Nome"
             value={nome}
-            onChange={e => setNome(e.target.value)}
-            placeholder="Nome do homem"
-            className="w-full bg-[#111] border border-gray-800 rounded-xl px-4 py-3 text-white outline-none"
+            onChange={(e) => setNome(e.target.value)}
           />
 
           <input
-            value={cidade}
-            onChange={e => setCidade(e.target.value)}
+            className="w-full bg-[#1A1A1A] text-white rounded-xl px-4 py-3 outline-none border border-transparent focus:border-gray-700"
             placeholder="Cidade"
-            className="w-full bg-[#111] border border-gray-800 rounded-xl px-4 py-3 text-white outline-none"
+            value={cidade}
+            onChange={(e) => setCidade(e.target.value)}
           />
 
           <input
+            className="w-full bg-[#1A1A1A] text-white rounded-xl px-4 py-3 outline-none border border-transparent focus:border-gray-700"
+            placeholder="Telefone"
             value={telefone}
-            onChange={e => setTelefone(e.target.value)}
-            placeholder="Telefone (opcional)"
-            className="w-full bg-[#111] border border-gray-800 rounded-xl px-4 py-3 text-white outline-none"
+            onChange={(e) => setTelefone(e.target.value)}
           />
+
+          {/* ✅ GREEN FLAGS */}
+          <div>
+            <p className="text-[#00ff7f] font-bold mb-2">Green Flags</p>
+            <div className="flex flex-wrap gap-2">
+              {greenFlags.map((f) => {
+                const slug = getFlagSlug(f)
+                const label = getFlagLabel(f)
+                const active = greenSelected.includes(slug)
+                return (
+                  <button
+                    key={slug}
+                    type="button"
+                    onClick={() => toggle(greenSelected, setGreenSelected, slug)}
+                    className={`px-3 py-1.5 rounded-lg text-sm border ${
+                      active
+                        ? 'bg-[#00ff7f]/15 text-[#00ff7f] border-[#00ff7f]/40'
+                        : 'bg-[#1A1A1A] text-gray-200 border-gray-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ✅ RED FLAGS */}
+          <div>
+            <p className="text-red-400 font-bold mb-2">Red Flags</p>
+            <div className="flex flex-wrap gap-2">
+              {redFlags.map((f) => {
+                const slug = getFlagSlug(f)
+                const label = getFlagLabel(f)
+                const active = redSelected.includes(slug)
+                return (
+                  <button
+                    key={slug}
+                    type="button"
+                    onClick={() => toggle(redSelected, setRedSelected, slug)}
+                    className={`px-3 py-1.5 rounded-lg text-sm border ${
+                      active
+                        ? 'bg-red-500/15 text-red-300 border-red-500/40'
+                        : 'bg-[#1A1A1A] text-gray-200 border-gray-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           <textarea
+            className="w-full bg-[#1A1A1A] text-white rounded-xl px-4 py-3 outline-none border border-transparent focus:border-gray-700 min-h-[90px]"
+            placeholder="Relato"
             value={relato}
-            onChange={e => setRelato(e.target.value)}
-            placeholder="Relato (opcional)"
-            className="w-full bg-[#111] border border-gray-800 rounded-xl px-4 py-3 text-white outline-none min-h-[110px]"
+            onChange={(e) => setRelato(e.target.value)}
           />
 
-          {/* GREEN FLAGS */}
-          <div className="space-y-2">
-            <p className="text-green-400 font-semibold">Green Flags</p>
-            <div className="flex flex-wrap gap-2">
-              {GREEN_FLAGS.map(f => (
-                <Chip
-                  key={f}
-                  label={f}
-                  active={greens.includes(f)}
-                  onClick={() => toggleGreen(f)}
-                  tone="green"
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* RED FLAGS */}
-          <div className="space-y-2">
-            <p className="text-red-400 font-semibold">Red Flags</p>
-            <div className="flex flex-wrap gap-2">
-              {RED_FLAGS.map(f => (
-                <Chip
-                  key={f}
-                  label={f}
-                  active={reds.includes(f)}
-                  onClick={() => toggleRed(f)}
-                  tone="red"
-                />
-              ))}
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-gray-200 text-sm">
+          <label className="flex items-center gap-2 text-gray-300 text-sm">
             <input
               type="checkbox"
               checked={anonimo}
-              onChange={e => setAnonimo(e.target.checked)}
+              onChange={(e) => setAnonimo(e.target.checked)}
             />
             Avaliar de forma anônima
           </label>
 
           <button
-            onClick={publicar}
-            disabled={!canSubmit}
-            className={[
-              'w-full font-bold py-3 rounded-xl',
-              canSubmit ? 'bg-[#D4AF37] text-black' : 'bg-[#D4AF37]/40 text-black/60',
-            ].join(' ')}
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-xl disabled:opacity-60"
           >
             {loading ? 'Publicando...' : 'Publicar avaliação'}
           </button>
