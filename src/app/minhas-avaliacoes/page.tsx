@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
@@ -8,34 +8,44 @@ import { createSupabaseClient } from '@/lib/supabase';
 
 const supabase = createSupabaseClient();
 
-interface Avaliacao {
+type MaleProfile = {
+  id: string;
+  display_name: string | null;
+  city: string | null;
+};
+
+interface AvaliacaoRow {
   id: string;
   male_profile_id: string | null;
+  flags_positive: string[] | null;
+  flags_negative: string[] | null;
   relato: string | null;
-  flags_positive: string[];
-  flags_negative: string[];
   comportamento: number;
   seguranca_emocional: number;
   respeito: number;
   carater: number;
   confianca: number;
   created_at: string;
-  male_profiles: {
+}
+
+interface AvaliacaoUI extends AvaliacaoRow {
+  avaliado: {
     nome: string | null;
     cidade: string | null;
-    telefone: string | null;
   } | null;
 }
 
 export default function MinhasAvaliacoes() {
   const router = useRouter();
-  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
+
+  const [avaliacoes, setAvaliacoes] = useState<AvaliacaoUI[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     carregarAvaliacoes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const carregarAvaliacoes = async () => {
@@ -43,40 +53,72 @@ export default function MinhasAvaliacoes() {
       setLoading(true);
 
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (!user) {
+      if (!session) {
         router.push('/login');
         return;
       }
 
-      const { data, error } = await supabase
+      const userId = session.user.id;
+
+      // 1) Busca avaliações do usuário
+      const { data: rows, error: errA } = await supabase
         .from('avaliacoes')
-        .select(`
-          id,
-          male_profile_id,
-          relato,
-          flags_positive,
-          flags_negative,
-          comportamento,
-          seguranca_emocional,
-          respeito,
-          carater,
-          confianca,
-          created_at,
-          male_profiles (
-            nome,
-            cidade,
-            telefone
-          )
-        `)
-        .eq('autor_id', user.id)
+        .select(
+          [
+            'id',
+            'male_profile_id',
+            'flags_positive',
+            'flags_negative',
+            'relato',
+            'comportamento',
+            'seguranca_emocional',
+            'respeito',
+            'carater',
+            'confianca',
+            'created_at',
+          ].join(',')
+        )
+        .eq('autor_id', userId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (errA) throw errA;
 
-      setAvaliacoes(data ?? []);
+      const base: AvaliacaoRow[] = (rows ?? []) as any;
+
+      // 2) Busca perfis masculinos vinculados
+      const ids = Array.from(
+        new Set(base.map((a) => a.male_profile_id).filter(Boolean))
+      ) as string[];
+
+      let profilesById = new Map<string, MaleProfile>();
+
+      if (ids.length > 0) {
+        const { data: profs, error: errP } = await supabase
+          .from('male_profiles')
+          .select('id,display_name,city')
+          .in('id', ids);
+
+        if (errP) throw errP;
+
+        (profs ?? []).forEach((p: any) => profilesById.set(p.id, p));
+      }
+
+      const ui: AvaliacaoUI[] = base.map((a) => {
+        const p = a.male_profile_id ? profilesById.get(a.male_profile_id) : null;
+        return {
+          ...a,
+          flags_positive: a.flags_positive ?? [],
+          flags_negative: a.flags_negative ?? [],
+          avaliado: p
+            ? { nome: p.display_name ?? null, cidade: p.city ?? null }
+            : null,
+        };
+      });
+
+      setAvaliacoes(ui);
     } catch (err) {
       console.error('Erro ao carregar avaliações:', err);
     } finally {
@@ -97,17 +139,10 @@ export default function MinhasAvaliacoes() {
     if (!avaliacaoToDelete) return;
 
     try {
-      const { error } = await supabase
-        .from('avaliacoes')
-        .delete()
-        .eq('id', avaliacaoToDelete);
-
+      const { error } = await supabase.from('avaliacoes').delete().eq('id', avaliacaoToDelete);
       if (error) throw error;
 
-      setAvaliacoes(prev =>
-        prev.filter(a => a.id !== avaliacaoToDelete)
-      );
-
+      setAvaliacoes((prev) => prev.filter((a) => a.id !== avaliacaoToDelete));
       setShowDeleteModal(false);
       setAvaliacaoToDelete(null);
     } catch (err) {
@@ -116,17 +151,10 @@ export default function MinhasAvaliacoes() {
     }
   };
 
-  const mediaNota = (a: Avaliacao) =>
-    (
-      (a.comportamento +
-        a.seguranca_emocional +
-        a.respeito +
-        a.carater +
-        a.confianca) / 5
-    ).toFixed(1);
+  const mediaNota = (a: AvaliacaoUI) =>
+    ((a.comportamento + a.seguranca_emocional + a.respeito + a.carater + a.confianca) / 5).toFixed(1);
 
-  const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString('pt-BR');
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('pt-BR');
 
   if (loading) {
     return (
@@ -139,13 +167,8 @@ export default function MinhasAvaliacoes() {
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
-
-        <h1 className="text-2xl font-bold text-white mb-1">
-          Minhas Avaliações
-        </h1>
-        <p className="text-gray-400 text-sm">
-          Apenas você pode ver estas avaliações.
-        </p>
+        <h1 className="text-2xl font-bold text-white mb-1">Minhas Avaliações</h1>
+        <p className="text-gray-400 text-sm">Apenas você pode ver estas avaliações.</p>
 
         <div className="mt-4 mb-6">
           <button
@@ -159,39 +182,30 @@ export default function MinhasAvaliacoes() {
         {avaliacoes.length === 0 ? (
           <div className="bg-[#1A1A1A] rounded-xl p-6 text-center">
             <AlertCircle className="w-10 h-10 mx-auto text-gray-500 mb-3" />
-            <p className="text-gray-400 text-sm">
-              Você ainda não fez nenhuma avaliação.
-            </p>
+            <p className="text-gray-400 text-sm">Você ainda não fez nenhuma avaliação.</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {avaliacoes.map(a => (
-              <div
-                key={a.id}
-                className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5"
-              >
+            {avaliacoes.map((a) => (
+              <div key={a.id} className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5">
                 <div className="flex justify-between mb-2">
                   <div>
                     <h3 className="text-white font-bold">
-                      {a.male_profiles?.nome || 'Nome não informado'}
+                      {a.avaliado?.nome || 'Nome não informado'}
                     </h3>
                     <p className="text-gray-400 text-xs">
+                      {a.avaliado?.cidade ? `${a.avaliado.cidade} • ` : ''}
                       {formatDate(a.created_at)}
                     </p>
                   </div>
-
                   <div className="flex items-center gap-1">
                     <Star className="w-5 h-5 text-[#D4AF37] fill-current" />
-                    <span className="text-[#D4AF37] font-bold">
-                      {mediaNota(a)}
-                    </span>
+                    <span className="text-[#D4AF37] font-bold">{mediaNota(a)}</span>
                   </div>
                 </div>
 
                 {a.relato && (
-                  <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-                    {a.relato}
-                  </p>
+                  <p className="text-gray-300 text-sm mb-3 line-clamp-2">{a.relato}</p>
                 )}
 
                 <div className="flex gap-2">
@@ -219,12 +233,8 @@ export default function MinhasAvaliacoes() {
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-[#1A1A1A] p-6 rounded-xl w-full max-w-sm">
-            <h3 className="text-white font-bold mb-3">
-              Excluir avaliação?
-            </h3>
-            <p className="text-gray-400 text-sm mb-6">
-              Esta ação é permanente.
-            </p>
+            <h3 className="text-white font-bold mb-3">Excluir avaliação?</h3>
+            <p className="text-gray-400 text-sm mb-6">Esta ação é permanente.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
