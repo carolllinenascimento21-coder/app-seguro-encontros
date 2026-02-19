@@ -32,7 +32,7 @@ const INITIAL_NOTAS: Notas = {
 const inputClassName =
   'w-full rounded-xl border border-[#D4AF37] bg-black px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/40'
 
-const sectionClassName = 'space-y-4 rounded-2xl border border-[#D4AF37] bg-black p-5'
+const sectionClassName = 'space-y-4 rounded-2xl border border-[#D4AF37]/80 bg-[#0B0B0B] p-5'
 
 export default function AvaliarClient() {
   const router = useRouter()
@@ -137,7 +137,7 @@ export default function AvaliarClient() {
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          alert('Sua sessão precisa ser revalidada. Faça login novamente para continuar.')
+          alert('Sessão expirada. Faça login novamente.')
           router.replace('/login?next=/avaliar')
           return
         }
@@ -146,7 +146,7 @@ export default function AvaliarClient() {
       }
 
       resetForm()
-      alert('Avaliação publicada!')
+      router.push(`/consultar-reputacao/${data.male_profile_id}`)
     } catch (error: any) {
       console.error(error)
       alert(error?.message || 'Erro ao publicar avaliação.')
@@ -166,8 +166,8 @@ export default function AvaliarClient() {
   }
 
   return (
-    <div className="min-h-screen bg-black px-4 py-10">
-      <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-[#D4AF37] bg-black p-6 text-white md:p-8">
+    <div className="min-h-screen bg-[#050505] px-4 py-10">
+      <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-[#D4AF37]/80 bg-black p-6 text-white shadow-[0_0_30px_rgba(212,175,55,0.08)] md:p-8">
         <h1 className="text-center text-3xl font-bold text-[#D4AF37]">Nova avaliação</h1>
 
         <section className={sectionClassName}>
@@ -232,8 +232,8 @@ export default function AvaliarClient() {
                 onClick={() => toggleFlag(flag.slug, 'green')}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   greenFlags.includes(flag.slug)
-                    ? 'border-[#D4AF37] bg-[#D4AF37] text-black'
-                    : 'border-[#D4AF37] bg-transparent text-white hover:bg-[#D4AF37]/20'
+                    ? 'border-green-500 bg-green-500/20 text-green-300'
+                    : 'border-green-500/60 bg-transparent text-green-200 hover:bg-green-500/10'
                 }`}
               >
                 {flag.label}
@@ -252,8 +252,8 @@ export default function AvaliarClient() {
                 onClick={() => toggleFlag(flag.slug, 'red')}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   redFlags.includes(flag.slug)
-                    ? 'border-[#D4AF37] bg-[#D4AF37] text-black'
-                    : 'border-[#D4AF37] bg-transparent text-white hover:bg-[#D4AF37]/20'
+                    ? 'border-red-500 bg-red-500/20 text-red-300'
+                    : 'border-red-500/60 bg-transparent text-red-200 hover:bg-red-500/10'
                 }`}
               >
                 {flag.label}
@@ -291,7 +291,7 @@ export default function AvaliarClient() {
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full bg-[#D4AF37] text-black font-semibold rounded-xl py-3 hover:bg-[#C9A227] transition disabled:opacity-60"
+          className="w-full rounded-xl border border-[#D4AF37] bg-gradient-to-r from-[#D4AF37] to-[#C9A227] py-3 font-semibold text-black transition hover:brightness-105 disabled:opacity-60"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}
         </button>

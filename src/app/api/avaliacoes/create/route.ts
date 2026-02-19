@@ -40,7 +40,10 @@ export async function POST(request: Request) {
   const user = session?.user ?? null
 
   if (authError || !user) {
-    return NextResponse.json({ error: 'Sessão inválida. Faça login para publicar avaliações.' }, { status: 403 })
+    return NextResponse.json(
+      { error: 'Sessão expirada. Faça login novamente.' },
+      { status: 401 }
+    )
   }
 
   const body = await request.json()
@@ -74,57 +77,113 @@ export async function POST(request: Request) {
   const normalizedName = normalizeText(nome)
   const normalizedCity = normalizeText(cidade)
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: existingProfile, error: existingProfileError } = await supabase
     .from('male_profiles')
-    .upsert(
-      {
-        normalized_name: normalizedName,
-        normalized_city: normalizedCity,
-        created_by: user.id,
-      },
-      {
-        onConflict: 'normalized_name,normalized_city',
-      }
-    )
     .select('id')
-    .single()
+    .eq('normalized_name', normalizedName)
+    .eq('normalized_city', normalizedCity)
+    .maybeSingle()
 
-  if (profileError || !profile) {
+  if (existingProfileError) {
+    console.error('[api/avaliacoes/create] Erro ao buscar perfil existente:', existingProfileError)
     return NextResponse.json(
-      { error: profileError?.message ?? 'Erro ao criar ou localizar perfil avaliado.' },
+      { error: 'Erro ao criar ou localizar perfil avaliado.' },
       { status: 400 }
     )
   }
 
-  const { data: avaliacao, error: avaliacaoError } = await supabase
+  let maleProfileId = existingProfile?.id ?? null
+
+  if (!maleProfileId) {
+    const { data: insertedProfile, error: insertedProfileError } = await supabase
+      .from('male_profiles')
+      .insert({
+        nome,
+        cidade,
+        created_by: user.id,
+      })
+      .select('id')
+      .single()
+
+    if (insertedProfileError || !insertedProfile) {
+      console.error('[api/avaliacoes/create] Erro ao inserir perfil:', insertedProfileError)
+      return NextResponse.json(
+        { error: insertedProfileError?.message ?? 'Erro ao criar perfil avaliado.' },
+        { status: 400 }
+      )
+    }
+
+    maleProfileId = insertedProfile.id
+  }
+
+  const avaliacaoPayload = {
+    male_profile_id: maleProfileId,
+    contato: contato || null,
+    relato: relato || null,
+    anonimo,
+    comportamento: notas.comportamento,
+    seguranca_emocional: notas.seguranca_emocional,
+    respeito: notas.respeito,
+    carater: notas.carater,
+    confianca: notas.confianca,
+    flags_positive: is_positive,
+    flags_negative: is_negative,
+  }
+
+  let avaliacao: { id: string } | null = null
+
+  const { data: avaliacaoByAuthorId, error: avaliacaoByAuthorIdError } = await supabase
     .from('avaliacoes')
     .insert({
-      male_profile_id: profile.id,
-      autor_id: user.id,
-      contato: contato || null,
-      relato: relato || null,
-      anonimo,
-      comportamento: notas.comportamento,
-      seguranca_emocional: notas.seguranca_emocional,
-      respeito: notas.respeito,
-      carater: notas.carater,
-      confianca: notas.confianca,
-      is_positive,
-      is_negative,
+      ...avaliacaoPayload,
+      author_id: user.id,
     })
     .select('id')
     .single()
 
-  if (avaliacaoError || !avaliacao) {
+  if (avaliacaoByAuthorIdError) {
+    const shouldRetryWithAutorId = /author_id/i.test(avaliacaoByAuthorIdError.message)
+
+    if (!shouldRetryWithAutorId) {
+      console.error('[api/avaliacoes/create] Erro ao inserir avaliação (author_id):', avaliacaoByAuthorIdError)
+      return NextResponse.json(
+        { error: avaliacaoByAuthorIdError.message ?? 'Erro ao publicar avaliação.' },
+        { status: 400 }
+      )
+    }
+
+    const { data: avaliacaoByAutorId, error: avaliacaoByAutorIdError } = await supabase
+      .from('avaliacoes')
+      .insert({
+        ...avaliacaoPayload,
+        autor_id: user.id,
+      })
+      .select('id')
+      .single()
+
+    if (avaliacaoByAutorIdError || !avaliacaoByAutorId) {
+      console.error('[api/avaliacoes/create] Erro ao inserir avaliação (autor_id):', avaliacaoByAutorIdError)
+      return NextResponse.json(
+        { error: avaliacaoByAutorIdError?.message ?? 'Erro ao publicar avaliação.' },
+        { status: 400 }
+      )
+    }
+
+    avaliacao = avaliacaoByAutorId
+  } else {
+    avaliacao = avaliacaoByAuthorId
+  }
+
+  if (!avaliacao) {
     return NextResponse.json(
-      { error: avaliacaoError?.message ?? 'Erro ao publicar avaliação.' },
+      { error: 'Erro ao publicar avaliação.' },
       { status: 400 }
     )
   }
 
   return NextResponse.json({
     ok: true,
-    male_profile_id: profile.id,
+    male_profile_id: maleProfileId,
     avaliacao_id: avaliacao.id,
   })
 }
