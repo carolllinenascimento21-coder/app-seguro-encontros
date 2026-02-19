@@ -68,14 +68,14 @@ export default function EditarAvaliacao() {
           respeito,
           carater,
           confianca,
-          male_profiles (
+          male_profile:male_profiles (
             id,
             display_name,
             city
           )
         `)
         .eq('id', avaliacaoId)
-        .eq('author_id', session.user.id)
+        .eq('user_id', session.user.id)
         .single()
 
       if (error) throw error
@@ -87,9 +87,13 @@ export default function EditarAvaliacao() {
 
       setMaleProfileId(data.male_profile_id)
 
+      const maleProfile = Array.isArray(data.male_profile)
+        ? data.male_profile[0]
+        : data.male_profile
+
       setFormData({
-        nome: data.male_profiles?.display_name || '',
-        cidade: data.male_profiles?.city || '',
+        nome: maleProfile?.display_name || '',
+        cidade: maleProfile?.city || '',
         comportamento: data.comportamento ?? 0,
         seguranca_emocional: data.seguranca_emocional ?? 0,
         respeito: data.respeito ?? 0,
@@ -140,7 +144,7 @@ export default function EditarAvaliacao() {
           confianca: formData.confianca,
         })
         .eq('id', avaliacaoId)
-        .eq('author_id', session.user.id)
+        .eq('user_id', session.user.id)
 
       if (avaliacaoError) throw avaliacaoError
 
