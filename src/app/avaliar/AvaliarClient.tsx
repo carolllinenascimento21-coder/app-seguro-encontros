@@ -30,9 +30,16 @@ const INITIAL_NOTAS: Notas = {
 }
 
 const inputClassName =
-  'w-full rounded-xl border border-[#D4AF37] bg-black px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/40'
+  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm text-white placeholder:text-white/35 backdrop-blur-md transition focus:border-[#D4AF37]/50 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/20'
 
-const sectionClassName = 'space-y-4 rounded-2xl border border-[#D4AF37]/80 bg-[#0B0B0B] p-5'
+const sectionClassName =
+  'space-y-6 rounded-2xl border border-white/10 bg-[#111111] p-6 shadow-lg'
+
+const sectionHeadingClassName =
+  'flex items-center gap-3 text-lg font-medium tracking-tight text-white'
+
+const badgeClassName =
+  'inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#D4AF37]/85 text-xs font-semibold text-black'
 
 export default function AvaliarClient() {
   const router = useRouter()
@@ -157,22 +164,29 @@ export default function AvaliarClient() {
 
   if (checkingSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black px-4">
-        <div className="w-full max-w-3xl rounded-2xl border border-[#D4AF37] bg-black p-8 text-white">
-          <p>Carregando avaliação...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A] px-4">
+        <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-white/5 p-8 text-white backdrop-blur-lg">
+          <p className="text-sm tracking-wide text-white/80">Carregando avaliação...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] px-4 py-10">
-      <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-[#D4AF37]/80 bg-black p-6 text-white shadow-[0_0_30px_rgba(212,175,55,0.08)] md:p-8">
-        <h1 className="text-center text-3xl font-bold text-[#D4AF37]">Nova avaliação</h1>
+    <div className="min-h-screen bg-[#0A0A0A] px-4 py-10 md:py-14">
+      <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 text-white shadow-[0_30px_70px_rgba(0,0,0,0.5)] backdrop-blur-xl md:p-8">
+        <header className="space-y-2 pb-2">
+          <p className="text-xs uppercase tracking-[0.25em] text-[#D4AF37]/85">Confia+ premium review</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">Nova avaliação</h1>
+          <p className="text-sm text-white/60">Relate com clareza para fortalecer a segurança da comunidade.</p>
+        </header>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-white">1. Identificação do homem avaliado</h2>
-          <div className="grid gap-3">
+          <h2 className={sectionHeadingClassName}>
+            <span className={badgeClassName}>1</span>
+            Identificação do homem avaliado
+          </h2>
+          <div className="grid gap-4">
             <input
               placeholder="Nome *"
               value={nome}
@@ -197,20 +211,29 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-white">2. Avaliação por estrelas</h2>
-          <div className="space-y-4">
+          <h2 className={sectionHeadingClassName}>
+            <span className={badgeClassName}>2</span>
+            Avaliação por estrelas
+          </h2>
+
+          <div className="space-y-5">
             {CRITERIOS.map((criterio) => (
-              <div key={criterio.key} className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <p className="font-medium text-white">{criterio.label}</p>
-                <div className="flex gap-1">
+              <div
+                key={criterio.key}
+                className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <p className="text-sm font-medium tracking-wide text-white/90">{criterio.label}</p>
+                <div className="flex gap-1.5">
                   {[1, 2, 3, 4, 5].map((n) => (
                     <button
                       key={n}
                       type="button"
                       aria-label={`${criterio.label}: ${n} estrela${n > 1 ? 's' : ''}`}
                       onClick={() => setNota(criterio.key, n)}
-                      className={`rounded-md px-1 text-2xl transition ${
-                        notas[criterio.key] >= n ? 'text-[#D4AF37]' : 'text-white/40 hover:text-[#D4AF37]/80'
+                      className={`rounded-lg px-1 text-3xl leading-none transition duration-200 hover:-translate-y-0.5 hover:scale-110 ${
+                        notas[criterio.key] >= n
+                          ? 'text-[#D4AF37] drop-shadow-[0_0_10px_rgba(212,175,55,0.28)]'
+                          : 'text-white/25 hover:text-[#D4AF37]/70'
                       }`}
                     >
                       ★
@@ -223,17 +246,20 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-white">3. Green Flags</h2>
-          <div className="flex flex-wrap gap-2">
+          <h2 className={sectionHeadingClassName}>
+            <span className={badgeClassName}>3</span>
+            Green Flags
+          </h2>
+          <div className="flex flex-wrap gap-3">
             {GREEN_FLAGS.map((flag) => (
               <button
                 key={flag.slug}
                 type="button"
                 onClick={() => toggleFlag(flag.slug, 'green')}
-                className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                className={`rounded-full border px-4 py-2 text-xs font-medium uppercase tracking-wider transition duration-200 ${
                   greenFlags.includes(flag.slug)
-                    ? 'border-green-500 bg-green-500/20 text-green-300'
-                    : 'border-green-500/60 bg-transparent text-green-200 hover:bg-green-500/10'
+                    ? 'border-emerald-300/50 bg-emerald-300/15 text-emerald-200 shadow-[0_0_15px_rgba(110,231,183,0.15)]'
+                    : 'border-white/15 bg-white/[0.03] text-white/70 hover:border-emerald-200/40 hover:bg-emerald-300/10 hover:text-emerald-100'
                 }`}
               >
                 {flag.label}
@@ -243,17 +269,20 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-white">4. Red Flags</h2>
-          <div className="flex flex-wrap gap-2">
+          <h2 className={sectionHeadingClassName}>
+            <span className={badgeClassName}>4</span>
+            Red Flags
+          </h2>
+          <div className="flex flex-wrap gap-3">
             {RED_FLAGS.map((flag) => (
               <button
                 key={flag.slug}
                 type="button"
                 onClick={() => toggleFlag(flag.slug, 'red')}
-                className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                className={`rounded-full border px-4 py-2 text-xs font-medium uppercase tracking-wider transition duration-200 ${
                   redFlags.includes(flag.slug)
-                    ? 'border-red-500 bg-red-500/20 text-red-300'
-                    : 'border-red-500/60 bg-transparent text-red-200 hover:bg-red-500/10'
+                    ? 'border-rose-300/45 bg-rose-300/15 text-rose-200 shadow-[0_0_15px_rgba(251,113,133,0.12)]'
+                    : 'border-white/15 bg-white/[0.03] text-white/70 hover:border-rose-200/40 hover:bg-rose-300/10 hover:text-rose-100'
                 }`}
               >
                 {flag.label}
@@ -263,23 +292,29 @@ export default function AvaliarClient() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-white">5. Relato</h2>
+          <h2 className={sectionHeadingClassName}>
+            <span className={badgeClassName}>5</span>
+            Relato
+          </h2>
           <textarea
             placeholder="Conte o relato com contexto e fatos importantes"
             value={relato}
             onChange={(e) => setRelato(e.target.value)}
-            className={`${inputClassName} min-h-28 resize-y`}
+            className={`${inputClassName} min-h-36 resize-y`}
           />
         </section>
 
         <section className={sectionClassName}>
-          <h2 className="text-lg font-semibold text-white">6. Anonimato</h2>
-          <label className="flex cursor-pointer items-start gap-3 text-sm text-white">
+          <h2 className={sectionHeadingClassName}>
+            <span className={badgeClassName}>6</span>
+            Anonimato
+          </h2>
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-white/80">
             <input
               type="checkbox"
               checked={anonimo}
               onChange={(e) => setAnonimo(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-[#D4AF37] bg-black text-[#D4AF37]"
+              className="mt-1 h-4 w-4 rounded border-white/30 bg-[#0A0A0A] text-[#D4AF37] focus:ring-[#D4AF37]/40"
             />
             <span>
               Avaliar de forma anônima. Seu vínculo com a conta permanece para segurança da plataforma.
@@ -291,7 +326,7 @@ export default function AvaliarClient() {
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full rounded-xl border border-[#D4AF37] bg-gradient-to-r from-[#D4AF37] to-[#C9A227] py-3 font-semibold text-black transition hover:brightness-105 disabled:opacity-60"
+          className="h-14 w-full rounded-2xl bg-gradient-to-r from-[#B89225] via-[#D4AF37] to-[#E0C15A] text-sm font-semibold uppercase tracking-wider text-black transition duration-300 hover:brightness-105 hover:shadow-[0_0_24px_rgba(212,175,55,0.35)] disabled:opacity-60"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}
         </button>
