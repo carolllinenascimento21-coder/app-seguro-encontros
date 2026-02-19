@@ -10,10 +10,9 @@ const supabase = createSupabaseClient()
 
 type MaleProfileRow = {
   id: string
+  display_name?: string | null
   nome?: string | null
-  normalized_name?: string | null
   cidade?: string | null
-  normalized_city?: string | null
 }
 
 interface AvaliacaoRow {
@@ -28,6 +27,7 @@ interface AvaliacaoRow {
   carater: number
   confianca: number
   created_at: string
+  male_profile?: MaleProfileRow | null
 }
 
 export default function MinhasAvaliacoes() {
@@ -66,58 +66,72 @@ export default function MinhasAvaliacoes() {
 
       const userId = session.user.id
 
-      // 1) Busca avaliações do usuário (sem join)
+      // 1) Busca avaliações do usuário com relacionamento no male_profiles
       let rows: AvaliacaoRow[] = []
 
-      const authorQuery = await supabase
-        .from('avaliacoes')
-        .select(
-          `
-          id,
-          male_profile_id,
-          flags_positive,
-          flags_negative,
-          relato,
-          comportamento,
-          seguranca_emocional,
-          respeito,
-          carater,
-          confianca,
-          created_at
-        `
-        )
-        .eq('author_id', userId)
-        .order('created_at', { ascending: false })
+      const baseSelect = `
+        id,
+        male_profile_id,
+        flags_positive,
+        flags_negative,
+        relato,
+        comportamento,
+        seguranca_emocional,
+        respeito,
+        carater,
+        confianca,
+        created_at,
+        male_profile:male_profiles(display_name,nome,cidade)
+      `
+
+      const fkSelect = `
+        id,
+        male_profile_id,
+        flags_positive,
+        flags_negative,
+        relato,
+        comportamento,
+        seguranca_emocional,
+        respeito,
+        carater,
+        confianca,
+        created_at,
+        male_profile:male_profiles!avaliacoes_male_profile_id_fkey(display_name,nome,cidade)
+      `
+
+      const fetchRows = async (authorColumn: 'author_id' | 'autor_id', selectClause: string) =>
+        supabase
+          .from('avaliacoes')
+          .select(selectClause)
+          .eq(authorColumn, userId)
+          .order('created_at', { ascending: false })
+
+      const authorQuery = await fetchRows('author_id', baseSelect)
 
       if (authorQuery.error) {
         const shouldRetryWithAutorId = /author_id/i.test(authorQuery.error.message)
 
         if (!shouldRetryWithAutorId) throw authorQuery.error
 
-        const autorQuery = await supabase
-          .from('avaliacoes')
-          .select(
-            `
-            id,
-            male_profile_id,
-            flags_positive,
-            flags_negative,
-            relato,
-            comportamento,
-            seguranca_emocional,
-            respeito,
-            carater,
-            confianca,
-            created_at
-          `
-          )
-          .eq('autor_id', userId)
-          .order('created_at', { ascending: false })
+        const autorQuery = await fetchRows('autor_id', baseSelect)
 
-        if (autorQuery.error) throw autorQuery.error
-        rows = (autorQuery.data ?? []) as any
+        if (autorQuery.error) {
+          const fallbackAutorQuery = await fetchRows('autor_id', fkSelect)
+
+          if (fallbackAutorQuery.error) throw fallbackAutorQuery.error
+          rows = (fallbackAutorQuery.data ?? []) as any
+        } else {
+          rows = (autorQuery.data ?? []) as any
+        }
       } else {
         rows = (authorQuery.data ?? []) as any
+
+        if (!rows.length) {
+          const fallbackAuthorQuery = await fetchRows('author_id', fkSelect)
+          if (!fallbackAuthorQuery.error) {
+            rows = (fallbackAuthorQuery.data ?? []) as any
+          }
+        }
       }
 
       const ui = (rows ?? []).map((a: any) => ({
@@ -128,39 +142,18 @@ export default function MinhasAvaliacoes() {
 
       setAvaliacoes(ui)
 
-      // 2) Busca perfis dos homens por IDs (segunda query)
-      const ids = Array.from(
-        new Set(ui.map((a) => a.male_profile_id).filter(Boolean) as string[])
-      )
-
-      if (ids.length === 0) {
-        setProfilesById({})
-        return
-      }
-
-      // Tentativa A: pegar nome/cidade (se existirem) + normalized_*
-      const profA = await supabase
-        .from('male_profiles')
-        .select('id, nome, cidade, normalized_name, normalized_city')
-        .in('id', ids)
-
-      if (profA.error) {
-        // Tentativa B: se 'cidade' não existir, busca sem ela
-        const profB = await supabase
-          .from('male_profiles')
-          .select('id, nome, normalized_name, normalized_city')
-          .in('id', ids)
-
-        if (profB.error) throw profB.error
-
-        const map: Record<string, MaleProfileRow> = {}
-        ;(profB.data ?? []).forEach((p: any) => (map[p.id] = p))
-        setProfilesById(map)
-      } else {
-        const map: Record<string, MaleProfileRow> = {}
-        ;(profA.data ?? []).forEach((p: any) => (map[p.id] = p))
-        setProfilesById(map)
-      }
+      const map: Record<string, MaleProfileRow> = {}
+      ;(ui ?? []).forEach((row) => {
+        if (row.male_profile_id && row.male_profile) {
+          map[row.male_profile_id] = {
+            id: row.male_profile_id,
+            display_name: row.male_profile.display_name,
+            nome: row.male_profile.nome,
+            cidade: row.male_profile.cidade,
+          }
+        }
+      })
+      setProfilesById(map)
     } catch (err) {
       console.error('Erro ao carregar avaliações:', err)
       setAvaliacoes([])
@@ -209,7 +202,7 @@ export default function MinhasAvaliacoes() {
         continue
       }
       const p = profilesById[pid]
-      map[a.id] = (p?.nome || p?.normalized_name || 'Nome não informado') as string
+      map[a.id] = (p?.display_name || p?.nome || 'Nome não informado') as string
     }
     return map
   }, [avaliacoes, profilesById])

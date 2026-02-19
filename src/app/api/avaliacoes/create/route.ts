@@ -2,22 +2,208 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
-const getString = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+type JsonObject = Record<string, unknown>
+
+type SupabaseLike = ReturnType<typeof createRouteHandlerClient>
+
+const MISSING_COLUMN_PATTERNS = [
+  /could not find the ['"]?([a-zA-Z0-9_]+)['"]? column/i,
+  /column ['"]?([a-zA-Z0-9_]+)['"]? .* does not exist/i,
+]
+
+const GENERATED_COLUMN_PATTERNS = [
+  /column ['"]?([a-zA-Z0-9_]+)['"]? .*generated always/i,
+]
+
+function normalize(text: string) {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+const getString = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+
 const getStringArray = (value: unknown) => {
   if (!Array.isArray(value)) return [] as string[]
+
   return value
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean)
 }
 
-function isMissingColumnError(err: any, column: string) {
-  const msg = String(err?.message ?? '')
-  return (
-    msg.includes(`Could not find the '${column}' column`) ||
-    msg.includes(`column "${column}" does not exist`) ||
-    (msg.includes('does not exist') && msg.includes(column))
-  )
+const parseColumnFromError = (message: string, patterns: RegExp[]) => {
+  for (const pattern of patterns) {
+    const match = pattern.exec(message)
+    const column = match?.[1]
+    if (column) return column
+  }
+  return null
+}
+
+const isMissingColumnError = (message: string) => {
+  return MISSING_COLUMN_PATTERNS.some((pattern) => pattern.test(message))
+}
+
+async function insertWithSchemaFallback(
+  supabase: SupabaseLike,
+  table: 'male_profiles' | 'avaliacoes',
+  initialPayload: JsonObject,
+  selectColumns: string
+) {
+  const payload: JsonObject = { ...initialPayload }
+  const maxAttempts = Math.max(Object.keys(payload).length + 1, 4)
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const { data, error } = await supabase.from(table).insert(payload).select(selectColumns).single()
+
+    if (!error) {
+      return { data, error: null }
+    }
+
+    const message = error.message ?? ''
+    const generatedColumn = parseColumnFromError(message, GENERATED_COLUMN_PATTERNS)
+
+    if (generatedColumn && generatedColumn in payload) {
+      delete payload[generatedColumn]
+      continue
+    }
+
+    if (isMissingColumnError(message)) {
+      const missingColumn = parseColumnFromError(message, MISSING_COLUMN_PATTERNS)
+
+      if (missingColumn && missingColumn in payload) {
+        delete payload[missingColumn]
+        continue
+      }
+    }
+
+    return { data: null, error }
+  }
+
+  return {
+    data: null,
+    error: {
+      message: `Não foi possível inserir em ${table} após ajustes automáticos de schema.`,
+    },
+  }
+}
+
+async function findMaleProfileId(
+  supabase: SupabaseLike,
+  params: { nome: string; cidade: string }
+): Promise<string | null> {
+  const nome = params.nome.trim()
+  const cidade = params.cidade.trim()
+
+  if (!nome) return null
+
+  const cityStrategies = cidade
+    ? [
+        { nameColumn: 'display_name', includeCity: true },
+        { nameColumn: 'nome', includeCity: true },
+      ]
+    : []
+
+  const nameOnlyStrategies = [
+    { nameColumn: 'display_name', includeCity: false },
+    { nameColumn: 'nome', includeCity: false },
+  ]
+
+  const strategies = [...cityStrategies, ...nameOnlyStrategies]
+
+  for (const strategy of strategies) {
+    let query = supabase.from('male_profiles').select('id').ilike(strategy.nameColumn, nome)
+
+    if (strategy.includeCity) {
+      query = query.ilike('cidade', cidade)
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle()
+
+    if (error) {
+      if (isMissingColumnError(error.message ?? '')) {
+        continue
+      }
+
+      throw error
+    }
+
+    if (data?.id) return data.id as string
+  }
+
+  return null
+}
+
+async function createMaleProfile(
+  supabase: SupabaseLike,
+  params: {
+    nome: string
+    cidade: string
+    normalizedName: string
+    normalizedCity: string
+    userId: string
+  }
+): Promise<string> {
+  const payload: JsonObject = {
+    display_name: params.nome,
+    nome: params.nome,
+    cidade: params.cidade || null,
+    normalized_name: params.normalizedName,
+    normalized_city: params.normalizedCity,
+    created_by: params.userId,
+    author_id: params.userId,
+    autor_id: params.userId,
+    autora_id: params.userId,
+  }
+
+  const { data, error } = await insertWithSchemaFallback(supabase, 'male_profiles', payload, 'id')
+
+  if (error || !data?.id) {
+    throw new Error(error?.message ?? 'Erro ao criar perfil masculino.')
+  }
+
+  return data.id as string
+}
+
+async function createAvaliacao(
+  supabase: SupabaseLike,
+  params: {
+    maleProfileId: string
+    userId: string
+    contato: string
+    relato: string
+    anonimo: boolean
+    comportamento: number
+    segurancaEmocional: number
+    respeito: number
+    carater: number
+    confianca: number
+    flagsPositive: string[]
+    flagsNegative: string[]
+  }
+) {
+  const payload: JsonObject = {
+    male_profile_id: params.maleProfileId,
+    contato: params.contato || null,
+    relato: params.relato || null,
+    anonimo: params.anonimo,
+    comportamento: params.comportamento,
+    seguranca_emocional: params.segurancaEmocional,
+    respeito: params.respeito,
+    carater: params.carater,
+    confianca: params.confianca,
+    flags_positive: params.flagsPositive,
+    flags_negative: params.flagsNegative,
+    author_id: params.userId,
+    autor_id: params.userId,
+    autora_id: params.userId,
+    created_by: params.userId,
+  }
+
+  return insertWithSchemaFallback(supabase, 'avaliacoes', payload, 'id')
 }
 
 export async function POST(request: Request) {
@@ -26,8 +212,8 @@ export async function POST(request: Request) {
   const { data: { session }, error: authError } = await supabase.auth.getSession()
   const user = session?.user ?? null
 
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Sessão expirada. Faça login novamente.' }, { status: 401 })
+  if (!session) {
+    return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 })
   }
 
   const body = await request.json()
@@ -38,16 +224,14 @@ export async function POST(request: Request) {
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
 
-  const notas = {
-    comportamento: Number(body?.notas?.comportamento ?? body.comportamento ?? 0),
-    seguranca_emocional: Number(body?.notas?.seguranca_emocional ?? body.seguranca_emocional ?? 0),
-    respeito: Number(body?.notas?.respeito ?? body.respeito ?? 0),
-    carater: Number(body?.notas?.carater ?? body.carater ?? 0),
-    confianca: Number(body?.notas?.confianca ?? body.confianca ?? 0),
-  }
+  const flagsPositive = getStringArray(body.greenFlags ?? body.flags_positive)
+  const flagsNegative = getStringArray(body.redFlags ?? body.flags_negative)
 
-  const flags_positive = getStringArray(body.flags_positive ?? body.is_positive ?? body.greenFlags)
-  const flags_negative = getStringArray(body.flags_negative ?? body.is_negative ?? body.redFlags)
+  const comportamento = Number(body.comportamento ?? body.notas?.comportamento ?? 0)
+  const segurancaEmocional = Number(body.seguranca_emocional ?? body.notas?.seguranca_emocional ?? 0)
+  const respeito = Number(body.respeito ?? body.notas?.respeito ?? 0)
+  const carater = Number(body.carater ?? body.notas?.carater ?? 0)
+  const confianca = Number(body.confianca ?? body.notas?.confianca ?? 0)
 
   if (!nome) {
     return NextResponse.json({ error: 'Nome é obrigatório.' }, { status: 400 })
@@ -59,144 +243,48 @@ export async function POST(request: Request) {
   // - autora_id / cidade podem existir ou não (fallback)
   // =========================================================
 
-  let maleProfileId: string | null = null
+  try {
+    let maleProfileId = await findMaleProfileId(supabase, { nome, cidade })
 
-  // Tenta dedupe por display_name + cidade (se cidade existir)
-  // (se cidade não existir no schema cache, cai no fallback)
-  const lookup1 = await supabase
-    .from('male_profiles')
-    .select('id')
-    .ilike('display_name', nome)
-    .eq('cidade', cidade || '')
-    .maybeSingle()
-
-  if (!lookup1.error) {
-    maleProfileId = lookup1.data?.id ?? null
-  } else {
-    // Se a coluna cidade não existir, tenta sem cidade
-    const lookup2 = await supabase
-      .from('male_profiles')
-      .select('id')
-      .ilike('display_name', nome)
-      .maybeSingle()
-
-    if (lookup2.error) {
-      console.error('[api/avaliacoes/create] Erro ao buscar perfil:', lookup2.error)
-      return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
+    if (!maleProfileId) {
+      maleProfileId = await createMaleProfile(supabase, {
+        nome,
+        cidade,
+        normalizedName,
+        normalizedCity,
+        userId: user.id,
+      })
     }
 
-    maleProfileId = lookup2.data?.id ?? null
-  }
+    const { data: avaliacao, error: avaliacaoError } = await createAvaliacao(supabase, {
+      maleProfileId,
+      userId: user.id,
+      contato,
+      relato,
+      anonimo,
+      comportamento,
+      segurancaEmocional,
+      respeito,
+      carater,
+      confianca,
+      flagsPositive,
+      flagsNegative,
+    })
 
-  if (!maleProfileId) {
-    // Monta insert base SEMPRE com display_name (NOT NULL)
-    // (nome/telefone/cidade/autora_id: tenta e faz fallback se não existir)
-    const baseInsert: Record<string, any> = {
-      display_name: nome,   // <- crucial para não violar NOT NULL
-      nome: nome,
-      telefone: contato || null,
-      cidade: cidade || null,
-      autora_id: user.id,
-    }
-
-    // 1ª tentativa: com tudo
-    let insert = await supabase
-      .from('male_profiles')
-      .insert(baseInsert)
-      .select('id')
-      .single()
-
-    // fallback se autora_id não existir
-    if (insert.error && isMissingColumnError(insert.error, 'autora_id')) {
-      const { autora_id, ...withoutAutora } = baseInsert
-      insert = await supabase
-        .from('male_profiles')
-        .insert(withoutAutora)
-        .select('id')
-        .single()
-    }
-
-    // fallback se cidade não existir
-    if (insert.error && isMissingColumnError(insert.error, 'cidade')) {
-      const { cidade: _cidade, ...withoutCidade } = baseInsert
-      insert = await supabase
-        .from('male_profiles')
-        .insert(withoutCidade)
-        .select('id')
-        .single()
-    }
-
-    // fallback se telefone não existir
-    if (insert.error && isMissingColumnError(insert.error, 'telefone')) {
-      const { telefone, ...withoutTelefone } = baseInsert
-      insert = await supabase
-        .from('male_profiles')
-        .insert(withoutTelefone)
-        .select('id')
-        .single()
-    }
-
-    // Se ainda falhar, loga e retorna
-    if (insert.error || !insert.data) {
-      console.error('[api/avaliacoes/create] Erro ao inserir male_profiles:', insert.error)
+    if (avaliacaoError || !avaliacao?.id) {
       return NextResponse.json(
-        { error: insert.error?.message ?? 'Erro ao criar perfil avaliado.' },
+        { error: avaliacaoError?.message ?? 'Erro ao criar avaliação.' },
         { status: 400 }
       )
     }
 
-    maleProfileId = insert.data.id
+    return NextResponse.json({
+      ok: true,
+      male_profile_id: maleProfileId,
+      avaliacao_id: avaliacao.id,
+    })
+  } catch (error: any) {
+    console.error('[api/avaliacoes/create] erro:', error)
+    return NextResponse.json({ error: error?.message ?? 'Erro ao publicar avaliação.' }, { status: 400 })
   }
-
-  // =========================================================
-  // 2) INSERIR AVALIACAO (alinhado ao schema: autor_id)
-  // =========================================================
-  const avaliacaoPayload: Record<string, any> = {
-    male_profile_id: maleProfileId,
-    contato: contato || null,
-    relato: relato || null,
-    anonimo,
-    comportamento: notas.comportamento,
-    seguranca_emocional: notas.seguranca_emocional,
-    respeito: notas.respeito,
-    carater: notas.carater,
-    confianca: notas.confianca,
-    flags_positive,
-    flags_negative,
-    autor_id: user.id, // <- pelo seu print existe autor_id
-  }
-
-  // tenta inserir com flags_positive/flags_negative;
-  // se schema antigo não tiver, tenta fallback para "flags" (unificado)
-  let insertA = await supabase
-    .from('avaliacoes')
-    .insert(avaliacaoPayload)
-    .select('id')
-    .single()
-
-  if (insertA.error && (isMissingColumnError(insertA.error, 'flags_positive') || isMissingColumnError(insertA.error, 'flags_negative'))) {
-    const { flags_positive: _fp, flags_negative: _fn, ...rest } = avaliacaoPayload
-    insertA = await supabase
-      .from('avaliacoes')
-      .insert({
-        ...rest,
-        flags: [...flags_positive, ...flags_negative],
-      })
-      .select('id')
-      .single()
-  }
-
-  if (insertA.error || !insertA.data) {
-    console.error('[api/avaliacoes/create] Erro ao inserir avaliação:', insertA.error)
-    return NextResponse.json(
-      { error: insertA.error?.message ?? 'Erro ao publicar avaliação.' },
-      { status: 400 }
-    )
-  }
-
-  return NextResponse.json({
-    ok: true,
-    male_profile_id: maleProfileId,
-    avaliacao_id: insertA.data.id,
-  })
 }
