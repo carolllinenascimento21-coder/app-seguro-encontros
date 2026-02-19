@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       .from('avaliacoes')
       .insert({
         male_profile_id,
-        autora_id: user.id,
+        user_id: user.id,
         is_anonymous: Boolean(anonimo),
         publica: true,
         relato: typeof relato === 'string' ? relato : null,
