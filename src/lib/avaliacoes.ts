@@ -7,7 +7,7 @@ export type AvaliacaoRatings = {
 }
 
 export type AvaliacaoPayloadNormalizado = {
-  avaliadoId: string
+  maleProfileId: string
   nome: string | null
   descricao: string | null
   cidade: string | null
@@ -95,20 +95,20 @@ export const validateAvaliacaoPayload = (
     body.descricao ?? body.relato ?? body.comentario ?? body.comment
   )
 
-  const avaliadoIdRaw =
-    body.avaliadoId ?? body.avaliacaoId ?? body.avaliado_id
-  const avaliadoId =
-    typeof avaliadoIdRaw === 'string'
-      ? avaliadoIdRaw.trim()
-      : typeof avaliadoIdRaw === 'number'
-        ? String(avaliadoIdRaw)
+  const maleProfileIdRaw =
+    body.maleProfileId ?? body.male_profile_id
+  const maleProfileId =
+    typeof maleProfileIdRaw === 'string'
+      ? maleProfileIdRaw.trim()
+      : typeof maleProfileIdRaw === 'number'
+        ? String(maleProfileIdRaw)
         : null
 
-  // 🔒 REGRA: avaliadoId é obrigatório e precisa ser UUID
-  if (!avaliadoId) {
-    errors.avaliadoId = 'avaliadoId é obrigatório.'
-  } else if (!isUuid(avaliadoId)) {
-    errors.avaliadoId = 'avaliadoId inválido.'
+  // 🔒 REGRA: maleProfileId é obrigatório e precisa ser UUID
+  if (!maleProfileId) {
+    errors.maleProfileId = 'maleProfileId é obrigatório.'
+  } else if (!isUuid(maleProfileId)) {
+    errors.maleProfileId = 'maleProfileId inválido.'
   }
 
   // 🔒 REGRA: nome deve ser null quando anônimo e obrigatório quando não for
@@ -201,7 +201,7 @@ export const validateAvaliacaoPayload = (
   return {
     success: true,
     data: {
-      avaliadoId,
+      maleProfileId: maleProfileId as string,
       nome: isAnonimo ? null : nome,
       descricao: descricao || null,
       cidade,

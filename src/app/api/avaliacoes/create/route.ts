@@ -11,15 +11,6 @@ const getStringArray = (value: unknown) => {
     .filter(Boolean)
 }
 
-function isMissingColumnError(err: any, column: string) {
-  const msg = String(err?.message ?? '')
-  return (
-    msg.includes(`Could not find the '${column}' column`) ||
-    msg.includes(`column "${column}" does not exist`) ||
-    (msg.includes('does not exist') && msg.includes(column))
-  )
-}
-
 export async function POST(request: Request) {
   const supabase = createRouteHandlerClient({ cookies })
 
@@ -32,8 +23,8 @@ export async function POST(request: Request) {
 
   const body = await request.json()
 
-  const nome = getString(body.nome ?? body.name)
-  const cidade = getString(body.cidade ?? body.city)
+  const displayName = getString(body.nome ?? body.name ?? body.display_name)
+  const city = getString(body.cidade ?? body.city)
   const contato = getString(body.contato ?? body.telefone ?? body.phone)
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
@@ -49,94 +40,33 @@ export async function POST(request: Request) {
   const flags_positive = getStringArray(body.flags_positive ?? body.is_positive ?? body.greenFlags)
   const flags_negative = getStringArray(body.flags_negative ?? body.is_negative ?? body.redFlags)
 
-  if (!nome) {
+  if (!displayName) {
     return NextResponse.json({ error: 'Nome é obrigatório.' }, { status: 400 })
   }
 
-  // =========================================================
-  // 1) ACHAR / CRIAR male_profile_id (ALINHADO AO SCHEMA)
-  // - male_profiles.display_name é NOT NULL (print)
-  // - autora_id / cidade podem existir ou não (fallback)
-  // =========================================================
-
   let maleProfileId: string | null = null
 
-  // Tenta dedupe por display_name + cidade (se cidade existir)
-  // (se cidade não existir no schema cache, cai no fallback)
-  const lookup1 = await supabase
+  const lookup = await supabase
     .from('male_profiles')
-    .select('id')
-    .ilike('display_name', nome)
-    .eq('cidade', cidade || '')
+    .select('id, display_name, city, normalized_name, normalized_city')
+    .ilike('display_name', displayName)
+    .eq('city', city || '')
     .maybeSingle()
 
-  if (!lookup1.error) {
-    maleProfileId = lookup1.data?.id ?? null
-  } else {
-    // Se a coluna cidade não existir, tenta sem cidade
-    const lookup2 = await supabase
-      .from('male_profiles')
-      .select('id')
-      .ilike('display_name', nome)
-      .maybeSingle()
-
-    if (lookup2.error) {
-      console.error('[api/avaliacoes/create] Erro ao buscar perfil:', lookup2.error)
-      return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
-    }
-
-    maleProfileId = lookup2.data?.id ?? null
+  if (lookup.error) {
+    console.error('[api/avaliacoes/create] Erro ao buscar perfil:', lookup.error)
+    return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
   }
 
-  if (!maleProfileId) {
-    // Monta insert base SEMPRE com display_name (NOT NULL)
-    // (nome/telefone/cidade/autora_id: tenta e faz fallback se não existir)
-    const baseInsert: Record<string, any> = {
-      display_name: nome,   // <- crucial para não violar NOT NULL
-      nome: nome,
-      telefone: contato || null,
-      cidade: cidade || null,
-      user_id: user.id,
-    }
+  maleProfileId = lookup.data?.id ?? null
 
-    // 1ª tentativa: com tudo
+  if (!maleProfileId) {
     let insert = await supabase
       .from('male_profiles')
-      .insert(baseInsert)
-      .select('id')
+      .insert({ display_name: displayName, city: city || null })
+      .select('id, display_name, city, normalized_name, normalized_city')
       .single()
 
-    // fallback se autora_id não existir
-    if (insert.error && isMissingColumnError(insert.error, 'autora_id')) {
-      const { autora_id, ...withoutAutora } = baseInsert
-      insert = await supabase
-        .from('male_profiles')
-        .insert(withoutAutora)
-        .select('id')
-        .single()
-    }
-
-    // fallback se cidade não existir
-    if (insert.error && isMissingColumnError(insert.error, 'cidade')) {
-      const { cidade: _cidade, ...withoutCidade } = baseInsert
-      insert = await supabase
-        .from('male_profiles')
-        .insert(withoutCidade)
-        .select('id')
-        .single()
-    }
-
-    // fallback se telefone não existir
-    if (insert.error && isMissingColumnError(insert.error, 'telefone')) {
-      const { telefone, ...withoutTelefone } = baseInsert
-      insert = await supabase
-        .from('male_profiles')
-        .insert(withoutTelefone)
-        .select('id')
-        .single()
-    }
-
-    // Se ainda falhar, loga e retorna
     if (insert.error || !insert.data) {
       console.error('[api/avaliacoes/create] Erro ao inserir male_profiles:', insert.error)
       return NextResponse.json(
@@ -148,9 +78,6 @@ export async function POST(request: Request) {
     maleProfileId = insert.data.id
   }
 
-  // =========================================================
-  // 2) INSERIR AVALIACAO (alinhado ao schema: autor_id)
-  // =========================================================
   const avaliacaoPayload: Record<string, any> = {
     male_profile_id: maleProfileId,
     contato: contato || null,
@@ -163,28 +90,14 @@ export async function POST(request: Request) {
     confianca: notas.confianca,
     flags_positive,
     flags_negative,
-    autor_id: user.id, // <- pelo seu print existe autor_id
+    autor_id: user.id,
   }
 
-  // tenta inserir com flags_positive/flags_negative;
-  // se schema antigo não tiver, tenta fallback para "flags" (unificado)
   let insertA = await supabase
     .from('avaliacoes')
     .insert(avaliacaoPayload)
     .select('id')
     .single()
-
-  if (insertA.error && (isMissingColumnError(insertA.error, 'flags_positive') || isMissingColumnError(insertA.error, 'flags_negative'))) {
-    const { flags_positive: _fp, flags_negative: _fn, ...rest } = avaliacaoPayload
-    insertA = await supabase
-      .from('avaliacoes')
-      .insert({
-        ...rest,
-        flags: [...flags_positive, ...flags_negative],
-      })
-      .select('id')
-      .single()
-  }
 
   if (insertA.error || !insertA.data) {
     console.error('[api/avaliacoes/create] Erro ao inserir avaliação:', insertA.error)

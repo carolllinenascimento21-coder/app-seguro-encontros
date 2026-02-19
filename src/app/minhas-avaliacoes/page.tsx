@@ -8,12 +8,12 @@ import { createSupabaseClient } from '@/lib/supabase'
 
 const supabase = createSupabaseClient()
 
-type MaleProfileRow = {
+type MaleProfile = {
   id: string
-  display_name?: string | null
-  normalized_name?: string | null
-  city?: string | null
-  normalized_city?: string | null
+  display_name: string
+  city: string | null
+  normalized_name: string
+  normalized_city: string
 }
 
 interface AvaliacaoRow {
@@ -34,7 +34,7 @@ export default function MinhasAvaliacoes() {
   const router = useRouter()
 
   const [avaliacoes, setAvaliacoes] = useState<AvaliacaoRow[]>([])
-  const [profilesById, setProfilesById] = useState<Record<string, MaleProfileRow>>({})
+  const [profilesById, setProfilesById] = useState<Record<string, MaleProfile>>({})
   const [loading, setLoading] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null)
@@ -100,12 +100,12 @@ export default function MinhasAvaliacoes() {
       // ✅ Usa city (coluna real do banco)
       const { data: profiles, error: profError } = await supabase
         .from('male_profiles')
-        .select('id, display_name, normalized_name, city, normalized_city')
+        .select('id, display_name, city, normalized_name, normalized_city')
         .in('id', ids)
 
       if (profError) throw profError
 
-      const map: Record<string, MaleProfileRow> = {}
+      const map: Record<string, MaleProfile> = {}
       ;(profiles ?? []).forEach((p: any) => {
         map[p.id] = p
       })
