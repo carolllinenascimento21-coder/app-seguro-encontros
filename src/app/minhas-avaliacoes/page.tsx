@@ -1,22 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
 
-type MaleProfile = {
+const supabase = createSupabaseClient()
+
+type MaleProfileRow = {
   id: string
-  name: string | null
-  cidade: string | null
+  nome?: string | null
+  normalized_name?: string | null
+  cidade?: string | null
+  normalized_city?: string | null
 }
 
 interface AvaliacaoRow {
   id: string
   male_profile_id: string | null
-  flags_positive: string[]
-  flags_negative: string[]
+  flags_positive: string[] | null
+  flags_negative: string[] | null
   relato: string | null
   comportamento: number
   seguranca_emocional: number
@@ -24,27 +28,32 @@ interface AvaliacaoRow {
   carater: number
   confianca: number
   created_at: string
-  male_profiles: MaleProfile | null
 }
 
 export default function MinhasAvaliacoes() {
   const router = useRouter()
-  const supabase = createSupabaseClient()
 
   const [avaliacoes, setAvaliacoes] = useState<AvaliacaoRow[]>([])
+  const [profilesById, setProfilesById] = useState<Record<string, MaleProfileRow>>({})
   const [loading, setLoading] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null)
 
   useEffect(() => {
     carregarAvaliacoes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const carregarAvaliacoes = async () => {
-    if (!supabase) return
-
     try {
       setLoading(true)
+
+      if (!supabase) {
+        console.error('Supabase client não inicializado (env ausente).')
+        setAvaliacoes([])
+        setProfilesById({})
+        return
+      }
 
       const {
         data: { session },
@@ -57,9 +66,13 @@ export default function MinhasAvaliacoes() {
 
       const userId = session.user.id
 
-      const { data, error } = await supabase
+      // 1) Busca avaliações do usuário (sem join)
+      let rows: AvaliacaoRow[] = []
+
+      const authorQuery = await supabase
         .from('avaliacoes')
-        .select(`
+        .select(
+          `
           id,
           male_profile_id,
           flags_positive,
@@ -70,31 +83,88 @@ export default function MinhasAvaliacoes() {
           respeito,
           carater,
           confianca,
-          created_at,
-          male_profiles (
-            id,
-            name,
-            cidade
-          )
-        `)
+          created_at
+        `
+        )
         .eq('author_id', userId)
         .order('created_at', { ascending: false })
 
-      if (error) {
-        console.error('Erro ao buscar avaliações:', error)
-        return
+      if (authorQuery.error) {
+        const shouldRetryWithAutorId = /author_id/i.test(authorQuery.error.message)
+
+        if (!shouldRetryWithAutorId) throw authorQuery.error
+
+        const autorQuery = await supabase
+          .from('avaliacoes')
+          .select(
+            `
+            id,
+            male_profile_id,
+            flags_positive,
+            flags_negative,
+            relato,
+            comportamento,
+            seguranca_emocional,
+            respeito,
+            carater,
+            confianca,
+            created_at
+          `
+          )
+          .eq('autor_id', userId)
+          .order('created_at', { ascending: false })
+
+        if (autorQuery.error) throw autorQuery.error
+        rows = (autorQuery.data ?? []) as any
+      } else {
+        rows = (authorQuery.data ?? []) as any
       }
 
-      const ui: AvaliacaoRow[] = (data ?? []).map((a: any) => ({
+      const ui = (rows ?? []).map((a: any) => ({
         ...a,
         flags_positive: a.flags_positive ?? [],
         flags_negative: a.flags_negative ?? [],
-        male_profiles: a.male_profiles ?? null,
-      }))
+      })) as AvaliacaoRow[]
 
       setAvaliacoes(ui)
+
+      // 2) Busca perfis dos homens por IDs (segunda query)
+      const ids = Array.from(
+        new Set(ui.map((a) => a.male_profile_id).filter(Boolean) as string[])
+      )
+
+      if (ids.length === 0) {
+        setProfilesById({})
+        return
+      }
+
+      // Tentativa A: pegar nome/cidade (se existirem) + normalized_*
+      const profA = await supabase
+        .from('male_profiles')
+        .select('id, nome, cidade, normalized_name, normalized_city')
+        .in('id', ids)
+
+      if (profA.error) {
+        // Tentativa B: se 'cidade' não existir, busca sem ela
+        const profB = await supabase
+          .from('male_profiles')
+          .select('id, nome, normalized_name, normalized_city')
+          .in('id', ids)
+
+        if (profB.error) throw profB.error
+
+        const map: Record<string, MaleProfileRow> = {}
+        ;(profB.data ?? []).forEach((p: any) => (map[p.id] = p))
+        setProfilesById(map)
+      } else {
+        const map: Record<string, MaleProfileRow> = {}
+        ;(profA.data ?? []).forEach((p: any) => (map[p.id] = p))
+        setProfilesById(map)
+      }
     } catch (err) {
-      console.error('Erro inesperado:', err)
+      console.error('Erro ao carregar avaliações:', err)
+      setAvaliacoes([])
+      setProfilesById({})
     } finally {
       setLoading(false)
     }
@@ -113,17 +183,10 @@ export default function MinhasAvaliacoes() {
     if (!avaliacaoToDelete || !supabase) return
 
     try {
-      const { error } = await supabase
-        .from('avaliacoes')
-        .delete()
-        .eq('id', avaliacaoToDelete)
-
+      const { error } = await supabase.from('avaliacoes').delete().eq('id', avaliacaoToDelete)
       if (error) throw error
 
-      setAvaliacoes((prev) =>
-        prev.filter((a) => a.id !== avaliacaoToDelete)
-      )
-
+      setAvaliacoes((prev) => prev.filter((a) => a.id !== avaliacaoToDelete))
       setShowDeleteModal(false)
       setAvaliacaoToDelete(null)
     } catch (err) {
@@ -133,17 +196,23 @@ export default function MinhasAvaliacoes() {
   }
 
   const mediaNota = (a: AvaliacaoRow) =>
-    (
-      (a.comportamento +
-        a.seguranca_emocional +
-        a.respeito +
-        a.carater +
-        a.confianca) /
-      5
-    ).toFixed(1)
+    ((a.comportamento + a.seguranca_emocional + a.respeito + a.carater + a.confianca) / 5).toFixed(1)
 
-  const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString('pt-BR')
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('pt-BR')
+
+  const displayNameByAvaliacao = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const a of avaliacoes) {
+      const pid = a.male_profile_id
+      if (!pid) {
+        map[a.id] = 'Nome não informado'
+        continue
+      }
+      const p = profilesById[pid]
+      map[a.id] = (p?.nome || p?.normalized_name || 'Nome não informado') as string
+    }
+    return map
+  }, [avaliacoes, profilesById])
 
   if (loading) {
     return (
@@ -156,12 +225,8 @@ export default function MinhasAvaliacoes() {
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-1">
-          Minhas Avaliações
-        </h1>
-        <p className="text-gray-400 text-sm">
-          Apenas você pode ver estas avaliações.
-        </p>
+        <h1 className="text-2xl font-bold text-white mb-1">Minhas Avaliações</h1>
+        <p className="text-gray-400 text-sm">Apenas você pode ver estas avaliações.</p>
 
         <div className="mt-4 mb-6">
           <button
@@ -175,45 +240,24 @@ export default function MinhasAvaliacoes() {
         {avaliacoes.length === 0 ? (
           <div className="bg-[#1A1A1A] rounded-xl p-6 text-center">
             <AlertCircle className="w-10 h-10 mx-auto text-gray-500 mb-3" />
-            <p className="text-gray-400 text-sm">
-              Você ainda não fez nenhuma avaliação.
-            </p>
+            <p className="text-gray-400 text-sm">Você ainda não fez nenhuma avaliação.</p>
           </div>
         ) : (
           <div className="space-y-4">
             {avaliacoes.map((a) => (
-              <div
-                key={a.id}
-                className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5"
-              >
+              <div key={a.id} className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5">
                 <div className="flex justify-between mb-2">
                   <div>
-                    <h3 className="text-white font-bold">
-                      {a.male_profiles?.name ?? 'Nome não informado'}
-                    </h3>
-                    {a.male_profiles?.cidade && (
-                      <p className="text-gray-500 text-xs">
-                        {a.male_profiles.cidade}
-                      </p>
-                    )}
-                    <p className="text-gray-400 text-xs">
-                      {formatDate(a.created_at)}
-                    </p>
+                    <h3 className="text-white font-bold">{displayNameByAvaliacao[a.id]}</h3>
+                    <p className="text-gray-400 text-xs">{formatDate(a.created_at)}</p>
                   </div>
-
                   <div className="flex items-center gap-1">
                     <Star className="w-5 h-5 text-[#D4AF37] fill-current" />
-                    <span className="text-[#D4AF37] font-bold">
-                      {mediaNota(a)}
-                    </span>
+                    <span className="text-[#D4AF37] font-bold">{mediaNota(a)}</span>
                   </div>
                 </div>
 
-                {a.relato && (
-                  <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-                    {a.relato}
-                  </p>
-                )}
+                {a.relato && <p className="text-gray-300 text-sm mb-3 line-clamp-2">{a.relato}</p>}
 
                 <div className="flex gap-2">
                   <button
@@ -240,12 +284,8 @@ export default function MinhasAvaliacoes() {
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-[#1A1A1A] p-6 rounded-xl w-full max-w-sm">
-            <h3 className="text-white font-bold mb-3">
-              Excluir avaliação?
-            </h3>
-            <p className="text-gray-400 text-sm mb-6">
-              Esta ação é permanente.
-            </p>
+            <h3 className="text-white font-bold mb-3">Excluir avaliação?</h3>
+            <p className="text-gray-400 text-sm mb-6">Esta ação é permanente.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
