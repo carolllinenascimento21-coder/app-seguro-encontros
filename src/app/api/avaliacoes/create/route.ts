@@ -2,11 +2,19 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
+function normalize(text: string) {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
 const getString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : ''
 
 const getStringArray = (value: unknown) => {
-  if (!Array.isArray(value)) return []
+  if (!Array.isArray(value)) return [] as string[]
   return value
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
@@ -22,7 +30,7 @@ export async function POST(request: Request) {
 
   if (!session) {
     return NextResponse.json(
-      { error: 'Sessão expirada. Faça login novamente.' },
+      { error: 'Sessão expirada.' },
       { status: 401 }
     )
   }
@@ -36,6 +44,15 @@ export async function POST(request: Request) {
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
 
+  const flags_positive = getStringArray(body.greenFlags)
+  const flags_negative = getStringArray(body.redFlags)
+
+  const comportamento = Number(body.comportamento ?? 0)
+  const seguranca_emocional = Number(body.seguranca_emocional ?? 0)
+  const respeito = Number(body.respeito ?? 0)
+  const carater = Number(body.carater ?? 0)
+  const confianca = Number(body.confianca ?? 0)
+
   if (!nome) {
     return NextResponse.json(
       { error: 'Nome é obrigatório.' },
@@ -43,64 +60,69 @@ export async function POST(request: Request) {
     )
   }
 
-  // 🔹 1. Busca perfil existente pelo nome + cidade
-  const { data: existingProfile } = await supabase
+  const normalizedName = normalize(nome)
+  const normalizedCity = cidade ? normalize(cidade) : ''
+
+  // 🔎 BUSCA PERFIL EXISTENTE
+  const { data: existing } = await supabase
     .from('male_profiles')
     .select('id')
-    .eq('nome', nome)
-    .eq('cidade', cidade || null)
+    .eq('normalized_name', normalizedName)
+    .eq('normalized_city', normalizedCity)
     .maybeSingle()
 
-  let maleProfileId = existingProfile?.id ?? null
+  let maleProfileId = existing?.id ?? null
 
-  // 🔹 2. Se não existir, cria perfil corretamente
+  // ➕ CRIA PERFIL SE NÃO EXISTIR
   if (!maleProfileId) {
-    const { data: newProfile, error: profileError } = await supabase
+    const { data: inserted, error } = await supabase
       .from('male_profiles')
       .insert({
-        nome,
+        display_name: nome,                // 🔥 obrigatório
         cidade: cidade || null,
-        display_name: nome,      // 🔥 ESSENCIAL (campo NOT NULL)
-        autora_id: user.id       // 🔥 coluna correta do seu banco
+        normalized_name: normalizedName,
+        normalized_city: normalizedCity,
+        created_by: user.id,
       })
       .select('id')
       .single()
 
-    if (profileError || !newProfile) {
-      console.error('Erro ao criar perfil:', profileError)
+    if (error || !inserted) {
+      console.error(error)
       return NextResponse.json(
-        { error: profileError?.message ?? 'Erro ao criar perfil.' },
+        { error: error?.message ?? 'Erro ao criar perfil.' },
         { status: 400 }
       )
     }
 
-    maleProfileId = newProfile.id
+    maleProfileId = inserted.id
   }
 
-  // 🔹 3. Cria avaliação
-  const { data: avaliacao, error: avaliacaoError } = await supabase
-    .from('avaliacoes')
-    .insert({
-      male_profile_id: maleProfileId,
-      contato: contato || null,
-      relato: relato || null,
-      anonimo,
-      comportamento: Number(body.comportamento ?? 0),
-      seguranca_emocional: Number(body.seguranca_emocional ?? 0),
-      respeito: Number(body.respeito ?? 0),
-      carater: Number(body.carater ?? 0),
-      confianca: Number(body.confianca ?? 0),
-      flags_positive: getStringArray(body.flags_positive ?? body.greenFlags),
-      flags_negative: getStringArray(body.flags_negative ?? body.redFlags),
-      autora_id: user.id
-    })
-    .select('id')
-    .single()
+  // ➕ CRIA AVALIAÇÃO
+  const { data: avaliacao, error: avaliacaoError } =
+    await supabase
+      .from('avaliacoes')
+      .insert({
+        male_profile_id: maleProfileId,
+        contato: contato || null,
+        relato: relato || null,
+        anonimo,
+        comportamento,
+        seguranca_emocional,
+        respeito,
+        carater,
+        confianca,
+        flags_positive,
+        flags_negative,
+        autora_id: user.id, // ✅ sua tabela usa autora_id
+      })
+      .select('id')
+      .single()
 
-  if (avaliacaoError || !avaliacao) {
-    console.error('Erro ao criar avaliação:', avaliacaoError)
+  if (avaliacaoError) {
+    console.error(avaliacaoError)
     return NextResponse.json(
-      { error: avaliacaoError?.message ?? 'Erro ao publicar avaliação.' },
+      { error: avaliacaoError.message },
       { status: 400 }
     )
   }
