@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
 import { useRouter } from 'next/navigation';
@@ -10,8 +10,8 @@ const supabase = createSupabaseClient();
 
 type MaleProfile = {
   id: string;
-  display_name: string | null;
-  city: string | null;
+  nome: string | null;
+  cidade: string | null;
 };
 
 interface AvaliacaoRow {
@@ -64,7 +64,9 @@ export default function MinhasAvaliacoes() {
       const userId = session.user.id;
 
       // 1) Busca avaliações do usuário
-      const { data: rows, error: errA } = await supabase
+      let rows: any[] | null = null
+
+      const authorQuery = await supabase
         .from('avaliacoes')
         .select(
           [
@@ -81,10 +83,42 @@ export default function MinhasAvaliacoes() {
             'created_at',
           ].join(',')
         )
-        .eq('autor_id', userId)
+        .eq('author_id', userId)
         .order('created_at', { ascending: false });
 
-      if (errA) throw errA;
+      if (authorQuery.error) {
+        const shouldRetryWithAutorId = /author_id/i.test(authorQuery.error.message)
+
+        if (!shouldRetryWithAutorId) {
+          throw authorQuery.error
+        }
+
+        const autorQuery = await supabase
+          .from('avaliacoes')
+          .select(
+            [
+              'id',
+              'male_profile_id',
+              'flags_positive',
+              'flags_negative',
+              'relato',
+              'comportamento',
+              'seguranca_emocional',
+              'respeito',
+              'carater',
+              'confianca',
+              'created_at',
+            ].join(',')
+          )
+          .eq('autor_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (autorQuery.error) throw autorQuery.error
+
+        rows = autorQuery.data
+      } else {
+        rows = authorQuery.data
+      }
 
       const base: AvaliacaoRow[] = (rows ?? []) as any;
 
@@ -98,7 +132,7 @@ export default function MinhasAvaliacoes() {
       if (ids.length > 0) {
         const { data: profs, error: errP } = await supabase
           .from('male_profiles')
-          .select('id,display_name,city')
+          .select('id,nome,cidade')
           .in('id', ids);
 
         if (errP) throw errP;
@@ -113,7 +147,7 @@ export default function MinhasAvaliacoes() {
           flags_positive: a.flags_positive ?? [],
           flags_negative: a.flags_negative ?? [],
           avaliado: p
-            ? { nome: p.display_name ?? null, cidade: p.city ?? null }
+            ? { nome: p.nome ?? null, cidade: p.cidade ?? null }
             : null,
         };
       });
