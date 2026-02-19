@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
-function normalizeText(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+function normalize(text: string) {
+  return text
     .trim()
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
 }
 
 const getString = (value: unknown) => {
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
   const body = await request.json()
 
-  const nome = getString(body.nome)
+  const nome = getString(body.nome ?? body.name)
   const cidade = getString(body.cidade)
   const contato = getString(body.contato)
   const relato = getString(body.relato)
@@ -74,8 +74,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const normalizedName = normalizeText(nome)
-  const normalizedCity = normalizeText(cidade)
+  const normalizedName = normalize(nome)
+  const normalizedCity = normalize(cidade)
 
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('male_profiles')
@@ -98,8 +98,8 @@ export async function POST(request: Request) {
     const { data: insertedProfile, error: insertedProfileError } = await supabase
       .from('male_profiles')
       .insert({
-        nome,
-        cidade,
+        normalized_name: normalizedName,
+        normalized_city: normalizedCity,
         created_by: user.id,
       })
       .select('id')
