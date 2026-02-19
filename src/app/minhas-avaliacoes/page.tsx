@@ -1,64 +1,63 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react';
-import Navbar from '@/components/custom/navbar';
-import { useRouter } from 'next/navigation';
-import { createSupabaseClient } from '@/lib/supabase';
-
-const supabase = createSupabaseClient();
+import { useEffect, useState } from 'react'
+import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react'
+import Navbar from '@/components/custom/navbar'
+import { useRouter } from 'next/navigation'
+import { createSupabaseClient } from '@/lib/supabase'
 
 type MaleProfile = {
-  normalized_name: string | null;
-};
+  id: string
+  name: string | null
+  cidade: string | null
+}
 
 interface AvaliacaoRow {
-  id: string;
-  male_profile_id: string | null;
-  flags_positive: string[] | null;
-  flags_negative: string[] | null;
-  relato: string | null;
-  comportamento: number;
-  seguranca_emocional: number;
-  respeito: number;
-  carater: number;
-  confianca: number;
-  created_at: string;
-  male_profiles: MaleProfile | null;
+  id: string
+  male_profile_id: string | null
+  flags_positive: string[]
+  flags_negative: string[]
+  relato: string | null
+  comportamento: number
+  seguranca_emocional: number
+  respeito: number
+  carater: number
+  confianca: number
+  created_at: string
+  male_profiles: MaleProfile | null
 }
 
 export default function MinhasAvaliacoes() {
-  const router = useRouter();
+  const router = useRouter()
+  const supabase = createSupabaseClient()
 
-  const [avaliacoes, setAvaliacoes] = useState<AvaliacaoRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null);
+  const [avaliacoes, setAvaliacoes] = useState<AvaliacaoRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null)
 
   useEffect(() => {
-    carregarAvaliacoes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    carregarAvaliacoes()
+  }, [])
 
   const carregarAvaliacoes = async () => {
+    if (!supabase) return
+
     try {
-      setLoading(true);
+      setLoading(true)
 
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } = await supabase.auth.getSession()
 
       if (!session) {
-        router.push('/login');
-        return;
+        router.push('/login')
+        return
       }
 
-      const userId = session.user.id;
+      const userId = session.user.id
 
-      // 1) Busca avaliações do usuário
-      let rows: any[] | null = null
-
-      const authorQuery = await supabase
+      const { data, error } = await supabase
         .from('avaliacoes')
         .select(`
           id,
@@ -73,105 +72,96 @@ export default function MinhasAvaliacoes() {
           confianca,
           created_at,
           male_profiles (
-            normalized_name
+            id,
+            name,
+            cidade
           )
         `)
         .eq('author_id', userId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
 
-      if (authorQuery.error) {
-        const shouldRetryWithAutorId = /author_id/i.test(authorQuery.error.message)
-
-        if (!shouldRetryWithAutorId) {
-          throw authorQuery.error
-        }
-
-        const autorQuery = await supabase
-          .from('avaliacoes')
-          .select(`
-            id,
-            male_profile_id,
-            flags_positive,
-            flags_negative,
-            relato,
-            comportamento,
-            seguranca_emocional,
-            respeito,
-            carater,
-            confianca,
-            created_at,
-            male_profiles (
-              normalized_name
-            )
-          `)
-          .eq('autor_id', userId)
-          .order('created_at', { ascending: false });
-
-        if (autorQuery.error) throw autorQuery.error
-
-        rows = autorQuery.data
-      } else {
-        rows = authorQuery.data
+      if (error) {
+        console.error('Erro ao buscar avaliações:', error)
+        return
       }
 
-      const ui: AvaliacaoRow[] = ((rows ?? []) as any[]).map((a) => ({
+      const ui: AvaliacaoRow[] = (data ?? []).map((a: any) => ({
         ...a,
         flags_positive: a.flags_positive ?? [],
         flags_negative: a.flags_negative ?? [],
         male_profiles: a.male_profiles ?? null,
-      }));
+      }))
 
-      setAvaliacoes(ui);
+      setAvaliacoes(ui)
     } catch (err) {
-      console.error('Erro ao carregar avaliações:', err);
+      console.error('Erro inesperado:', err)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleEdit = (id: string) => {
-    router.push(`/minhas-avaliacoes/editar/${id}`);
-  };
+    router.push(`/minhas-avaliacoes/editar/${id}`)
+  }
 
   const handleDeleteClick = (id: string) => {
-    setAvaliacaoToDelete(id);
-    setShowDeleteModal(true);
-  };
+    setAvaliacaoToDelete(id)
+    setShowDeleteModal(true)
+  }
 
   const handleDeleteConfirm = async () => {
-    if (!avaliacaoToDelete) return;
+    if (!avaliacaoToDelete || !supabase) return
 
     try {
-      const { error } = await supabase.from('avaliacoes').delete().eq('id', avaliacaoToDelete);
-      if (error) throw error;
+      const { error } = await supabase
+        .from('avaliacoes')
+        .delete()
+        .eq('id', avaliacaoToDelete)
 
-      setAvaliacoes((prev) => prev.filter((a) => a.id !== avaliacaoToDelete));
-      setShowDeleteModal(false);
-      setAvaliacaoToDelete(null);
+      if (error) throw error
+
+      setAvaliacoes((prev) =>
+        prev.filter((a) => a.id !== avaliacaoToDelete)
+      )
+
+      setShowDeleteModal(false)
+      setAvaliacaoToDelete(null)
     } catch (err) {
-      console.error('Erro ao excluir avaliação:', err);
-      alert('Erro ao excluir avaliação.');
+      console.error('Erro ao excluir avaliação:', err)
+      alert('Erro ao excluir avaliação.')
     }
-  };
+  }
 
   const mediaNota = (a: AvaliacaoRow) =>
-    ((a.comportamento + a.seguranca_emocional + a.respeito + a.carater + a.confianca) / 5).toFixed(1);
+    (
+      (a.comportamento +
+        a.seguranca_emocional +
+        a.respeito +
+        a.carater +
+        a.confianca) /
+      5
+    ).toFixed(1)
 
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('pt-BR');
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString('pt-BR')
 
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#D4AF37]" />
       </div>
-    );
+    )
   }
 
   return (
     <div className="min-h-screen bg-black pb-20">
       <div className="px-4 pt-8 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-1">Minhas Avaliações</h1>
-        <p className="text-gray-400 text-sm">Apenas você pode ver estas avaliações.</p>
+        <h1 className="text-2xl font-bold text-white mb-1">
+          Minhas Avaliações
+        </h1>
+        <p className="text-gray-400 text-sm">
+          Apenas você pode ver estas avaliações.
+        </p>
 
         <div className="mt-4 mb-6">
           <button
@@ -185,29 +175,44 @@ export default function MinhasAvaliacoes() {
         {avaliacoes.length === 0 ? (
           <div className="bg-[#1A1A1A] rounded-xl p-6 text-center">
             <AlertCircle className="w-10 h-10 mx-auto text-gray-500 mb-3" />
-            <p className="text-gray-400 text-sm">Você ainda não fez nenhuma avaliação.</p>
+            <p className="text-gray-400 text-sm">
+              Você ainda não fez nenhuma avaliação.
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
             {avaliacoes.map((a) => (
-              <div key={a.id} className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5">
+              <div
+                key={a.id}
+                className="bg-[#1A1A1A] border border-gray-800 rounded-xl p-5"
+              >
                 <div className="flex justify-between mb-2">
                   <div>
                     <h3 className="text-white font-bold">
-                      {a.male_profiles?.normalized_name || 'Nome não informado'}
+                      {a.male_profiles?.name ?? 'Nome não informado'}
                     </h3>
+                    {a.male_profiles?.cidade && (
+                      <p className="text-gray-500 text-xs">
+                        {a.male_profiles.cidade}
+                      </p>
+                    )}
                     <p className="text-gray-400 text-xs">
                       {formatDate(a.created_at)}
                     </p>
                   </div>
+
                   <div className="flex items-center gap-1">
                     <Star className="w-5 h-5 text-[#D4AF37] fill-current" />
-                    <span className="text-[#D4AF37] font-bold">{mediaNota(a)}</span>
+                    <span className="text-[#D4AF37] font-bold">
+                      {mediaNota(a)}
+                    </span>
                   </div>
                 </div>
 
                 {a.relato && (
-                  <p className="text-gray-300 text-sm mb-3 line-clamp-2">{a.relato}</p>
+                  <p className="text-gray-300 text-sm mb-3 line-clamp-2">
+                    {a.relato}
+                  </p>
                 )}
 
                 <div className="flex gap-2">
@@ -235,8 +240,12 @@ export default function MinhasAvaliacoes() {
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-[#1A1A1A] p-6 rounded-xl w-full max-w-sm">
-            <h3 className="text-white font-bold mb-3">Excluir avaliação?</h3>
-            <p className="text-gray-400 text-sm mb-6">Esta ação é permanente.</p>
+            <h3 className="text-white font-bold mb-3">
+              Excluir avaliação?
+            </h3>
+            <p className="text-gray-400 text-sm mb-6">
+              Esta ação é permanente.
+            </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
@@ -257,5 +266,5 @@ export default function MinhasAvaliacoes() {
 
       <Navbar />
     </div>
-  );
+  )
 }
