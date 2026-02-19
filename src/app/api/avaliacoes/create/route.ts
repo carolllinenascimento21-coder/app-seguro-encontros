@@ -209,20 +209,18 @@ async function createAvaliacao(
 export async function POST(request: Request) {
   const supabase = createRouteHandlerClient({ cookies })
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const { data: { session }, error: authError } = await supabase.auth.getSession()
+  const user = session?.user ?? null
 
   if (!session) {
     return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 })
   }
 
-  const user = session.user
   const body = await request.json()
 
   const nome = getString(body.nome ?? body.name)
   const cidade = getString(body.cidade ?? body.city)
-  const contato = getString(body.contato)
+  const contato = getString(body.contato ?? body.telefone ?? body.phone)
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
 
@@ -239,8 +237,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Nome é obrigatório.' }, { status: 400 })
   }
 
-  const normalizedName = normalize(nome)
-  const normalizedCity = cidade ? normalize(cidade) : ''
+  // =========================================================
+  // 1) ACHAR / CRIAR male_profile_id (ALINHADO AO SCHEMA)
+  // - male_profiles.display_name é NOT NULL (print)
+  // - autora_id / cidade podem existir ou não (fallback)
+  // =========================================================
 
   try {
     let maleProfileId = await findMaleProfileId(supabase, { nome, cidade })
