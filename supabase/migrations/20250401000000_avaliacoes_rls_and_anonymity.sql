@@ -16,19 +16,6 @@ begin
       from information_schema.columns
      where table_schema = 'public'
        and table_name = 'avaliacoes'
-       and column_name = 'autor_id'
-  ) then
-    execute 'update public.avaliacoes set user_id = autor_id where user_id is null';
-  end if;
-end $$;
-
-do $$
-begin
-  if exists (
-    select 1
-      from information_schema.columns
-     where table_schema = 'public'
-       and table_name = 'avaliacoes'
        and column_name = 'anonimo'
   ) then
     execute 'update public.avaliacoes set is_anonymous = anonimo where is_anonymous is null';

@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     confianca: notas.confianca,
     flags_positive,
     flags_negative,
-    autor_id: user.id,
+    user_id: user.id,
   }
 
   let insertA = await supabase

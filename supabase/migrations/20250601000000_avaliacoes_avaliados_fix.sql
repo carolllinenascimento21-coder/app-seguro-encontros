@@ -42,7 +42,7 @@ create policy "Avaliacoes select public or own"
   for select
   using (
     publica = true
-    or autor_id = auth.uid()
+    or user_id = auth.uid()
   );
 
 -- Avaliacoes: inserção pública permitida
@@ -59,15 +59,15 @@ drop policy if exists "Avaliacoes update own" on public.avaliacoes;
 create policy "Avaliacoes update own"
   on public.avaliacoes
   for update
-  using (autor_id = auth.uid())
-  with check (autor_id = auth.uid());
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
 
 drop policy if exists "Avaliacoes delete own" on public.avaliacoes;
 create policy "Avaliacoes delete own"
   on public.avaliacoes
   for delete
-  using (autor_id = auth.uid());
+  using (user_id = auth.uid());
 
 alter table public.avaliados enable row level security;
 
@@ -82,7 +82,7 @@ create policy "Avaliados select public or own"
       select 1
         from public.avaliacoes a
        where a.avaliado_id = avaliados.id
-         and (a.publica = true or a.autor_id = auth.uid())
+         and (a.publica = true or a.user_id = auth.uid())
     )
   );
 
