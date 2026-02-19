@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       nome: nome,
       telefone: contato || null,
       cidade: cidade || null,
-      autora_id: user.id,
+      user_id: user.id,
     }
 
     // 1ª tentativa: com tudo
