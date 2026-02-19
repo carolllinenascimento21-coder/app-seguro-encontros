@@ -9,9 +9,7 @@ import { createSupabaseClient } from '@/lib/supabase';
 const supabase = createSupabaseClient();
 
 type MaleProfile = {
-  id: string;
-  nome: string | null;
-  cidade: string | null;
+  normalized_name: string | null;
 };
 
 interface AvaliacaoRow {
@@ -26,19 +24,13 @@ interface AvaliacaoRow {
   carater: number;
   confianca: number;
   created_at: string;
-}
-
-interface AvaliacaoUI extends AvaliacaoRow {
-  avaliado: {
-    nome: string | null;
-    cidade: string | null;
-  } | null;
+  male_profiles: MaleProfile | null;
 }
 
 export default function MinhasAvaliacoes() {
   const router = useRouter();
 
-  const [avaliacoes, setAvaliacoes] = useState<AvaliacaoUI[]>([]);
+  const [avaliacoes, setAvaliacoes] = useState<AvaliacaoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [avaliacaoToDelete, setAvaliacaoToDelete] = useState<string | null>(null);
@@ -68,21 +60,22 @@ export default function MinhasAvaliacoes() {
 
       const authorQuery = await supabase
         .from('avaliacoes')
-        .select(
-          [
-            'id',
-            'male_profile_id',
-            'flags_positive',
-            'flags_negative',
-            'relato',
-            'comportamento',
-            'seguranca_emocional',
-            'respeito',
-            'carater',
-            'confianca',
-            'created_at',
-          ].join(',')
-        )
+        .select(`
+          id,
+          male_profile_id,
+          flags_positive,
+          flags_negative,
+          relato,
+          comportamento,
+          seguranca_emocional,
+          respeito,
+          carater,
+          confianca,
+          created_at,
+          male_profiles (
+            normalized_name
+          )
+        `)
         .eq('author_id', userId)
         .order('created_at', { ascending: false });
 
@@ -95,21 +88,22 @@ export default function MinhasAvaliacoes() {
 
         const autorQuery = await supabase
           .from('avaliacoes')
-          .select(
-            [
-              'id',
-              'male_profile_id',
-              'flags_positive',
-              'flags_negative',
-              'relato',
-              'comportamento',
-              'seguranca_emocional',
-              'respeito',
-              'carater',
-              'confianca',
-              'created_at',
-            ].join(',')
-          )
+          .select(`
+            id,
+            male_profile_id,
+            flags_positive,
+            flags_negative,
+            relato,
+            comportamento,
+            seguranca_emocional,
+            respeito,
+            carater,
+            confianca,
+            created_at,
+            male_profiles (
+              normalized_name
+            )
+          `)
           .eq('autor_id', userId)
           .order('created_at', { ascending: false });
 
@@ -120,37 +114,12 @@ export default function MinhasAvaliacoes() {
         rows = authorQuery.data
       }
 
-      const base: AvaliacaoRow[] = (rows ?? []) as any;
-
-      // 2) Busca perfis masculinos vinculados
-      const ids = Array.from(
-        new Set(base.map((a) => a.male_profile_id).filter(Boolean))
-      ) as string[];
-
-      let profilesById = new Map<string, MaleProfile>();
-
-      if (ids.length > 0) {
-        const { data: profs, error: errP } = await supabase
-          .from('male_profiles')
-          .select('id,nome,cidade')
-          .in('id', ids);
-
-        if (errP) throw errP;
-
-        (profs ?? []).forEach((p: any) => profilesById.set(p.id, p));
-      }
-
-      const ui: AvaliacaoUI[] = base.map((a) => {
-        const p = a.male_profile_id ? profilesById.get(a.male_profile_id) : null;
-        return {
-          ...a,
-          flags_positive: a.flags_positive ?? [],
-          flags_negative: a.flags_negative ?? [],
-          avaliado: p
-            ? { nome: p.nome ?? null, cidade: p.cidade ?? null }
-            : null,
-        };
-      });
+      const ui: AvaliacaoRow[] = ((rows ?? []) as any[]).map((a) => ({
+        ...a,
+        flags_positive: a.flags_positive ?? [],
+        flags_negative: a.flags_negative ?? [],
+        male_profiles: a.male_profiles ?? null,
+      }));
 
       setAvaliacoes(ui);
     } catch (err) {
@@ -185,7 +154,7 @@ export default function MinhasAvaliacoes() {
     }
   };
 
-  const mediaNota = (a: AvaliacaoUI) =>
+  const mediaNota = (a: AvaliacaoRow) =>
     ((a.comportamento + a.seguranca_emocional + a.respeito + a.carater + a.confianca) / 5).toFixed(1);
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('pt-BR');
@@ -225,10 +194,9 @@ export default function MinhasAvaliacoes() {
                 <div className="flex justify-between mb-2">
                   <div>
                     <h3 className="text-white font-bold">
-                      {a.avaliado?.nome || 'Nome não informado'}
+                      {a.male_profiles?.normalized_name || 'Nome não informado'}
                     </h3>
                     <p className="text-gray-400 text-xs">
-                      {a.avaliado?.cidade ? `${a.avaliado.cidade} • ` : ''}
                       {formatDate(a.created_at)}
                     </p>
                   </div>
