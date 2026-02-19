@@ -30,16 +30,16 @@ const INITIAL_NOTAS: Notas = {
 }
 
 const inputClassName =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm text-white placeholder:text-white/35 backdrop-blur-md transition focus:border-[#D4AF37]/50 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/20'
+  'w-full rounded-2xl border border-white/12 bg-[#121212] px-4 py-3.5 text-sm text-white placeholder:text-white/35 backdrop-blur-md transition focus:border-[#C6A24A]/60 focus:outline-none focus:ring-2 focus:ring-[#C6A24A]/20'
 
 const sectionClassName =
-  'space-y-6 rounded-2xl border border-white/10 bg-[#111111] p-6 shadow-lg'
+  'space-y-6 rounded-2xl border border-white/12 bg-[#111111] p-6 shadow-[0_16px_34px_rgba(0,0,0,0.35)] md:p-7'
 
 const sectionHeadingClassName =
-  'flex items-center gap-3 text-lg font-medium tracking-tight text-white'
+  'flex items-center gap-3 text-lg font-medium tracking-[0.01em] text-white'
 
 const badgeClassName =
-  'inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#D4AF37]/85 text-xs font-semibold text-black'
+  'inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#C6A24A]/45 bg-[#1A1610] text-[11px] font-semibold text-[#D8BC74] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
 
 export default function AvaliarClient() {
   const router = useRouter()
@@ -176,9 +176,9 @@ export default function AvaliarClient() {
     <div className="min-h-screen bg-[#0A0A0A] px-4 py-10 md:py-14">
       <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 text-white shadow-[0_30px_70px_rgba(0,0,0,0.5)] backdrop-blur-xl md:p-8">
         <header className="space-y-2 pb-2">
-          <p className="text-xs uppercase tracking-[0.25em] text-[#D4AF37]/85">Confia+ premium review</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">Nova avaliação</h1>
-          <p className="text-sm text-white/60">Relate com clareza para fortalecer a segurança da comunidade.</p>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-[#D0B271]/80">Confia+ premium review</p>
+          <h1 className="text-3xl font-semibold tracking-[0.01em] text-white md:text-4xl">Nova avaliação</h1>
+          <p className="text-sm text-white/65">Relate com clareza para fortalecer a segurança da comunidade.</p>
         </header>
 
         <section className={sectionClassName}>
@@ -222,7 +222,7 @@ export default function AvaliarClient() {
                 key={criterio.key}
                 className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:flex-row md:items-center md:justify-between"
               >
-                <p className="text-sm font-medium tracking-wide text-white/90">{criterio.label}</p>
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-white/78">{criterio.label}</p>
                 <div className="flex gap-1.5">
                   {[1, 2, 3, 4, 5].map((n) => (
                     <button
@@ -232,8 +232,8 @@ export default function AvaliarClient() {
                       onClick={() => setNota(criterio.key, n)}
                       className={`rounded-lg px-1 text-3xl leading-none transition duration-200 hover:-translate-y-0.5 hover:scale-110 ${
                         notas[criterio.key] >= n
-                          ? 'text-[#D4AF37] drop-shadow-[0_0_10px_rgba(212,175,55,0.28)]'
-                          : 'text-white/25 hover:text-[#D4AF37]/70'
+                          ? 'text-[#CFAE62] drop-shadow-[0_0_10px_rgba(198,162,74,0.22)]'
+                          : 'text-white/25 hover:text-[#CFAE62]/70'
                       }`}
                     >
                       ★
@@ -326,7 +326,7 @@ export default function AvaliarClient() {
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="h-14 w-full rounded-2xl bg-gradient-to-r from-[#B89225] via-[#D4AF37] to-[#E0C15A] text-sm font-semibold uppercase tracking-wider text-black transition duration-300 hover:brightness-105 hover:shadow-[0_0_24px_rgba(212,175,55,0.35)] disabled:opacity-60"
+          className="h-14 w-full rounded-2xl border border-[#C6A24A]/35 bg-gradient-to-r from-[#9B7A2A] via-[#C6A24A] to-[#B99544] text-sm font-semibold uppercase tracking-[0.16em] text-[#1A1407] transition duration-300 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-[0_10px_28px_rgba(198,162,74,0.34)] active:translate-y-0 active:brightness-95 disabled:opacity-60"
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}
         </button>
