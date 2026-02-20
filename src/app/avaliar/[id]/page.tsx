@@ -42,7 +42,7 @@ const redFlags = [
   'comportamento_abusivo',
 ]
 
-export default function AvaliarPage({ params }: { params: { id: string } }) {
+export default function AvaliarPerfilPage({ params }: { params: { id: string } }) {
   const supabase = createClientComponentClient()
   const router = useRouter()
 
@@ -54,9 +54,9 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
     confianca: 0,
   })
 
-  const [relato, setRelato] = useState('')
   const [greens, setGreens] = useState<string[]>([])
   const [reds, setReds] = useState<string[]>([])
+  const [relato, setRelato] = useState('')
   const [anonimo, setAnonimo] = useState(true)
   const [loading, setLoading] = useState(false)
 
@@ -78,6 +78,7 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
       return
     }
 
+    // 🔹 1. Inserir avaliação
     const { error } = await supabase.from('avaliacoes').insert({
       male_profile_id: params.id,
       user_id: session.user.id,
@@ -93,14 +94,56 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
       flags_negative: reds,
     })
 
-    setLoading(false)
-
     if (error) {
       console.error(error)
       alert('Erro ao publicar avaliação')
+      setLoading(false)
       return
     }
 
+    // 🔹 2. Recalcular médias
+    const { data: todas } = await supabase
+      .from('avaliacoes')
+      .select('*')
+      .eq('male_profile_id', params.id)
+      .eq('publica', true)
+
+    if (todas && todas.length > 0) {
+
+      const total = todas.length
+
+      const soma = (campo: string) =>
+        todas.reduce((acc, item) => acc + (item[campo] || 0), 0)
+
+      const mediaComportamento = soma('comportamento') / total
+      const mediaSeguranca = soma('seguranca_emocional') / total
+      const mediaRespeito = soma('respeito') / total
+      const mediaCarater = soma('carater') / total
+      const mediaConfianca = soma('confianca') / total
+
+      const mediaGeral =
+        (mediaComportamento +
+          mediaSeguranca +
+          mediaRespeito +
+          mediaCarater +
+          mediaConfianca) / 5
+
+      // 🔹 3. Atualizar perfil
+      await supabase
+        .from('male_profiles')
+        .update({
+          media_comportamento: mediaComportamento,
+          media_seguranca_emocional: mediaSeguranca,
+          media_respeito: mediaRespeito,
+          media_carater: mediaCarater,
+          media_confianca: mediaConfianca,
+          media_geral: mediaGeral,
+          total_avaliacoes: total,
+        })
+        .eq('id', params.id)
+    }
+
+    setLoading(false)
     router.push(`/consultar-reputacao/${params.id}`)
   }
 
@@ -111,7 +154,6 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
         Nova Avaliação
       </h1>
 
-      {/* ESTRELAS */}
       {criterios.map((c) => (
         <div key={c.key} className="mb-6">
           <label className="block mb-2">{c.label}</label>
@@ -131,9 +173,8 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
         </div>
       ))}
 
-      {/* GREEN FLAGS */}
       <div className="mb-8">
-        <h2 className="mb-3 text-green-400 font-medium">Green Flags</h2>
+        <h2 className="mb-3 text-green-400">Green Flags</h2>
         <div className="flex flex-wrap gap-2">
           {greenFlags.map((flag) => (
             <button
@@ -151,9 +192,8 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      {/* RED FLAGS */}
       <div className="mb-8">
-        <h2 className="mb-3 text-red-400 font-medium">Red Flags</h2>
+        <h2 className="mb-3 text-red-400">Red Flags</h2>
         <div className="flex flex-wrap gap-2">
           {redFlags.map((flag) => (
             <button
@@ -171,7 +211,6 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      {/* RELATO */}
       <div className="mb-6">
         <label className="block mb-2">Relato</label>
         <textarea
@@ -181,7 +220,6 @@ export default function AvaliarPage({ params }: { params: { id: string } }) {
         />
       </div>
 
-      {/* ANONIMO */}
       <div className="flex items-center gap-2 mb-8">
         <input
           type="checkbox"
