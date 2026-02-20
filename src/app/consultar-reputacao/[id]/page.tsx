@@ -25,7 +25,18 @@ export default async function PerfilPage({
 
   const { data: avaliacoes } = await supabase
     .from('avaliacoes')
-    .select('*')
+    .select(`
+      id,
+      media_geral,
+      comportamento,
+      seguranca_emocional,
+      respeito,
+      carater,
+      confianca,
+      relato,
+      flags_negative,
+      created_at
+    `)
     .eq('male_profile_id', params.id)
     .order('created_at', { ascending: false })
 
@@ -33,12 +44,15 @@ export default async function PerfilPage({
     return <div className="text-white p-10">Perfil não encontrado</div>
   }
 
-  const total = avaliacoes?.length ?? 0
+  const totalAvaliacoes = avaliacoes?.length ?? 0
+
   const somaEstrelas =
     avaliacoes?.reduce((acc, a) => acc + (a.media_geral ?? 0), 0) ?? 0
 
-  const media = total > 0 ? somaEstrelas / total : 0
-  const status = getStatus(media)
+  const mediaGeral =
+    totalAvaliacoes > 0 ? somaEstrelas / totalAvaliacoes : 0
+
+  const status = getStatus(mediaGeral)
 
   const categorias = [
     { key: 'comportamento', label: 'Comportamento' },
@@ -53,8 +67,9 @@ export default async function PerfilPage({
   categorias.forEach((cat) => {
     const soma =
       avaliacoes?.reduce((acc, a) => acc + (a[cat.key] ?? 0), 0) ?? 0
+
     mediasCategorias[cat.key] =
-      total > 0 ? soma / total : 0
+      totalAvaliacoes > 0 ? soma / totalAvaliacoes : 0
   })
 
   return (
@@ -65,10 +80,12 @@ export default async function PerfilPage({
           ← Voltar
         </Link>
 
-        {/* CARD 1 */}
+        {/* CARD 1 — IDENTIFICAÇÃO */}
         <div className="mt-4 bg-[#111] border border-gray-800 p-5 rounded-xl relative shadow-lg">
 
-          <div className={`absolute top-4 right-4 px-3 py-1 text-xs rounded-full text-white ${status.color}`}>
+          <div
+            className={`absolute top-4 right-4 px-3 py-1 text-xs rounded-full text-white ${status.color}`}
+          >
             {status.label}
           </div>
 
@@ -82,18 +99,18 @@ export default async function PerfilPage({
 
         </div>
 
-        {/* CARD 2 */}
+        {/* CARD 2 — SCORE */}
         <div className="mt-6 bg-gradient-to-br from-[#1a1a1a] to-[#111] border border-yellow-600/30 p-6 rounded-xl text-center shadow-lg">
 
           <div className="flex justify-center items-center gap-2 text-[#D4AF37]">
             <Star size={28} fill="currentColor" />
             <span className="text-4xl font-bold">
-              {media.toFixed(1)}
+              {mediaGeral.toFixed(1)}
             </span>
           </div>
 
           <p className="text-gray-400 text-sm mt-2">
-            {total} avaliações
+            {totalAvaliacoes} avaliações
           </p>
 
           <p className="text-xs text-gray-500 mt-1">
@@ -102,7 +119,7 @@ export default async function PerfilPage({
 
         </div>
 
-        {/* CARD 3 */}
+        {/* CARD 3 — ALERTAS DE SEGURANÇA */}
         {perfil.flags_negative?.length > 0 && (
           <div className="mt-6 bg-red-900/30 border border-red-600 p-5 rounded-xl shadow-lg">
 
@@ -120,7 +137,7 @@ export default async function PerfilPage({
           </div>
         )}
 
-        {/* CARD 4 */}
+        {/* CARD 4 — MÉDIA POR CATEGORIA */}
         <div className="mt-8 bg-[#111] border border-gray-800 p-5 rounded-xl shadow-lg">
 
           <h2 className="text-yellow-500 font-semibold mb-4">
@@ -151,49 +168,55 @@ export default async function PerfilPage({
 
         </div>
 
-        {/* CARD 5 */}
-        <div className="mt-8 space-y-4">
+        {/* CARD 5 — RELATOS DAS USUÁRIAS */}
+        <div className="mt-8 space-y-5">
 
-          <h2 className="text-yellow-500 font-semibold">
+          <h2 className="text-yellow-500 font-semibold text-lg">
             Relatos das Usuárias
           </h2>
 
-          {avaliacoes?.map((a) => (
-            <div
-              key={a.id}
-              className="bg-[#111] border border-gray-800 p-4 rounded-xl shadow-md"
-            >
+          {avaliacoes && avaliacoes.length > 0 ? (
+            avaliacoes.map((a) => (
+              <div
+                key={a.id}
+                className="bg-[#111] border border-gray-800 p-5 rounded-xl shadow-lg"
+              >
 
-              <div className="flex items-center gap-2 text-[#D4AF37] font-bold text-sm">
-                <Star size={14} fill="currentColor" />
-                {a.media_geral?.toFixed(1)}
-              </div>
-
-              {a.notas && (
-                <p className="text-sm text-gray-300 mt-2">
-                  {a.notas}
-                </p>
-              )}
-
-              {a.flags_negative?.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {a.flags_negative.map((flag: string) => (
-                    <span
-                      key={flag}
-                      className="px-2 py-1 text-xs bg-red-600/20 text-red-400 rounded-full"
-                    >
-                      {flag}
-                    </span>
-                  ))}
+                <div className="flex items-center gap-2 text-[#D4AF37] font-bold text-sm">
+                  <Star size={14} fill="currentColor" />
+                  {a.media_geral?.toFixed(1)}
                 </div>
-              )}
 
-              <p className="text-xs text-gray-500 mt-3">
-                {new Date(a.created_at).toLocaleDateString()}
-              </p>
+                {a.relato && (
+                  <p className="text-sm text-gray-300 mt-3 leading-relaxed">
+                    {a.relato}
+                  </p>
+                )}
 
+                {a.flags_negative?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {a.flags_negative.map((flag: string) => (
+                      <span
+                        key={flag}
+                        className="px-3 py-1 text-xs bg-red-600/20 text-red-400 rounded-full border border-red-600/30"
+                      >
+                        {flag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-500 mt-4">
+                  {new Date(a.created_at).toLocaleDateString('pt-BR')}
+                </p>
+
+              </div>
+            ))
+          ) : (
+            <div className="text-gray-500 text-sm">
+              Ainda não há relatos para este perfil.
             </div>
-          ))}
+          )}
 
         </div>
 
