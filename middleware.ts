@@ -4,17 +4,16 @@ import { createServerClient } from '@supabase/ssr'
 const PUBLIC_PATHS = [
   '/',
   '/funil',
-  '/onboarding',
   '/login',
-  '/signup',
   '/register',
   '/planos',
-  '/plans',
-  '/verification-pending',
   '/auth/callback',
-  '/api',
+  '/reset-password',
+  '/update-password',
+  '/verify-selfie',
 ]
 
+// Páginas que exigem login
 const PROTECTED_PATHS = [
   '/consultar-reputacao',
   '/avaliar',
@@ -24,18 +23,21 @@ const PROTECTED_PATHS = [
   '/configuracoes',
 ]
 
+// Rotas que NÃO devem disparar selfie gate (pra evitar loop / permitir concluir selfie)
+const SELFIE_EXCEPTIONS = ['/verify-selfie', '/auth/callback', '/login', '/reset-password', '/update-password']
+
+function pathMatches(pathname: string, base: string) {
+  return pathname === base || pathname.startsWith(`${base}/`)
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  const isPublicRoute = PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
-  )
+  const isPublicRoute = PUBLIC_PATHS.some((p) => pathMatches(pathname, p))
+  const isProtectedRoute = PROTECTED_PATHS.some((p) => pathMatches(pathname, p))
 
-  let response = NextResponse.next({
-    request: {
-      headers: req.headers,
-    },
-  })
+  // NextResponse que preserva headers/cookies
+  let res = NextResponse.next({ request: { headers: req.headers } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,7 +50,7 @@ export async function middleware(req: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             req.cookies.set(name, value)
-            response.cookies.set(name, value, options)
+            res.cookies.set(name, value, options)
           })
         },
       },
@@ -59,35 +61,64 @@ export async function middleware(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Public -> segue
   if (isPublicRoute) {
-    response.headers.set('x-middleware-active', 'true')
-    response.headers.set('x-middleware-path', pathname)
-
-    if (pathname.startsWith('/funil')) {
-      response.headers.set('x-funil-public', 'true')
-    }
-
-    return response
+    res.headers.set('x-middleware-active', 'true')
+    res.headers.set('x-middleware-path', pathname)
+    return res
   }
 
-  const isProtectedRoute = PROTECTED_PATHS.some((path) =>
-    pathname.startsWith(path)
-  )
-
+  // Protegida e sem login -> /login
   if (isProtectedRoute && !user) {
     const loginUrl = new URL('/login', req.url)
     loginUrl.searchParams.set('next', pathname)
-
-    const redirectResponse = NextResponse.redirect(loginUrl)
-    redirectResponse.headers.set('x-middleware-active', 'true')
-    redirectResponse.headers.set('x-middleware-path', pathname)
-    redirectResponse.headers.set('x-reason', 'login-required')
-    return redirectResponse
+    const redirect = NextResponse.redirect(loginUrl)
+    redirect.headers.set('x-reason', 'login-required')
+    return redirect
   }
 
-  response.headers.set('x-middleware-active', 'true')
-  response.headers.set('x-middleware-path', pathname)
-  return response
+  // Se não é protegida, mas também não é pública, deixe seguir (ou ajuste suas regras aqui)
+  if (!isProtectedRoute) {
+    res.headers.set('x-middleware-active', 'true')
+    res.headers.set('x-middleware-path', pathname)
+    return res
+  }
+
+  // ===== Selfie Gate =====
+  // Se já está logado e está numa rota protegida, exige selfie (exceto páginas do fluxo)
+  const shouldSkipSelfie = SELFIE_EXCEPTIONS.some((p) => pathMatches(pathname, p))
+  if (user && !shouldSkipSelfie) {
+    // tenta ler o profile do usuário; depende de RLS permitir select do próprio perfil
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('selfie_verified, selfie_url, is_active')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    // Se erro de RLS, não vamos “travar” o app; apenas segue
+    if (!error) {
+      // Se conta desativada, joga pro login (ou crie uma página específica)
+      if (profile?.is_active === false) {
+        const loginUrl = new URL('/login', req.url)
+        const redirect = NextResponse.redirect(loginUrl)
+        redirect.headers.set('x-reason', 'inactive-account')
+        return redirect
+      }
+
+      const selfieOk = Boolean(profile?.selfie_verified) && Boolean(profile?.selfie_url)
+      if (!selfieOk) {
+        const verifyUrl = new URL('/verify-selfie', req.url)
+        verifyUrl.searchParams.set('next', pathname)
+        const redirect = NextResponse.redirect(verifyUrl)
+        redirect.headers.set('x-reason', 'selfie-required')
+        return redirect
+      }
+    }
+  }
+
+  res.headers.set('x-middleware-active', 'true')
+  res.headers.set('x-middleware-path', pathname)
+  return res
 }
 
 export const config = {
