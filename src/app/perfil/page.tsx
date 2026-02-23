@@ -28,7 +28,7 @@ function PlanLabel(plan?: string | null) {
 export default function PerfilPage() {
   const router = useRouter()
 
-  const [profile, setProfile] = useState<(ProfileRecord & { current_plan_id?: string | null }) | null>(null)
+  const [profile, setProfile] = useState<ProfileRecord | null>(null)
   const [contacts, setContacts] = useState<EmergencyContact[]>([])
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
@@ -69,17 +69,10 @@ export default function PerfilPage() {
         return
       }
 
-      // opcional: puxa current_plan_id se existir no schema
-      const { data: planRow } = await supabase
-        .from('profiles')
-        .select('current_plan_id')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      const merged = { ...(ensured.profile ?? {}), ...(planRow ?? {}) }
-      setProfile(merged as any)
-      setEditNome((merged as any)?.nome || '')
-      setEditTelefone((merged as any)?.telefone || '')
+      const merged = ensured.profile ?? null
+      setProfile(merged)
+      setEditNome(merged?.nome || '')
+      setEditTelefone(merged?.telefone || '')
 
       const { data: contactsData } = await supabase
         .from('emergency_contacts')
@@ -90,11 +83,11 @@ export default function PerfilPage() {
       setContacts(contactsData || [])
 
       // avatar > selfie
-      if ((merged as any)?.avatar_url) {
-        const { data } = await supabase.storage.from('avatars').createSignedUrl((merged as any).avatar_url, 3600)
+      if (merged?.avatar_url) {
+        const { data } = await supabase.storage.from('avatars').createSignedUrl(merged.avatar_url, 3600)
         setAvatarUrl(data?.signedUrl || null)
-      } else if ((merged as any)?.selfie_url) {
-        const { data } = await supabase.storage.from('selfie-verifications').createSignedUrl((merged as any).selfie_url, 3600)
+      } else if (merged?.selfie_url) {
+        const { data } = await supabase.storage.from('selfie-verifications').createSignedUrl(merged.selfie_url, 3600)
         setSelfieUrl(data?.signedUrl || null)
       }
 
@@ -256,7 +249,7 @@ export default function PerfilPage() {
 
           <p><span className="text-gray-400">Nome:</span> {profile?.nome || '—'}</p>
           <p><span className="text-gray-400">Email:</span> {profile?.email || '—'}</p>
-          <p><span className="text-gray-400">Telefone:</span> {(profile as any)?.telefone || '—'}</p>
+          <p><span className="text-gray-400">Telefone:</span> {profile?.telefone || '—'}</p>
         </div>
 
         <button
@@ -268,7 +261,7 @@ export default function PerfilPage() {
             <div>
               <p className="text-sm text-gray-400">Meu plano</p>
               <p className="font-semibold text-[#D4AF37]">
-                {PlanLabel((profile as any)?.current_plan_id)} — Ver planos
+                {PlanLabel(profile?.current_plan_id)} — Ver planos
               </p>
             </div>
           </div>

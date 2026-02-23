@@ -6,38 +6,60 @@ const PUBLIC_PATHS = [
   '/funil',
   '/login',
   '/register',
+  '/signup',
+  '/cadastro',
   '/planos',
+  '/plans',
+  '/planos-publicos',
+  '/onboarding',
   '/auth/callback',
   '/reset-password',
   '/update-password',
+  '/verification-pending',
+]
+
+const PROTECTED_PATHS = [
+  '/home',
+  '/perfil',
+  '/avaliar',
+  '/consultar-reputacao',
+  '/alertas',
+  '/minhas-avaliacoes',
+  '/configuracoes',
+  '/rede-apoio',
+  '/modo-seguro',
+  '/comunidade',
+  '/checkout',
+  '/verificacao-selfie',
   '/verify-selfie',
 ]
 
-// Páginas que exigem login
-const PROTECTED_PATHS = [
-  '/consultar-reputacao',
-  '/avaliar',
-  '/alertas',
-  '/perfil',
-  '/minhas-avaliacoes',
-  '/configuracoes',
+const SELFIE_GATE_EXCEPTIONS = [
+  '/verificacao-selfie',
+  '/verify-selfie',
+  '/auth/callback',
+  '/login',
+  '/reset-password',
+  '/update-password',
 ]
-
-// Rotas que NÃO devem disparar selfie gate (pra evitar loop / permitir concluir selfie)
-const SELFIE_EXCEPTIONS = ['/verify-selfie', '/auth/callback', '/login', '/reset-password', '/update-password']
 
 function pathMatches(pathname: string, base: string) {
   return pathname === base || pathname.startsWith(`${base}/`)
 }
 
+function applyAuthCookies(target: NextResponse, source: NextResponse) {
+  for (const cookie of source.cookies.getAll()) {
+    target.cookies.set(cookie)
+  }
+}
+
 export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
+  const { pathname, search } = req.nextUrl
 
-  const isPublicRoute = PUBLIC_PATHS.some((p) => pathMatches(pathname, p))
-  const isProtectedRoute = PROTECTED_PATHS.some((p) => pathMatches(pathname, p))
+  const isPublicRoute = PUBLIC_PATHS.some((route) => pathMatches(pathname, route))
+  const isProtectedRoute = PROTECTED_PATHS.some((route) => pathMatches(pathname, route))
 
-  // NextResponse que preserva headers/cookies
-  let res = NextResponse.next({ request: { headers: req.headers } })
+  const response = NextResponse.next({ request: { headers: req.headers } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,10 +70,10 @@ export async function middleware(req: NextRequest) {
           return req.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
+          for (const { name, value, options } of cookiesToSet) {
             req.cookies.set(name, value)
-            res.cookies.set(name, value, options)
-          })
+            response.cookies.set(name, value, options)
+          }
         },
       },
     }
@@ -61,66 +83,50 @@ export async function middleware(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Public -> segue
-  if (isPublicRoute) {
-    res.headers.set('x-middleware-active', 'true')
-    res.headers.set('x-middleware-path', pathname)
-    return res
-  }
-
-  // Protegida e sem login -> /login
   if (isProtectedRoute && !user) {
     const loginUrl = new URL('/login', req.url)
-    loginUrl.searchParams.set('next', pathname)
+    loginUrl.searchParams.set('next', `${pathname}${search}`)
+
     const redirect = NextResponse.redirect(loginUrl)
-    redirect.headers.set('x-reason', 'login-required')
+    applyAuthCookies(redirect, response)
     return redirect
   }
 
-  // Se não é protegida, mas também não é pública, deixe seguir (ou ajuste suas regras aqui)
-  if (!isProtectedRoute) {
-    res.headers.set('x-middleware-active', 'true')
-    res.headers.set('x-middleware-path', pathname)
-    return res
+  if (!user) {
+    return response
   }
 
-  // ===== Selfie Gate =====
-  // Se já está logado e está numa rota protegida, exige selfie (exceto páginas do fluxo)
-  const shouldSkipSelfie = SELFIE_EXCEPTIONS.some((p) => pathMatches(pathname, p))
-  if (user && !shouldSkipSelfie) {
-    // tenta ler o profile do usuário; depende de RLS permitir select do próprio perfil
+  const shouldCheckSelfie =
+    isProtectedRoute &&
+    !SELFIE_GATE_EXCEPTIONS.some((route) => pathMatches(pathname, route))
+
+  if (shouldCheckSelfie) {
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('selfie_verified, selfie_url, is_active')
+      .select('selfie_verified, selfie_url')
       .eq('id', user.id)
       .maybeSingle()
 
-    // Se erro de RLS, não vamos “travar” o app; apenas segue
     if (!error) {
-      // Se conta desativada, joga pro login (ou crie uma página específica)
-      if (profile?.is_active === false) {
-        const loginUrl = new URL('/login', req.url)
-        const redirect = NextResponse.redirect(loginUrl)
-        redirect.headers.set('x-reason', 'inactive-account')
-        return redirect
-      }
-
-      const selfieOk = Boolean(profile?.selfie_verified) && Boolean(profile?.selfie_url)
-      if (!selfieOk) {
+      const hasVerifiedSelfie = Boolean(profile?.selfie_verified) && Boolean(profile?.selfie_url)
+      if (!hasVerifiedSelfie) {
         const verifyUrl = new URL('/verify-selfie', req.url)
-        verifyUrl.searchParams.set('next', pathname)
+        verifyUrl.searchParams.set('next', `${pathname}${search}`)
+
         const redirect = NextResponse.redirect(verifyUrl)
-        redirect.headers.set('x-reason', 'selfie-required')
+        applyAuthCookies(redirect, response)
         return redirect
       }
     }
   }
 
-  res.headers.set('x-middleware-active', 'true')
-  res.headers.set('x-middleware-path', pathname)
-  return res
+  if (!isProtectedRoute && !isPublicRoute) {
+    return response
+  }
+
+  return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 }

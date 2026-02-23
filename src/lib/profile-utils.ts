@@ -6,12 +6,14 @@ export type ProfileRecord = {
   email?: string | null
   telefone?: string | null
   cidade?: string | null
+  avatar_url?: string | null
   selfie_url?: string | null
   selfie_verified?: boolean | null
   onboarding_completed?: boolean | null
   termos_aceitos?: boolean | null
   is_active?: boolean | null
   deleted_at?: string | null
+  current_plan_id?: string | null
 }
 
 export type ProfileErrorType = 'schema' | 'permission' | 'unknown'
@@ -37,12 +39,14 @@ const baseProfileFields = [
   'email',
   'telefone',
   'cidade',
+  'avatar_url',
   'selfie_url',
   'selfie_verified',
   'onboarding_completed',
   'termos_aceitos',
   'is_active',
   'deleted_at',
+  'current_plan_id',
 ] as const
 
 function buildSelect(fields: readonly string[]) {
@@ -67,6 +71,12 @@ function resolveErrorType(error: unknown): ProfileErrorType {
     return 'schema'
   }
   return 'unknown'
+}
+
+
+export function isMissingColumnError(error: unknown) {
+  const info = getErrorInfo(error)
+  return (info.code ?? '').toUpperCase() === '42703'
 }
 
 function extractMissingColumnName(error: unknown) {
@@ -110,8 +120,17 @@ async function fetchProfile(
   supabase: SupabaseClient,
   userId: string,
   fields: readonly string[]
-) {
-  return supabase.from('profiles').select(buildSelect(fields)).eq('id', userId).maybeSingle()
+): Promise<{ data: ProfileRecord | null; error: unknown | null }> {
+  const result = await supabase
+    .from('profiles')
+    .select(buildSelect(fields))
+    .eq('id', userId)
+    .maybeSingle()
+
+  return {
+    data: (result.data as ProfileRecord | null) ?? null,
+    error: result.error,
+  }
 }
 
 export const getProfileErrorInfo = (error: unknown) => getErrorInfo(error)
@@ -126,7 +145,7 @@ export async function ensureProfileForUser(
   let { data: profile, error } = await fetchProfile(supabase, user.id, fields)
 
   while (error) {
-    const missing = extractMissingColumnName(error)
+    const missing = isMissingColumnError(error) ? extractMissingColumnName(error) : null
     if (!missing || missing === 'id' || !fields.includes(missing as any)) {
       return { profile: null, error, errorType: resolveErrorType(error), errorInfo: getErrorInfo(error) }
     }
@@ -134,10 +153,11 @@ export async function ensureProfileForUser(
     ;({ data: profile, error } = await fetchProfile(supabase, user.id, fields))
   }
 
+  const resolvedProfile = profile as ProfileRecord | null
   const defaults = resolveDefaults(user)
 
   // 2) se não existe, cria
-  if (!profile) {
+  if (!resolvedProfile) {
     let payload: Record<string, unknown> = {
       id: user.id,
       nome: defaults.nome,
@@ -153,7 +173,7 @@ export async function ensureProfileForUser(
       const { error: upsertError } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' })
       if (!upsertError) break
 
-      const missing = extractMissingColumnName(upsertError)
+      const missing = isMissingColumnError(upsertError) ? extractMissingColumnName(upsertError) : null
       const next = removeMissingColumnFromPayload(payload, missing)
       if (Object.keys(next).length === Object.keys(payload).length) {
         return {
@@ -176,17 +196,17 @@ export async function ensureProfileForUser(
   // 3) se existe, preenche mínimos se faltarem
   const updates: Partial<ProfileRecord> = {}
 
-  if ('nome' in profile && isBlank(profile.nome) && !isBlank(defaults.nome)) updates.nome = defaults.nome
-  if ('email' in profile && isBlank(profile.email) && !isBlank(defaults.email)) updates.email = defaults.email
-  if ('telefone' in profile && isBlank(profile.telefone) && !isBlank(defaults.telefone)) updates.telefone = defaults.telefone
+  if (isBlank(resolvedProfile.nome) && !isBlank(defaults.nome)) updates.nome = defaults.nome
+  if (isBlank(resolvedProfile.email) && !isBlank(defaults.email)) updates.email = defaults.email
+  if (isBlank(resolvedProfile.telefone) && !isBlank(defaults.telefone)) updates.telefone = defaults.telefone
 
   // inicializa bools se vierem null
-  if ('selfie_verified' in profile && profile.selfie_verified == null) updates.selfie_verified = false
-  if ('onboarding_completed' in profile && profile.onboarding_completed == null) updates.onboarding_completed = false
-  if ('termos_aceitos' in profile && profile.termos_aceitos == null) updates.termos_aceitos = false
+  if (resolvedProfile.selfie_verified == null) updates.selfie_verified = false
+  if (resolvedProfile.onboarding_completed == null) updates.onboarding_completed = false
+  if (resolvedProfile.termos_aceitos == null) updates.termos_aceitos = false
 
   if (Object.keys(updates).length === 0) {
-    return { profile: profile as ProfileRecord, error: null }
+    return { profile: resolvedProfile, error: null }
   }
 
   let payload: Record<string, unknown> = { ...updates }
@@ -200,14 +220,14 @@ export async function ensureProfileForUser(
       .maybeSingle()
 
     if (!updateError) {
-      return { profile: (updated as ProfileRecord) ?? (profile as ProfileRecord), error: null }
+      return { profile: (updated as ProfileRecord) ?? resolvedProfile, error: null }
     }
 
-    const missing = extractMissingColumnName(updateError)
+    const missing = isMissingColumnError(updateError) ? extractMissingColumnName(updateError) : null
     const next = removeMissingColumnFromPayload(payload, missing)
     if (Object.keys(next).length === Object.keys(payload).length) {
       return {
-        profile: profile as ProfileRecord,
+        profile: resolvedProfile,
         error: updateError,
         errorType: resolveErrorType(updateError),
         errorInfo: getErrorInfo(updateError),
