@@ -20,11 +20,11 @@ const PLAN_ALIAS_MAP: Record<
 
 const PLAN_PRICE_ENV: Record<
   'premium_monthly' | 'premium_yearly' | 'premium_plus',
-  string
+  string[]
 > = {
-  premium_monthly: 'STRIPE_PRICE_PREMIUM_MONTHLY',
-  premium_yearly: 'STRIPE_PRICE_PREMIUM_YEARLY',
-  premium_plus: 'STRIPE_PRICE_PREMIUM_PLUS',
+  premium_monthly: ['STRIPE_PRICE_PREMIUM_MONTHLY', 'STRIPE_PRICE_PREMIUM_MENSAL'],
+  premium_yearly: ['STRIPE_PRICE_PREMIUM_YEARLY', 'STRIPE_PRICE_PREMIUM_ANUAL'],
+  premium_plus: ['STRIPE_PRICE_PREMIUM_PLUS'],
 }
 
 export async function POST(req: Request) {
@@ -79,12 +79,16 @@ export async function POST(req: Request) {
       )
     }
 
-    const priceEnv = PLAN_PRICE_ENV[normalizedPlan]
-    const priceId = process.env[priceEnv]
+    const priceEnvCandidates = PLAN_PRICE_ENV[normalizedPlan]
+    const priceId = priceEnvCandidates
+      .map((envKey) => process.env[envKey])
+      .find((value) => Boolean(value))
 
     if (!priceId) {
       return NextResponse.json(
-        { error: 'Preço não configurado no ambiente' },
+        {
+          error: `Preço não configurado no ambiente (${priceEnvCandidates.join(' ou ')})`,
+        },
         { status: 500 }
       )
     }

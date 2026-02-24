@@ -26,8 +26,10 @@ const PRICE_TO_PLAN: Record<string, 'premium_monthly' | 'premium_yearly' | 'prem
 
 const HANDLED_EVENTS = new Set([
   'checkout.session.completed',
+  'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
+  'invoice.paid',
 ])
 
 function jsonOk(data: any = { received: true }) {
@@ -42,7 +44,7 @@ async function resolveUserIdFromCustomer({
   supabaseAdmin,
   customerId,
 }: {
-  supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>
+  supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>
   customerId: string
 }) {
   const { data, error } = await supabaseAdmin
@@ -76,28 +78,36 @@ async function resolvePlanFromCheckoutSession(stripe: Stripe, sessionId: string)
 }
 
 export async function POST(req: Request) {
-  const signature = headers().get('stripe-signature')
+  const signature = (await headers()).get('stripe-signature')
 
   if (!signature || !webhookSecret) {
     return jsonErr('Webhook não configurado (signature/secret ausente).', 400)
   }
 
   const stripe = getStripeClient()
+  if (!stripe) {
+    console.error('[stripe-webhook] STRIPE_SECRET_KEY ausente.')
+    return jsonErr('Stripe não configurado.', 500)
+  }
+
   const body = await req.text()
 
   let event: Stripe.Event
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
-  } catch {
+  } catch (error) {
+    console.error('[stripe-webhook] Assinatura inválida:', error)
     return jsonErr('Assinatura inválida (Stripe signature).', 400)
   }
 
   if (!HANDLED_EVENTS.has(event.type)) {
+    console.info(`[stripe-webhook] Evento ignorado: ${event.type}`)
     return jsonOk()
   }
 
   const supabaseAdmin = getSupabaseAdminClient()
   if (!supabaseAdmin) {
+    console.error('[stripe-webhook] Supabase admin indisponível.')
     return jsonErr('Supabase Admin indisponível.', 503)
   }
 
@@ -175,6 +185,7 @@ export async function POST(req: Request) {
    * =====================================================
    */
   if (
+    event.type === 'customer.subscription.created' ||
     event.type === 'customer.subscription.updated' ||
     event.type === 'customer.subscription.deleted'
   ) {
@@ -215,6 +226,39 @@ export async function POST(req: Request) {
 
     await supabaseAdmin.from('profiles').update(updatePayload).eq('id', userId)
 
+    return jsonOk()
+  }
+
+  if (event.type === 'invoice.paid') {
+    const invoice = event.data.object as Stripe.Invoice
+    const customerId = invoice.customer?.toString() ?? null
+
+    let userId: string | null = null
+    if (customerId) {
+      userId = await resolveUserIdFromCustomer({ supabaseAdmin, customerId })
+    }
+
+    if (!userId) {
+      return jsonOk({ received: true, warning: 'invoice.paid sem match de user.' })
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      subscription_status: 'active',
+      has_active_plan: true,
+    }
+
+    if (customerId) {
+      updatePayload.stripe_customer_id = customerId
+    }
+
+    const invoiceSubscription = (invoice as Stripe.Invoice & { subscription?: string | null })
+      .subscription
+    const subscriptionId = invoiceSubscription ?? null
+    if (subscriptionId) {
+      updatePayload.stripe_subscription_id = subscriptionId
+    }
+
+    await supabaseAdmin.from('profiles').update(updatePayload).eq('id', userId)
     return jsonOk()
   }
 
