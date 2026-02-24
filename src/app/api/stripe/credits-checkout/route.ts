@@ -24,8 +24,8 @@ export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
   const { data: { user } } = await supabase.auth.getUser()
 
-  const body = await req.json()
-  const pack = CREDIT_PACKS[body.packId]
+  const body = (await req.json()) as { packId?: string }
+  const pack = body.packId ? CREDIT_PACKS[body.packId as keyof typeof CREDIT_PACKS] : null
 
   if (!pack) {
     return NextResponse.json({ error: 'Pacote inválido' }, { status: 400 })
@@ -37,6 +37,10 @@ export async function POST(req: Request) {
   }
 
   const stripe = getStripeClient()
+  if (!stripe) {
+    return NextResponse.json({ error: 'Stripe não configurado' }, { status: 500 })
+  }
+
   const siteUrl = getSiteUrl()
 
   const session = await stripe.checkout.sessions.create({
