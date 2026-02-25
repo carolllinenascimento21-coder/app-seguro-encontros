@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     )
   }
 
-  let body: { amount: number; reason: string }
+  let body: { reason?: string }
 
   try {
     body = await req.json()
@@ -27,28 +27,28 @@ export async function POST(req: Request) {
     )
   }
 
-  const { amount, reason } = body
+  const reason = (body.reason || 'manual_consume').trim()
 
-  if (!Number.isInteger(amount) || amount <= 0) {
+  if (!reason) {
     return NextResponse.json(
-      { error: 'Quantidade de créditos inválida' },
+      { error: 'Motivo inválido para consumo de crédito' },
       { status: 400 }
     )
   }
 
-  // chama função SQL segura
-  const { error } = await supabase.rpc('consume_credit', {
-    p_user_id: user.id,
-    p_amount: amount,
-    p_description: reason ?? 'Consumo de crédito',
+  const { data, error } = await supabase.rpc('consume_credit_for_action', {
+    user_uuid: user.id,
+    action: reason,
   })
 
   if (error) {
+    const message = String(error.message || '')
+    const status = message.includes('PAYWALL') ? 402 : 400
     return NextResponse.json(
-      { error: error.message },
-      { status: 402 } // pagamento requerido
+      { error: message },
+      { status }
     )
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, data })
 }
