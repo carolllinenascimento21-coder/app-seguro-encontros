@@ -24,6 +24,10 @@ export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
   const { data: { user } } = await supabase.auth.getUser()
 
+  if (!user) {
+    return NextResponse.json({ error: 'Usuário não autenticado' }, { status: 401 })
+  }
+
   const body = (await req.json()) as { packId?: string }
   const pack = body.packId ? CREDIT_PACKS[body.packId as keyof typeof CREDIT_PACKS] : null
 
@@ -46,17 +50,16 @@ export async function POST(req: Request) {
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: [{ price: priceId, quantity: 1 }],
-    customer_email: user?.email ?? undefined,
+    customer_email: user.email ?? undefined,
     success_url: `${siteUrl}/creditos?status=success`,
     cancel_url: `${siteUrl}/creditos?status=cancel`,
-    metadata: user
-      ? {
-          user_id: user.id,
-          credits: pack.amount.toString(),
-        }
-      : {
-          credits: pack.amount.toString(),
-        },
+    metadata: {
+      user_id: user.id,
+      credits: pack.amount.toString(),
+      pack_id: body.packId ?? '',
+    },
+  }, {
+    idempotencyKey: `credits-checkout:${user.id}:${body.packId}:${Math.floor(Date.now() / 30000)}`,
   })
 
   return NextResponse.json({ url: session.url })
