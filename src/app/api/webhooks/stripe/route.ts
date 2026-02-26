@@ -253,7 +253,7 @@ export async function POST(req: Request) {
             user_uuid: userId,
             credit_delta: credits,
             external_ref: session.payment_intent?.toString() ?? session.id,
-            transaction_type: 'credit_purchase',
+            transaction_type: 'purchase',
           })
 
           if (rpcErr) {
