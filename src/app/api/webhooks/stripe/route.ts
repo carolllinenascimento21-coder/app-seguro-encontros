@@ -43,6 +43,10 @@ function jsonErr(message: string, status = 400, extra?: any) {
   return NextResponse.json({ error: message, ...extra }, { status })
 }
 
+function auditLog(event: string, payload: Record<string, unknown>) {
+  console.log(`[AUDIT] ${event}`, payload)
+}
+
 async function resolveUserIdFromCustomer({
   supabaseAdmin,
   customerId,
@@ -175,6 +179,15 @@ export async function POST(req: Request) {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
 
+      auditLog('checkout.session.completed.received', {
+        eventId: event.id,
+        sessionId: session.id,
+        mode: session.mode,
+        payment_status: session.payment_status,
+        metadata: session.metadata ?? null,
+        payment_intent: session.payment_intent?.toString() ?? null,
+      })
+
       // 1) user_id do metadata (ideal)
       let userId = session.metadata?.user_id ?? null
 
@@ -239,6 +252,12 @@ export async function POST(req: Request) {
       if (session.mode === 'payment') {
         // ✅ Evita conceder crédito sem pagamento confirmado
         if (session.payment_status !== 'paid') {
+          auditLog('checkout.session.completed.payment.skipped_unpaid', {
+            eventId: event.id,
+            sessionId: session.id,
+            payment_status: session.payment_status ?? 'unknown',
+          })
+
           await markStripeEvent(supabaseAdmin, event.id, {
             status: 'skipped',
             error: `payment_status=${session.payment_status ?? 'unknown'}`,
@@ -247,8 +266,39 @@ export async function POST(req: Request) {
         }
 
         const credits = Number(session.metadata?.credits ?? 0)
+        const externalRef = session.payment_intent?.toString() ?? session.id
+
+        auditLog('checkout.session.completed.payment.parsed', {
+          eventId: event.id,
+          sessionId: session.id,
+          credits,
+          external_reference: externalRef,
+          metadata_credits: session.metadata?.credits ?? null,
+        })
+
+        if (!Number.isFinite(credits) || credits <= 0) {
+          await markStripeEvent(supabaseAdmin, event.id, {
+            status: 'skipped',
+            error: `credits_invalid=${session.metadata?.credits ?? 'missing'}`,
+          })
+
+          auditLog('checkout.session.completed.payment.skipped_invalid_credits', {
+            eventId: event.id,
+            sessionId: session.id,
+            metadata: session.metadata ?? null,
+          })
+
+          return jsonOk({ skipped: 'credits metadata missing/invalid' })
+        }
+
         if (credits > 0) {
-          const externalRef = session.payment_intent?.toString() ?? session.id
+          auditLog('checkout.session.completed.payment.rpc_call', {
+            eventId: event.id,
+            sessionId: session.id,
+            userId,
+            credits,
+            external_reference: externalRef,
+          })
 
           const { error: rpcErr } = await supabaseAdmin.rpc('add_profile_credits_with_transaction', {
             user_uuid: userId,
@@ -259,12 +309,26 @@ export async function POST(req: Request) {
 
           if (rpcErr) {
             console.error('[stripe-webhook] Erro ao creditar:', rpcErr)
+            auditLog('checkout.session.completed.payment.rpc_error', {
+              eventId: event.id,
+              sessionId: session.id,
+              error: String((rpcErr as any).message || rpcErr),
+            })
+
             await markStripeEvent(supabaseAdmin, event.id, {
               status: 'failed',
               error: `Falha RPC credit: ${String((rpcErr as any).message || rpcErr)}`,
             })
             return jsonErr('Erro ao aplicar créditos', 500)
           }
+
+          auditLog('checkout.session.completed.payment.rpc_success', {
+            eventId: event.id,
+            sessionId: session.id,
+            userId,
+            credits,
+            external_reference: externalRef,
+          })
         }
 
         await markStripeEvent(supabaseAdmin, event.id, { status: 'processed' })
@@ -348,6 +412,13 @@ export async function POST(req: Request) {
     if (event.type === 'invoice.paid') {
       const invoice = event.data.object as Stripe.Invoice
       const customerId = invoice.customer?.toString() ?? null
+
+      auditLog('invoice.paid.received', {
+        eventId: event.id,
+        invoiceId: invoice.id,
+        customerId,
+        subscriptionId: (invoice as any).subscription?.toString?.() ?? (invoice as any).subscription ?? null,
+      })
 
       let userId: string | null = null
       if (customerId) {
