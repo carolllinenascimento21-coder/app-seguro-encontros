@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
-import { getSiteUrl } from '@/lib/billing'
 
 const supabase = createSupabaseClient()
 
@@ -72,7 +71,7 @@ export default function SignupPage() {
       email,
       password,
       options: {
-        emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback`,
         data: {
           nome,
           telefone,
@@ -80,7 +79,6 @@ export default function SignupPage() {
           onboarding_completed: false,
           selfie_verified: false,
         },
-        phone: telefone,
       },
     })
 

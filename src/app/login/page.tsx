@@ -126,6 +126,16 @@ export default function LoginPage() {
           {loading ? 'Entrando...' : 'Entrar'}
         </button>
 
+
+        <p className="text-center text-sm text-gray-400">
+          <button
+            onClick={() => router.push('/reset-password')}
+            className="font-semibold text-[#D4AF37] hover:underline"
+          >
+            Esqueci minha senha
+          </button>
+        </p>
+
         <p className="text-center text-sm text-gray-400">
           Ainda não tem conta?{' '}
           <button

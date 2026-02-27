@@ -23,12 +23,13 @@ export async function GET(request: NextRequest) {
 
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const type = searchParams.get('type')
 
   if (code) {
     const supabase = createRouteHandlerClient({ cookies })
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // 🔑 Sempre entrega o controle ao middleware
-  return NextResponse.redirect(`${origin}/home`)
+  const redirectPath = type === 'recovery' ? '/update-password' : '/home'
+  return NextResponse.redirect(`${origin}${redirectPath}`)
 }

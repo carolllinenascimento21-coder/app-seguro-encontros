@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { getSupabasePublicEnv } from '@/lib/env'
 
 const PUBLIC_PATHS = [
   '/',
@@ -61,9 +62,15 @@ export async function middleware(req: NextRequest) {
 
   const response = NextResponse.next({ request: { headers: req.headers } })
 
+  const supabaseEnv = getSupabasePublicEnv('middleware', { throwOnMissing: false })
+
+  if (!supabaseEnv) {
+    return response
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseEnv.url,
+    supabaseEnv.anonKey,
     {
       cookies: {
         getAll() {
