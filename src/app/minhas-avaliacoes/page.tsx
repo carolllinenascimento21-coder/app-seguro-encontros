@@ -133,12 +133,25 @@ export default function MinhasAvaliacoes() {
     if (!avaliacaoToDelete) return
 
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        router.push('/login')
+        return
+      }
+
       const { error } = await supabase
         .from('avaliacoes')
         .delete()
         .eq('id', avaliacaoToDelete)
+        .eq('user_id', session.user.id)
 
-      if (error) throw error
+      if (error) {
+        console.error(error)
+        throw error
+      }
 
       setAvaliacoes((prev) => prev.filter((a) => a.id !== avaliacaoToDelete))
       setShowDeleteModal(false)

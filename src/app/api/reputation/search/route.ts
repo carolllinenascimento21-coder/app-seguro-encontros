@@ -12,10 +12,10 @@ function normalize(value: string | null) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const termoRaw = searchParams.get('termo')
-    const termo = normalize(termoRaw)
+    const nome = normalize(searchParams.get('nome'))
+    const cidade = normalize(searchParams.get('cidade'))
 
-    if (!termo) {
+    if (!nome && !cidade) {
       return NextResponse.json(
         { success: false, message: 'Informe um termo para busca' },
         { status: 400 }
@@ -24,14 +24,20 @@ export async function GET(req: Request) {
 
     const supabase = getSupabaseAdminClient()
 
-    const { data: profiles, error } = await supabase
+    let query = supabase
       .from('male_profiles')
       .select('id, display_name, city')
       .eq('is_active', true)
-      .or(
-        `normalized_name.ilike.%${termo}%,normalized_city.ilike.%${termo}%`
-      )
-      .limit(30)
+
+    if (nome) {
+      query = query.ilike('normalized_name', `%${nome}%`)
+    }
+
+    if (cidade) {
+      query = query.ilike('normalized_city', `%${cidade}%`)
+    }
+
+    const { data: profiles, error } = await query.limit(30)
 
     if (error) throw error
 
