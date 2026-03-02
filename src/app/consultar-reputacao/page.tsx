@@ -97,13 +97,18 @@ export default function ConsultarReputacao() {
       setLoading(true)
       setError(null)
 
-      // junta nome + cidade se ambos existirem
-      const termo = [nomeNormalizado, cidadeNormalizada]
-        .filter(Boolean)
-        .join(' ')
+      const params = new URLSearchParams()
+
+      if (nomeNormalizado) {
+        params.set('nome', nomeNormalizado)
+      }
+
+      if (cidadeNormalizada) {
+        params.set('cidade', cidadeNormalizada)
+      }
 
       const res = await fetch(
-        `/api/reputation/search?termo=${encodeURIComponent(termo)}`,
+        `/api/reputation/search?${params.toString()}`,
         { cache: 'no-store' }
       )
 
