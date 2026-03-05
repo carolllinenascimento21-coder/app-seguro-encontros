@@ -36,26 +36,60 @@ export default function PrivacidadePage() {
             </p>
           </section>
           <section>
-            <h2 className="text-lg font-semibold text-white">3. Compartilhamento de informações</h2>
+            <h2 className="text-lg font-semibold text-white">3. Base legal e transparência (LGPD)</h2>
+            <p>
+              O tratamento de dados ocorre com fundamento nas bases legais cabíveis da Lei Geral de Proteção de
+              Dados (Lei nº 13.709/2018), incluindo execução de contrato, legítimo interesse, cumprimento de
+              obrigação legal e, quando aplicável, consentimento.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold text-white">4. Compartilhamento de informações</h2>
             <p>
               Não comercializamos dados pessoais. O compartilhamento pode ocorrer com operadores essenciais,
               autoridades competentes ou quando houver obrigação legal.
             </p>
           </section>
           <section>
-            <h2 className="text-lg font-semibold text-white">4. Seus direitos</h2>
+            <h2 className="text-lg font-semibold text-white">5. Conteúdo gerado por usuárias (UGC)</h2>
+            <p>
+              A plataforma permite publicação de avaliações e relatos por usuárias. Esses conteúdos podem conter
+              opiniões e percepções pessoais. O Confia+ adota medidas para prevenção de abuso, incluindo regras de
+              comunidade, detecção de condutas proibidas e mecanismos de denúncia.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold text-white">6. Sistema de denúncia de conteúdo</h2>
+            <p>
+              Qualquer pessoa pode denunciar conteúdo considerado inadequado, falso, ofensivo, difamatório ou que
+              viole direitos de terceiros. A denúncia pode ser usada para solicitar revisão, limitação de
+              visibilidade ou remoção, conforme análise de conformidade legal e das regras da comunidade.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold text-white">7. Processo de moderação</h2>
+            <p>
+              Podemos revisar, editar, restringir ou remover avaliações e comentários quando houver indícios de
+              violação deste termo, de normas da plataforma, da legislação aplicável ou de políticas da Google Play.
+              Em casos graves, poderemos suspender contas e preservar registros para cooperação com autoridades.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold text-white">8. Seus direitos</h2>
             <p>
               Você pode solicitar acesso, correção, exclusão e portabilidade dos seus dados, além de revogar
               consentimentos, observadas as hipóteses legais de retenção.
             </p>
           </section>
           <section>
-            <h2 className="text-lg font-semibold text-white">5. Segurança e contato</h2>
+            <h2 className="text-lg font-semibold text-white">9. Segurança, retenção e contato</h2>
             <p>
               Adotamos medidas técnicas e administrativas para proteção dos dados contra acesso não autorizado,
-              perda ou alteração indevida.
+              perda ou alteração indevida. Os dados são mantidos pelo tempo necessário ao cumprimento das
+              finalidades informadas e de obrigações legais/regulatórias.
             </p>
             <p className="mt-2">Contato: privacidade@confiamais.com.br</p>
+            <p>Canal para revisão/remoção de avaliações: suporte@confiamais.com.br</p>
           </section>
         </div>
       </article>
