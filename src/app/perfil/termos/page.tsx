@@ -54,58 +54,79 @@ export default function TermosPage() {
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">4. Conteúdo do Usuário</h2>
+              <h2 className="text-lg font-bold text-white mb-2">4. Conteúdo do Usuário (UGC)</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
-                Você é responsável pelo conteúdo que publica no Confia+. Não é permitido publicar conteúdo difamatório, ofensivo, ilegal ou que viole os direitos de terceiros.
+                Você é responsável pelo conteúdo que publica no Confia+. Não é permitido publicar conteúdo difamatório, ofensivo, ilegal, falso de forma intencional ou que viole os direitos de terceiros.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">5. Privacidade e Segurança</h2>
+              <h2 className="text-lg font-bold text-white mb-2">5. Aviso sobre avaliações</h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                As avaliações refletem experiências pessoais das usuárias e não representam afirmações factuais verificadas pela plataforma.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-white mb-2">6. Sistema de denúncia de conteúdo</h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                Qualquer pessoa pode denunciar conteúdo inadequado, falso, ofensivo ou potencialmente difamatório e solicitar revisão, limitação de visibilidade ou remoção.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-white mb-2">7. Processo de moderação</h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                O aplicativo pode revisar, editar ou remover avaliações que violem estes termos, as regras da comunidade, a legislação aplicável ou as políticas da Google Play.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-white mb-2">8. Privacidade e Segurança</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Levamos sua privacidade a sério. Consulte nossa Política de Privacidade para entender como coletamos, usamos e protegemos suas informações pessoais.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">6. Verificação Facial</h2>
+              <h2 className="text-lg font-bold text-white mb-2">9. Verificação Facial</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 A verificação facial é opcional, mas recomendada para aumentar a confiança na plataforma. As imagens são processadas de forma segura e não são compartilhadas publicamente.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">7. Modificações dos Termos</h2>
+              <h2 className="text-lg font-bold text-white mb-2">10. Modificações dos Termos</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Reservamo-nos o direito de modificar estes termos a qualquer momento. Notificaremos você sobre mudanças significativas através do aplicativo ou por e-mail.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">8. Rescisão</h2>
+              <h2 className="text-lg font-bold text-white mb-2">11. Rescisão</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Podemos suspender ou encerrar sua conta se você violar estes termos. Você pode encerrar sua conta a qualquer momento através das configurações do aplicativo.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">9. Limitação de Responsabilidade</h2>
+              <h2 className="text-lg font-bold text-white mb-2">12. Limitação de Responsabilidade</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 O Confia+ não se responsabiliza por danos diretos, indiretos, incidentais ou consequenciais resultantes do uso ou incapacidade de usar o serviço.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">10. Contato</h2>
+              <h2 className="text-lg font-bold text-white mb-2">13. Contato</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
-                Para dúvidas sobre estes termos, entre em contato conosco através do e-mail: contato@confiamais.com.br
+                Para dúvidas sobre estes termos, entre em contato conosco através do e-mail: contato@confiamais.com.br. Para revisão/remoção de conteúdo: suporte@confiamais.com.br
               </p>
             </div>
           </div>
 
           <div className="pt-4 border-t border-gray-800">
             <p className="text-gray-500 text-xs text-center">
-              Última atualização: Janeiro de 2024
+              Última atualização: 16 de fevereiro de 2026
             </p>
           </div>
         </div>

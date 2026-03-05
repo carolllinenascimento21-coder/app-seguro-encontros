@@ -50,6 +50,12 @@ export default function ConsultarReputacaoClient({ profile }: Props) {
         </div>
 
         {/* Busca */}
+        <div className="rounded-xl border border-[#D4AF37]/60 bg-[#D4AF37]/10 p-3">
+          <p className="text-xs sm:text-sm text-[#EFD9A7]">
+            As avaliações refletem experiências pessoais das usuárias. Utilize as informações com responsabilidade.
+          </p>
+        </div>
+
         <div className="border border-[#D4AF37] rounded-2xl p-4 space-y-3">
           <p className="text-sm text-[#EFD9A7]">
             Digite o nome para consultar. Você verá um resumo gratuito; detalhes completos exigem plano.

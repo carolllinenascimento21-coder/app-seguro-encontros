@@ -62,36 +62,44 @@ export default function PrivacidadePage() {
               </ul>
             </div>
 
+
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">3. Compartilhamento de Informações</h2>
+              <h2 className="text-lg font-bold text-white mb-2">3. Base legal do tratamento (LGPD)</h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                O tratamento de dados pessoais ocorre conforme as bases legais previstas na LGPD, incluindo execução de contrato, legítimo interesse, cumprimento de obrigação legal e consentimento quando necessário.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-white mb-2">4. Compartilhamento de Informações</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Não vendemos suas informações pessoais. Podemos compartilhar informações apenas em casos específicos: com seu consentimento, para cumprir obrigações legais, ou para proteger a segurança dos usuários.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">4. Segurança dos Dados</h2>
+              <h2 className="text-lg font-bold text-white mb-2">5. Segurança dos Dados</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Implementamos medidas de segurança técnicas e organizacionais para proteger suas informações contra acesso não autorizado, alteração, divulgação ou destruição.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">5. Verificação Facial</h2>
+              <h2 className="text-lg font-bold text-white mb-2">6. Verificação Facial</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 A verificação facial é opcional e usa tecnologia de reconhecimento facial para confirmar sua identidade. As imagens são criptografadas e armazenadas de forma segura. Você pode optar por não usar este recurso.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">6. Dados de Localização</h2>
+              <h2 className="text-lg font-bold text-white mb-2">7. Dados de Localização</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Coletamos dados de localização apenas quando você ativa o Modo Encontro Seguro. Esses dados são usados exclusivamente para sua segurança e podem ser compartilhados com seu contato de confiança em caso de emergência.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">7. Seus Direitos</h2>
+              <h2 className="text-lg font-bold text-white mb-2">8. Seus Direitos</h2>
               <p className="text-gray-400 text-sm leading-relaxed mb-2">
                 Você tem o direito de:
               </p>
@@ -105,37 +113,51 @@ export default function PrivacidadePage() {
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">8. Retenção de Dados</h2>
+              <h2 className="text-lg font-bold text-white mb-2">9. Retenção de Dados</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Mantemos suas informações pelo tempo necessário para fornecer nossos serviços. Quando você exclui sua conta, removemos permanentemente seus dados pessoais, exceto quando exigido por lei.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">9. Cookies e Tecnologias Similares</h2>
+              <h2 className="text-lg font-bold text-white mb-2">10. Cookies e Tecnologias Similares</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Usamos cookies e tecnologias similares para melhorar sua experiência, analisar o uso do aplicativo e personalizar conteúdo.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">10. Alterações nesta Política</h2>
+              <h2 className="text-lg font-bold text-white mb-2">11. Conteúdo gerado por usuárias (UGC)</h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                O Confia+ permite avaliações e relatos publicados por usuárias. Esses conteúdos podem refletir opiniões pessoais e são submetidos a regras de comunidade, mecanismos de denúncia e revisão de conformidade.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-white mb-2">12. Sistema de denúncia e moderação</h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                Qualquer pessoa pode denunciar conteúdo inadequado, falso, ofensivo ou difamatório. O aplicativo pode revisar, editar ou remover avaliações que violem regras da comunidade, legislação aplicável ou políticas da Google Play.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-white mb-2">13. Alterações nesta Política</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Podemos atualizar esta política periodicamente. Notificaremos você sobre mudanças significativas através do aplicativo ou por e-mail.
               </p>
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-white mb-2">11. Contato</h2>
+              <h2 className="text-lg font-bold text-white mb-2">14. Contato</h2>
               <p className="text-gray-400 text-sm leading-relaxed">
-                Para questões sobre privacidade ou para exercer seus direitos, entre em contato: privacidade@confiamais.com.br
+                Para questões sobre privacidade ou para exercer seus direitos, entre em contato: privacidade@confiamais.com.br. Solicitações de revisão/remoção de avaliações: suporte@confiamais.com.br
               </p>
             </div>
           </div>
 
           <div className="pt-4 border-t border-gray-800">
             <p className="text-gray-500 text-xs text-center">
-              Última atualização: Janeiro de 2024
+              Última atualização: 16 de fevereiro de 2026
             </p>
           </div>
         </div>
