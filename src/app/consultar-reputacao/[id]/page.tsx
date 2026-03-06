@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Star, ShieldAlert } from 'lucide-react'
+import { ReportReviewButton } from '@/components/ReportReviewButton'
 
 type Avaliacao = {
   id: string
@@ -17,6 +18,7 @@ type Avaliacao = {
   relato: string | null
   flags_negative: string[] | null
   flags_positive: string[] | null
+  status: 'public' | 'pending_moderation' | 'hidden' | 'removed'
 }
 
 const categorias = [
@@ -100,10 +102,12 @@ export default async function Page({
       confianca,
       relato,
       flags_negative,
-      flags_positive
+      flags_positive,
+      status
     `)
     .eq('male_profile_id', params.id)
     .eq('publica', true)
+    .eq('status', 'public')
     .order('created_at', { ascending: false })
 
   const lista = avaliacoes ?? []
@@ -283,7 +287,7 @@ export default async function Page({
 
                   {a.flags_negative && a.flags_negative.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3">
-                      {a.flags_negative.map((flag) => (
+                      {a.flags_negative.map((flag: string) => (
                         <span
                           key={flag}
                           className="px-3 py-1 text-xs bg-red-600/20 text-red-400 rounded-full border border-red-600/30"
@@ -299,6 +303,8 @@ export default async function Page({
                       ? 'Avaliação anônima'
                       : 'Avaliação identificada'}
                   </p>
+
+                  <ReportReviewButton avaliacaoId={a.id} />
                 </div>
               ))}
             </div>

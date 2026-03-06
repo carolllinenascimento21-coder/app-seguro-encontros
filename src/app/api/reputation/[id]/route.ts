@@ -162,6 +162,7 @@ export async function GET(
       `)
       .eq('male_profile_id', maleProfileId)
       .eq('publica', true)
+      .eq('status', 'public')
       .order('created_at', { ascending: false })
 
   if (reviewsError) {

@@ -47,6 +47,7 @@ export async function GET(req: Request) {
       .from('avaliacoes')
       .select('*')
       .eq('publica', true)
+      .eq('status', 'public')
       .in('male_profile_id', ids.length ? ids : ['00000000-0000'])
 
     const grouped: Record<string, any[]> = {}
