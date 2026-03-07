@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { hashIdentifier, normalizeIdentifierPlatform } from '@/lib/identifier-hash'
 
 const getString = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const getStringArray = (value: unknown) => {
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
   const displayName = getString(body.nome ?? body.name ?? body.display_name)
   const city = getString(body.cidade ?? body.city)
   const contato = getString(body.contato ?? body.telefone ?? body.phone)
+  const contatoPlatform = getString(body.contato_platform ?? body.platform)
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
 
@@ -45,20 +47,46 @@ export async function POST(request: Request) {
   }
 
   let maleProfileId: string | null = null
+  const normalizedPlatform = normalizeIdentifierPlatform(contatoPlatform)
+  const hasContatoIdentifier = Boolean(contato)
+  const identifierHash = hasContatoIdentifier
+    ? hashIdentifier(contato, normalizedPlatform)
+    : null
 
-  const lookup = await supabase
-    .from('male_profiles')
-    .select('id, display_name, city, normalized_name, normalized_city')
-    .ilike('display_name', displayName)
-    .eq('city', city || '')
-    .maybeSingle()
+  if (identifierHash) {
+    const existingIdentifier = await supabase
+      .from('profile_identifiers')
+      .select('profile_id')
+      .eq('platform', normalizedPlatform)
+      .eq('identifier_hash', identifierHash)
+      .maybeSingle()
 
-  if (lookup.error) {
-    console.error('[api/avaliacoes/create] Erro ao buscar perfil:', lookup.error)
-    return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
+    if (existingIdentifier.error) {
+      console.error('[api/avaliacoes/create] Erro ao buscar identifier hash:', existingIdentifier.error)
+      return NextResponse.json(
+        { error: 'Erro ao buscar identificador do perfil avaliado.' },
+        { status: 400 }
+      )
+    }
+
+    maleProfileId = existingIdentifier.data?.profile_id ?? null
   }
 
-  maleProfileId = lookup.data?.id ?? null
+  if (!maleProfileId) {
+    const lookup = await supabase
+      .from('male_profiles')
+      .select('id, display_name, city, normalized_name, normalized_city')
+      .ilike('display_name', displayName)
+      .eq('city', city || '')
+      .maybeSingle()
+
+    if (lookup.error) {
+      console.error('[api/avaliacoes/create] Erro ao buscar perfil:', lookup.error)
+      return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
+    }
+
+    maleProfileId = lookup.data?.id ?? null
+  }
 
   if (!maleProfileId) {
     let insert = await supabase
@@ -78,9 +106,49 @@ export async function POST(request: Request) {
     maleProfileId = insert.data.id
   }
 
+  if (identifierHash && maleProfileId) {
+    const identifierUpsert = await supabase
+      .from('profile_identifiers')
+      .insert({
+        profile_id: maleProfileId,
+        platform: normalizedPlatform,
+        identifier_hash: identifierHash,
+      })
+
+    if (identifierUpsert.error && identifierUpsert.error.code === '23505') {
+      const existingIdentifier = await supabase
+        .from('profile_identifiers')
+        .select('profile_id')
+        .eq('platform', normalizedPlatform)
+        .eq('identifier_hash', identifierHash)
+        .maybeSingle()
+
+      if (existingIdentifier.error) {
+        console.error(
+          '[api/avaliacoes/create] Erro ao resolver identifier hash duplicado:',
+          existingIdentifier.error
+        )
+        return NextResponse.json(
+          { error: 'Erro ao resolver identificador existente do perfil avaliado.' },
+          { status: 400 }
+        )
+      }
+
+      if (existingIdentifier.data?.profile_id) {
+        maleProfileId = existingIdentifier.data.profile_id
+      }
+    } else if (identifierUpsert.error) {
+      console.error('[api/avaliacoes/create] Erro ao salvar identifier hash:', identifierUpsert.error)
+      return NextResponse.json(
+        { error: 'Erro ao vincular identificador ao perfil avaliado.' },
+        { status: 400 }
+      )
+    }
+  }
+
   const avaliacaoPayload: Record<string, any> = {
     male_profile_id: maleProfileId,
-    contato: contato || null,
+    contato: null,
     relato: relato || null,
     anonimo,
     comportamento: notas.comportamento,
