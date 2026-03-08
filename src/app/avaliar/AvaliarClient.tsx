@@ -13,6 +13,42 @@ type Notas = {
   confianca: number
 }
 
+type IdentifierFields = {
+  instagram: string
+  facebook: string
+  tiktok: string
+  tinder: string
+  linkedin: string
+  telegram: string
+  whatsapp: string
+  telefone: string
+  outro: string
+}
+
+const IDENTIFIER_LABELS: Array<{ key: keyof IdentifierFields; label: string }> = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'tiktok', label: 'TikTok' },
+  { key: 'tinder', label: 'Tinder' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'telegram', label: 'Telegram' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'telefone', label: 'Telefone' },
+  { key: 'outro', label: 'Outro' },
+]
+
+const INITIAL_IDENTIFIERS: IdentifierFields = {
+  instagram: '',
+  facebook: '',
+  tiktok: '',
+  tinder: '',
+  linkedin: '',
+  telegram: '',
+  whatsapp: '',
+  telefone: '',
+  outro: '',
+}
+
 const CRITERIOS: Array<{ key: keyof Notas; label: string }> = [
   { key: 'comportamento', label: 'Comportamento' },
   { key: 'seguranca_emocional', label: 'Segurança Emocional' },
@@ -50,7 +86,7 @@ export default function AvaliarClient() {
 
   const [nome, setNome] = useState('')
   const [cidade, setCidade] = useState('')
-  const [contato, setContato] = useState('')
+  const [identifiers, setIdentifiers] = useState<IdentifierFields>(INITIAL_IDENTIFIERS)
   const [relato, setRelato] = useState('')
   const [anonimo, setAnonimo] = useState(false)
 
@@ -97,10 +133,14 @@ export default function AvaliarClient() {
     setNotas((prev) => ({ ...prev, [key]: value }))
   }
 
+  const setIdentifier = (key: keyof IdentifierFields, value: string) => {
+    setIdentifiers((prev) => ({ ...prev, [key]: value }))
+  }
+
   const resetForm = () => {
     setNome('')
     setCidade('')
-    setContato('')
+    setIdentifiers(INITIAL_IDENTIFIERS)
     setRelato('')
     setAnonimo(false)
     setNotas(INITIAL_NOTAS)
@@ -124,7 +164,8 @@ export default function AvaliarClient() {
         body: JSON.stringify({
           nome,
           cidade,
-          contato,
+          identifiers,
+          ...identifiers,
           relato,
           anonimo,
           notas,
@@ -201,12 +242,19 @@ export default function AvaliarClient() {
               className={inputClassName}
             />
 
-            <input
-              placeholder="Contato (telefone, instagram, facebook etc.)"
-              value={contato}
-              onChange={(e) => setContato(e.target.value)}
-              className={inputClassName}
-            />
+            <div className="grid gap-4 md:grid-cols-2">
+              {IDENTIFIER_LABELS.map((item) => (
+                <label key={item.key} className="grid gap-1.5">
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/60">{item.label}</span>
+                  <input
+                    placeholder={item.label}
+                    value={identifiers[item.key]}
+                    onChange={(e) => setIdentifier(item.key, e.target.value)}
+                    className={inputClassName}
+                  />
+                </label>
+              ))}
+            </div>
           </div>
         </section>
 

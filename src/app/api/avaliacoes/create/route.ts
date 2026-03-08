@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { hashIdentifier, normalizeIdentifierPlatform } from '@/lib/identifier-hash'
+import {
+  extractIdentifierInputs,
+  hashIdentifier,
+  normalizeIdentifierPlatform,
+  SUPPORTED_IDENTIFIER_PLATFORMS,
+  type SupportedIdentifierPlatform,
+} from '@/lib/identifier-hash'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 const getString = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const getStringArray = (value: unknown) => {
@@ -12,10 +19,25 @@ const getStringArray = (value: unknown) => {
     .filter(Boolean)
 }
 
+const normalizeNameOrCity = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+
 export async function POST(request: Request) {
   const supabase = createRouteHandlerClient({ cookies })
+  const supabaseAdmin = getSupabaseAdminClient()
 
-  const { data: { session }, error: authError } = await supabase.auth.getSession()
+  if (!supabaseAdmin) {
+    return NextResponse.json({ error: 'Serviço temporariamente indisponível.' }, { status: 503 })
+  }
+
+  const {
+    data: { session },
+    error: authError,
+  } = await supabase.auth.getSession()
   const user = session?.user ?? null
 
   if (authError || !user) {
@@ -26,8 +48,8 @@ export async function POST(request: Request) {
 
   const displayName = getString(body.nome ?? body.name ?? body.display_name)
   const city = getString(body.cidade ?? body.city)
-  const contato = getString(body.contato ?? body.telefone ?? body.phone)
-  const contatoPlatform = getString(body.contato_platform ?? body.platform)
+  const legacyContato = getString(body.contato ?? body.telefone ?? body.phone)
+  const legacyContatoPlatform = getString(body.contato_platform ?? body.platform)
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
 
@@ -46,53 +68,102 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Nome é obrigatório.' }, { status: 400 })
   }
 
-  let maleProfileId: string | null = null
-  const normalizedPlatform = normalizeIdentifierPlatform(contatoPlatform)
-  const hasContatoIdentifier = Boolean(contato)
-  const identifierHash = hasContatoIdentifier
-    ? hashIdentifier(contato, normalizedPlatform)
-    : null
+  const identifierInputs = extractIdentifierInputs(body.identifiers)
 
-  if (identifierHash) {
-    const existingIdentifier = await supabase
+  for (const platform of SUPPORTED_IDENTIFIER_PLATFORMS) {
+    const directValue = getString(body[platform])
+    if (directValue) {
+      identifierInputs[platform] = directValue
+    }
+  }
+
+  if (legacyContato) {
+    const legacyPlatform = normalizeIdentifierPlatform(legacyContatoPlatform) as SupportedIdentifierPlatform
+    if (SUPPORTED_IDENTIFIER_PLATFORMS.includes(legacyPlatform)) {
+      identifierInputs[legacyPlatform] = legacyContato
+    } else {
+      identifierInputs.outro = legacyContato
+    }
+  }
+
+  const identifiersToMatch = SUPPORTED_IDENTIFIER_PLATFORMS.map((platform) => {
+    const rawValue = identifierInputs[platform]
+    if (!rawValue) return null
+
+    return {
+      platform,
+      identifierHash: hashIdentifier(rawValue, platform),
+    }
+  }).filter((item): item is { platform: SupportedIdentifierPlatform; identifierHash: string } => Boolean(item))
+
+  let maleProfileId: string | null = null
+
+  // STEP 1 — identifier match
+  for (const identifier of identifiersToMatch) {
+    const existingIdentifier = await supabaseAdmin
       .from('profile_identifiers')
       .select('profile_id')
-      .eq('platform', normalizedPlatform)
-      .eq('identifier_hash', identifierHash)
+      .eq('platform', identifier.platform)
+      .eq('identifier_hash', identifier.identifierHash)
       .maybeSingle()
 
     if (existingIdentifier.error) {
       console.error('[api/avaliacoes/create] Erro ao buscar identifier hash:', existingIdentifier.error)
-      return NextResponse.json(
-        { error: 'Erro ao buscar identificador do perfil avaliado.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Erro ao buscar identificador do perfil avaliado.' }, { status: 400 })
     }
 
-    maleProfileId = existingIdentifier.data?.profile_id ?? null
+    if (existingIdentifier.data?.profile_id) {
+      maleProfileId = existingIdentifier.data.profile_id
+      break
+    }
   }
 
+  // STEP 2 — name + city match (fallback)
   if (!maleProfileId) {
-    const lookup = await supabase
+    const normalizedName = normalizeNameOrCity(displayName)
+    const normalizedCity = normalizeNameOrCity(city)
+
+    const lookup = await supabaseAdmin
       .from('male_profiles')
-      .select('id, display_name, city, normalized_name, normalized_city')
-      .ilike('display_name', displayName)
-      .eq('city', city || '')
+      .select('id')
+      .eq('normalized_name', normalizedName)
+      .eq('normalized_city', normalizedCity)
+      .limit(1)
       .maybeSingle()
 
     if (lookup.error) {
-      console.error('[api/avaliacoes/create] Erro ao buscar perfil:', lookup.error)
+      console.error('[api/avaliacoes/create] Erro ao buscar perfil por nome/cidade:', lookup.error)
       return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
     }
 
     maleProfileId = lookup.data?.id ?? null
   }
 
+  // STEP 3 — create profile (only if no previous match)
   if (!maleProfileId) {
-    let insert = await supabase
+    // Rate limit: max 3 new profiles per user in 24h
+    const profileCount = await supabaseAdmin
       .from('male_profiles')
-      .insert({ display_name: displayName, city: city || null })
-      .select('id, display_name, city, normalized_name, normalized_city')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by', user.id)
+      .gt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+
+    if (profileCount.error) {
+      console.error('[api/avaliacoes/create] Erro ao validar limite de criação:', profileCount.error)
+      return NextResponse.json({ error: 'Erro ao validar limite de criação de perfil.' }, { status: 400 })
+    }
+
+    if ((profileCount.count ?? 0) >= 3) {
+      return NextResponse.json(
+        { error: 'Limite diário atingido para criação de novos perfis. Tente novamente em 24h.' },
+        { status: 429 }
+      )
+    }
+
+    const insert = await supabaseAdmin
+      .from('male_profiles')
+      .insert({ display_name: displayName, city: city || null, created_by: user.id })
+      .select('id')
       .single()
 
     if (insert.error || !insert.data) {
@@ -106,43 +177,22 @@ export async function POST(request: Request) {
     maleProfileId = insert.data.id
   }
 
-  if (identifierHash && maleProfileId) {
-    const identifierUpsert = await supabase
-      .from('profile_identifiers')
-      .insert({
+  if (maleProfileId && identifiersToMatch.length > 0) {
+    for (const identifier of identifiersToMatch) {
+      const identifierInsert = await supabaseAdmin.from('profile_identifiers').insert({
         profile_id: maleProfileId,
-        platform: normalizedPlatform,
-        identifier_hash: identifierHash,
+        platform: identifier.platform,
+        identifier_hash: identifier.identifierHash,
       })
 
-    if (identifierUpsert.error && identifierUpsert.error.code === '23505') {
-      const existingIdentifier = await supabase
-        .from('profile_identifiers')
-        .select('profile_id')
-        .eq('platform', normalizedPlatform)
-        .eq('identifier_hash', identifierHash)
-        .maybeSingle()
-
-      if (existingIdentifier.error) {
-        console.error(
-          '[api/avaliacoes/create] Erro ao resolver identifier hash duplicado:',
-          existingIdentifier.error
-        )
-        return NextResponse.json(
-          { error: 'Erro ao resolver identificador existente do perfil avaliado.' },
-          { status: 400 }
-        )
+      if (identifierInsert.error && identifierInsert.error.code === '23505') {
+        continue
       }
 
-      if (existingIdentifier.data?.profile_id) {
-        maleProfileId = existingIdentifier.data.profile_id
+      if (identifierInsert.error) {
+        console.error('[api/avaliacoes/create] Erro ao salvar identifier hash:', identifierInsert.error)
+        return NextResponse.json({ error: 'Erro ao vincular identificador ao perfil avaliado.' }, { status: 400 })
       }
-    } else if (identifierUpsert.error) {
-      console.error('[api/avaliacoes/create] Erro ao salvar identifier hash:', identifierUpsert.error)
-      return NextResponse.json(
-        { error: 'Erro ao vincular identificador ao perfil avaliado.' },
-        { status: 400 }
-      )
     }
   }
 
@@ -161,11 +211,7 @@ export async function POST(request: Request) {
     user_id: user.id,
   }
 
-  let insertA = await supabase
-    .from('avaliacoes')
-    .insert(avaliacaoPayload)
-    .select('id')
-    .single()
+  const insertA = await supabaseAdmin.from('avaliacoes').insert(avaliacaoPayload).select('id').single()
 
   if (insertA.error || !insertA.data) {
     console.error('[api/avaliacoes/create] Erro ao inserir avaliação:', insertA.error)
