@@ -149,8 +149,11 @@ export default function AvaliarClient() {
   }
 
   const handleSubmit = async () => {
-    if (!nome.trim() || !cidade.trim()) {
-      alert('Nome e cidade são obrigatórios.')
+    const hasCidade = Boolean(cidade.trim())
+    const hasIdentifier = Object.values(identifiers).some((value) => value.trim().length > 0)
+
+    if (!nome.trim() || (!hasCidade && !hasIdentifier)) {
+      alert('Preencha o nome e ao menos um identificador ou a cidade para localizar/criar o perfil.')
       return
     }
 
@@ -176,6 +179,8 @@ export default function AvaliarClient() {
           confianca: notas.confianca,
           is_positive: greenFlags,
           is_negative: redFlags,
+          flags_positive: greenFlags,
+          flags_negative: redFlags,
           greenFlags,
           redFlags,
         }),
