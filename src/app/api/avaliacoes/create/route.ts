@@ -26,6 +26,12 @@ const normalizeNameOrCity = (value: string) =>
     .trim()
     .toLowerCase()
 
+const isMissingColumnError = (error: { code?: string; message?: string } | null | undefined, columnName: string) => {
+  if (!error) return false
+  if (error.code !== '42703') return false
+  return (error.message ?? '').toLowerCase().includes(`column "${columnName.toLowerCase()}"`)
+}
+
 export async function POST(request: Request) {
   const supabase = createRouteHandlerClient({ cookies })
   const supabaseAdmin = getSupabaseAdminClient()
@@ -204,9 +210,11 @@ export async function POST(request: Request) {
 
   const avaliacaoPayload: Record<string, any> = {
     male_profile_id: maleProfileId,
+    autora_id: autoraId,
     contato: null,
     relato: relato || null,
     anonimo,
+    is_anonymous: anonimo,
     comportamento: notas.comportamento,
     seguranca_emocional: notas.seguranca_emocional,
     respeito: notas.respeito,
@@ -217,13 +225,26 @@ export async function POST(request: Request) {
     user_id: user.id,
   }
 
-  const insertA = await supabaseAdmin.from('avaliacoes').insert(avaliacaoPayload).select('id').single()
+  let insertA = await supabaseAdmin.from('avaliacoes').insert(avaliacaoPayload).select('id').maybeSingle()
+
+  if (isMissingColumnError(insertA.error, 'autora_id')) {
+    const { autora_id: _ignoredAutoraId, ...payloadWithoutAutoraId } = avaliacaoPayload
+    insertA = await supabaseAdmin.from('avaliacoes').insert(payloadWithoutAutoraId).select('id').maybeSingle()
+  }
 
   if (insertA.error || !insertA.data) {
     console.error('[api/avaliacoes/create] Erro ao inserir avaliação:', insertA.error)
     return NextResponse.json(
       { error: insertA.error?.message ?? 'Erro ao publicar avaliação.' },
       { status: 400 }
+    )
+  }
+
+  if (!insertA.data.id) {
+    console.error('[api/avaliacoes/create] Inserção de avaliação sem id retornado:', insertA)
+    return NextResponse.json(
+      { error: 'Erro ao publicar avaliação (id não retornado).' },
+      { status: 500 }
     )
   }
 
