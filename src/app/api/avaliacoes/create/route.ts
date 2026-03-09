@@ -44,6 +44,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Sessão expirada. Faça login novamente.' }, { status: 401 })
   }
 
+  const autoraId = user.id
+
+  if (!autoraId) {
+    throw new Error('Missing author id')
+  }
+
   const body = await request.json()
 
   const displayName = getString(body.nome ?? body.name ?? body.display_name)
@@ -217,6 +223,19 @@ export async function POST(request: Request) {
     console.error('[api/avaliacoes/create] Erro ao inserir avaliação:', insertA.error)
     return NextResponse.json(
       { error: insertA.error?.message ?? 'Erro ao publicar avaliação.' },
+      { status: 400 }
+    )
+  }
+
+  const insertAutora = await supabaseAdmin.from('avaliacoes_autoras').insert({
+    avaliacao_id: insertA.data.id,
+    autora_id: autoraId,
+  })
+
+  if (insertAutora.error) {
+    console.error('[api/avaliacoes/create] Erro ao vincular autora da avaliação:', insertAutora.error)
+    return NextResponse.json(
+      { error: insertAutora.error.message ?? 'Erro ao vincular autora da avaliação.' },
       { status: 400 }
     )
   }
