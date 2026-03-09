@@ -10,6 +10,13 @@ import {
 } from '@/lib/identifier-hash'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
+type SupabaseErrorLike = {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+}
+
 const getString = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const getStringArray = (value: unknown) => {
   if (!Array.isArray(value)) return [] as string[]
@@ -26,10 +33,55 @@ const normalizeNameOrCity = (value: string) =>
     .trim()
     .toLowerCase()
 
-const isMissingColumnError = (error: { code?: string; message?: string } | null | undefined, columnName: string) => {
+const isMissingColumnError = (error: SupabaseErrorLike | null | undefined, columnName: string) => {
   if (!error) return false
   if (error.code !== '42703') return false
   return (error.message ?? '').toLowerCase().includes(`column "${columnName.toLowerCase()}"`)
+}
+
+const isPostgresConstraintError = (error: SupabaseErrorLike | null | undefined) => {
+  if (!error?.code) return false
+  return ['23502', '23503', '23505', '23514', '22P02'].includes(error.code)
+}
+
+const safeLogError = (context: string, error: unknown, extras?: Record<string, unknown>) => {
+  const e = (error ?? {}) as SupabaseErrorLike
+  console.error(`[api/avaliacoes/create] ${context}`, {
+    code: e.code,
+    message: e.message,
+    details: e.details,
+    hint: e.hint,
+    ...extras,
+  })
+}
+
+const toClientError = (
+  error: SupabaseErrorLike | null | undefined,
+  fallbackMessage: string,
+  defaultStatus = 400
+) => {
+  if (!error) {
+    return { status: defaultStatus, message: fallbackMessage }
+  }
+
+  if (isPostgresConstraintError(error)) {
+    switch (error.code) {
+      case '23502':
+        return { status: 400, message: 'Dados obrigatórios ausentes para publicar avaliação.' }
+      case '23503':
+        return { status: 400, message: 'Referência inválida ao salvar avaliação.' }
+      case '23505':
+        return { status: 409, message: 'Registro duplicado detectado.' }
+      case '23514':
+        return { status: 400, message: 'Dados fora das regras de validação do banco.' }
+      case '22P02':
+        return { status: 400, message: 'Formato inválido de dados para publicação.' }
+      default:
+        return { status: 400, message: fallbackMessage }
+    }
+  }
+
+  return { status: defaultStatus, message: fallbackMessage }
 }
 
 export async function POST(request: Request) {
@@ -44,19 +96,26 @@ export async function POST(request: Request) {
     data: { session },
     error: authError,
   } = await supabase.auth.getSession()
-  const user = session?.user ?? null
 
-  if (authError || !user) {
+  if (authError) {
+    safeLogError('Erro ao recuperar sessão', authError)
     return NextResponse.json({ error: 'Sessão expirada. Faça login novamente.' }, { status: 401 })
   }
 
-  const autoraId = user.id
+  const user = session?.user ?? null
+  const autoraId = user?.id ?? null
 
-  if (!autoraId) {
-    throw new Error('Missing author id')
+  if (!user || !autoraId) {
+    return NextResponse.json({ error: 'Sessão expirada. Faça login novamente.' }, { status: 401 })
   }
 
-  const body = await request.json()
+  let body: any
+  try {
+    body = await request.json()
+  } catch (error) {
+    safeLogError('Body JSON inválido', error)
+    return NextResponse.json({ error: 'Payload inválido.' }, { status: 400 })
+  }
 
   const displayName = getString(body.nome ?? body.name ?? body.display_name)
   const city = getString(body.cidade ?? body.city)
@@ -110,7 +169,6 @@ export async function POST(request: Request) {
 
   let maleProfileId: string | null = null
 
-  // STEP 1 — identifier match
   for (const identifier of identifiersToMatch) {
     const existingIdentifier = await supabaseAdmin
       .from('profile_identifiers')
@@ -120,7 +178,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (existingIdentifier.error) {
-      console.error('[api/avaliacoes/create] Erro ao buscar identifier hash:', existingIdentifier.error)
+      safeLogError('Erro ao buscar identifier hash', existingIdentifier.error)
       return NextResponse.json({ error: 'Erro ao buscar identificador do perfil avaliado.' }, { status: 400 })
     }
 
@@ -130,7 +188,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // STEP 2 — name + city match (fallback)
   if (!maleProfileId) {
     const normalizedName = normalizeNameOrCity(displayName)
     const normalizedCity = normalizeNameOrCity(city)
@@ -144,16 +201,14 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (lookup.error) {
-      console.error('[api/avaliacoes/create] Erro ao buscar perfil por nome/cidade:', lookup.error)
+      safeLogError('Erro ao buscar perfil por nome/cidade', lookup.error)
       return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
     }
 
     maleProfileId = lookup.data?.id ?? null
   }
 
-  // STEP 3 — create profile (only if no previous match)
   if (!maleProfileId) {
-    // Rate limit: max 3 new profiles per user in 24h
     const profileCount = await supabaseAdmin
       .from('male_profiles')
       .select('id', { count: 'exact', head: true })
@@ -161,7 +216,7 @@ export async function POST(request: Request) {
       .gt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
 
     if (profileCount.error) {
-      console.error('[api/avaliacoes/create] Erro ao validar limite de criação:', profileCount.error)
+      safeLogError('Erro ao validar limite de criação', profileCount.error)
       return NextResponse.json({ error: 'Erro ao validar limite de criação de perfil.' }, { status: 400 })
     }
 
@@ -179,11 +234,9 @@ export async function POST(request: Request) {
       .single()
 
     if (insert.error || !insert.data) {
-      console.error('[api/avaliacoes/create] Erro ao inserir male_profiles:', insert.error)
-      return NextResponse.json(
-        { error: insert.error?.message ?? 'Erro ao criar perfil avaliado.' },
-        { status: 400 }
-      )
+      safeLogError('Erro ao inserir male_profiles', insert.error)
+      const mapped = toClientError(insert.error, 'Erro ao criar perfil avaliado.')
+      return NextResponse.json({ error: mapped.message }, { status: mapped.status })
     }
 
     maleProfileId = insert.data.id
@@ -202,7 +255,7 @@ export async function POST(request: Request) {
       }
 
       if (identifierInsert.error) {
-        console.error('[api/avaliacoes/create] Erro ao salvar identifier hash:', identifierInsert.error)
+        safeLogError('Erro ao salvar identifier hash', identifierInsert.error)
         return NextResponse.json({ error: 'Erro ao vincular identificador ao perfil avaliado.' }, { status: 400 })
       }
     }
@@ -233,37 +286,40 @@ export async function POST(request: Request) {
   }
 
   if (insertA.error || !insertA.data) {
-    console.error('[api/avaliacoes/create] Erro ao inserir avaliação:', insertA.error)
-    return NextResponse.json(
-      { error: insertA.error?.message ?? 'Erro ao publicar avaliação.' },
-      { status: 400 }
-    )
+    safeLogError('Erro ao inserir avaliação', insertA.error)
+    const mapped = toClientError(insertA.error, 'Erro ao publicar avaliação.')
+    return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 
-  if (!insertA.data.id) {
-    console.error('[api/avaliacoes/create] Inserção de avaliação sem id retornado:', insertA)
+  const avaliacaoId = insertA.data?.id ?? null
+
+  if (!avaliacaoId) {
+    safeLogError('Inserção de avaliação sem id retornado', insertA.error, { insertReturnedData: Boolean(insertA.data) })
+    return NextResponse.json({ error: 'Erro ao publicar avaliação (id não retornado).' }, { status: 500 })
+  }
+
+  if (!autoraId) {
+    safeLogError('autoraId vazio após inserção da avaliação', null, { avaliacaoId })
     return NextResponse.json(
-      { error: 'Erro ao publicar avaliação (id não retornado).' },
-      { status: 500 }
+      { error: 'Avaliação criada, mas autora não pôde ser vinculada por falta de autenticação.' },
+      { status: 401 }
     )
   }
 
   const insertAutora = await supabaseAdmin.from('avaliacoes_autoras').insert({
-    avaliacao_id: insertA.data.id,
+    avaliacao_id: avaliacaoId,
     autora_id: autoraId,
   })
 
   if (insertAutora.error) {
-    console.error('[api/avaliacoes/create] Erro ao vincular autora da avaliação:', insertAutora.error)
-    return NextResponse.json(
-      { error: insertAutora.error.message ?? 'Erro ao vincular autora da avaliação.' },
-      { status: 400 }
-    )
+    safeLogError('Erro ao vincular autora da avaliação', insertAutora.error, { avaliacaoId })
+    const mapped = toClientError(insertAutora.error, 'Erro ao vincular autora da avaliação.')
+    return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 
   return NextResponse.json({
     ok: true,
     male_profile_id: maleProfileId,
-    avaliacao_id: insertA.data.id,
+    avaliacao_id: avaliacaoId,
   })
 }
