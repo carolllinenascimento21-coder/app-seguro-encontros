@@ -165,7 +165,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Erro ao validar limite de criação de perfil.' }, { status: 400 })
     }
 
-    if ((profileCount.count ?? 0) >= 3) {
+    if ((profileCount.count ?? 0) >= 50) {
       return NextResponse.json(
         { error: 'Limite diário atingido para criação de novos perfis. Tente novamente em 24h.' },
         { status: 429 }
