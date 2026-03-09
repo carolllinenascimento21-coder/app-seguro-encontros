@@ -55,6 +55,12 @@ const safeLogError = (context: string, error: unknown, extras?: Record<string, u
   })
 }
 
+const extractNotNullColumn = (error: SupabaseErrorLike | null | undefined) => {
+  const source = `${error?.details ?? ''} ${error?.message ?? ''}`
+  const match = source.match(/column\s+"([^"]+)"/i)
+  return match?.[1] ?? null
+}
+
 const toClientError = (
   error: SupabaseErrorLike | null | undefined,
   fallbackMessage: string,
@@ -66,8 +72,11 @@ const toClientError = (
 
   if (isPostgresConstraintError(error)) {
     switch (error.code) {
-      case '23502':
-        return { status: 400, message: 'Dados obrigatórios ausentes para publicar avaliação.' }
+      case '23502': {
+        const column = extractNotNullColumn(error)
+        const suffix = column ? ` (coluna obrigatória: ${column})` : ''
+        return { status: 400, message: `Falha ao salvar: campo obrigatório ausente${suffix}.` }
+      }
       case '23503':
         return { status: 400, message: 'Referência inválida ao salvar avaliação.' }
       case '23505':
@@ -85,6 +94,7 @@ const toClientError = (
 }
 
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID()
   const supabase = createRouteHandlerClient({ cookies })
   const supabaseAdmin = getSupabaseAdminClient()
 
@@ -98,7 +108,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getSession()
 
   if (authError) {
-    safeLogError('Erro ao recuperar sessão', authError)
+    safeLogError('Erro ao recuperar sessão', authError, { requestId })
     return NextResponse.json({ error: 'Sessão expirada. Faça login novamente.' }, { status: 401 })
   }
 
@@ -113,7 +123,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json()
   } catch (error) {
-    safeLogError('Body JSON inválido', error)
+    safeLogError('Body JSON inválido', error, { requestId, userId: user?.id ?? null })
     return NextResponse.json({ error: 'Payload inválido.' }, { status: 400 })
   }
 
@@ -136,7 +146,7 @@ export async function POST(request: Request) {
   const flags_negative = getStringArray(body.flags_negative ?? body.is_negative ?? body.redFlags)
 
   if (!displayName) {
-    return NextResponse.json({ error: 'Nome é obrigatório.' }, { status: 400 })
+    return NextResponse.json({ error: 'Preencha o nome e ao menos um identificador ou a cidade para localizar/criar o perfil.' }, { status: 400 })
   }
 
   const identifierInputs = extractIdentifierInputs(body.identifiers)
@@ -157,6 +167,17 @@ export async function POST(request: Request) {
     }
   }
 
+  const hasAnyIdentifier = SUPPORTED_IDENTIFIER_PLATFORMS.some((platform) =>
+    Boolean(getString(identifierInputs[platform]))
+  )
+
+  if (!city && !hasAnyIdentifier) {
+    return NextResponse.json(
+      { error: 'Preencha o nome e ao menos um identificador ou a cidade para localizar/criar o perfil.' },
+      { status: 400 }
+    )
+  }
+
   const identifiersToMatch = SUPPORTED_IDENTIFIER_PLATFORMS.map((platform) => {
     const rawValue = identifierInputs[platform]
     if (!rawValue) return null
@@ -166,6 +187,19 @@ export async function POST(request: Request) {
       identifierHash: hashIdentifier(rawValue, platform),
     }
   }).filter((item): item is { platform: SupportedIdentifierPlatform; identifierHash: string } => Boolean(item))
+  const payloadPresence = {
+    nome: Boolean(displayName),
+    cidade: Boolean(city),
+    relato: Boolean(relato),
+    anonimo,
+    notas: Object.fromEntries(Object.entries(notas).map(([k, v]) => [k, Number.isFinite(v) && v > 0])),
+    flags_positive: flags_positive.length,
+    flags_negative: flags_negative.length,
+    identifiers: Object.fromEntries(
+      SUPPORTED_IDENTIFIER_PLATFORMS.map((platform) => [platform, Boolean(getString(identifierInputs[platform]))])
+    ),
+  }
+
 
   let maleProfileId: string | null = null
 
@@ -178,7 +212,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (existingIdentifier.error) {
-      safeLogError('Erro ao buscar identifier hash', existingIdentifier.error)
+      safeLogError('Erro ao buscar identifier hash', existingIdentifier.error, { requestId, userId: user.id, stage: 'lookup_identifier', payloadPresence })
       return NextResponse.json({ error: 'Erro ao buscar identificador do perfil avaliado.' }, { status: 400 })
     }
 
@@ -201,7 +235,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (lookup.error) {
-      safeLogError('Erro ao buscar perfil por nome/cidade', lookup.error)
+      safeLogError('Erro ao buscar perfil por nome/cidade', lookup.error, { requestId, userId: user.id, stage: 'lookup_male_profile', payloadPresence })
       return NextResponse.json({ error: 'Erro ao criar ou localizar perfil avaliado.' }, { status: 400 })
     }
 
@@ -216,7 +250,7 @@ export async function POST(request: Request) {
       .gt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
 
     if (profileCount.error) {
-      safeLogError('Erro ao validar limite de criação', profileCount.error)
+      safeLogError('Erro ao validar limite de criação', profileCount.error, { requestId, userId: user.id, stage: 'rate_limit_profile_creation', payloadPresence })
       return NextResponse.json({ error: 'Erro ao validar limite de criação de perfil.' }, { status: 400 })
     }
 
@@ -234,9 +268,9 @@ export async function POST(request: Request) {
       .single()
 
     if (insert.error || !insert.data) {
-      safeLogError('Erro ao inserir male_profiles', insert.error)
+      safeLogError('Erro ao inserir male_profiles', insert.error, { requestId, userId: user.id, stage: 'insert_male_profile', payloadPresence })
       const mapped = toClientError(insert.error, 'Erro ao criar perfil avaliado.')
-      return NextResponse.json({ error: mapped.message }, { status: mapped.status })
+      return NextResponse.json({ error: mapped.message, requestId }, { status: mapped.status })
     }
 
     maleProfileId = insert.data.id
@@ -255,7 +289,7 @@ export async function POST(request: Request) {
       }
 
       if (identifierInsert.error) {
-        safeLogError('Erro ao salvar identifier hash', identifierInsert.error)
+        safeLogError('Erro ao salvar identifier hash', identifierInsert.error, { requestId, userId: user.id, maleProfileId, stage: 'insert_profile_identifier', payloadPresence })
         return NextResponse.json({ error: 'Erro ao vincular identificador ao perfil avaliado.' }, { status: 400 })
       }
     }
@@ -286,20 +320,20 @@ export async function POST(request: Request) {
   }
 
   if (insertA.error || !insertA.data) {
-    safeLogError('Erro ao inserir avaliação', insertA.error)
+    safeLogError('Erro ao inserir avaliação', insertA.error, { requestId, userId: user.id, maleProfileId, stage: 'insert_avaliacao', payloadPresence })
     const mapped = toClientError(insertA.error, 'Erro ao publicar avaliação.')
-    return NextResponse.json({ error: mapped.message }, { status: mapped.status })
+    return NextResponse.json({ error: mapped.message, requestId }, { status: mapped.status })
   }
 
   const avaliacaoId = insertA.data?.id ?? null
 
   if (!avaliacaoId) {
-    safeLogError('Inserção de avaliação sem id retornado', insertA.error, { insertReturnedData: Boolean(insertA.data) })
+    safeLogError('Inserção de avaliação sem id retornado', insertA.error, { requestId, userId: user.id, maleProfileId, stage: 'insert_avaliacao_missing_id', insertReturnedData: Boolean(insertA.data), payloadPresence })
     return NextResponse.json({ error: 'Erro ao publicar avaliação (id não retornado).' }, { status: 500 })
   }
 
   if (!autoraId) {
-    safeLogError('autoraId vazio após inserção da avaliação', null, { avaliacaoId })
+    safeLogError('autoraId vazio após inserção da avaliação', null, { requestId, userId: user.id, maleProfileId, avaliacaoId, stage: 'insert_avaliacao_autora_missing' })
     return NextResponse.json(
       { error: 'Avaliação criada, mas autora não pôde ser vinculada por falta de autenticação.' },
       { status: 401 }
@@ -312,13 +346,14 @@ export async function POST(request: Request) {
   })
 
   if (insertAutora.error) {
-    safeLogError('Erro ao vincular autora da avaliação', insertAutora.error, { avaliacaoId })
+    safeLogError('Erro ao vincular autora da avaliação', insertAutora.error, { requestId, userId: user.id, maleProfileId, avaliacaoId, stage: 'insert_avaliacao_autora', payloadPresence })
     const mapped = toClientError(insertAutora.error, 'Erro ao vincular autora da avaliação.')
-    return NextResponse.json({ error: mapped.message }, { status: mapped.status })
+    return NextResponse.json({ error: mapped.message, requestId }, { status: mapped.status })
   }
 
   return NextResponse.json({
     ok: true,
+    requestId,
     male_profile_id: maleProfileId,
     avaliacao_id: avaliacaoId,
   })
