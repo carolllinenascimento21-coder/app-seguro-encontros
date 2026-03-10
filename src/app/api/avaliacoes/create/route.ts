@@ -107,6 +107,13 @@ export async function POST(request: Request) {
   const user = session.user
   const autoraId = user.id
 
+  if (!autoraId) {
+    return NextResponse.json(
+      { error: 'Usuário inválido ao criar avaliação.' },
+      { status: 401 }
+    )
+  }
+
   let body: any
 
   try {
@@ -204,9 +211,15 @@ export async function POST(request: Request) {
     flags_negative,
   }
 
+  console.log('[avaliacaoPayload]', {
+    male_profile_id: maleProfileId,
+    autora_id: autoraId,
+    user_id: autoraId,
+  })
+
   const insertA = await supabaseAdmin
     .from('avaliacoes')
-    .insert(avaliacaoPayload)
+    .insert([avaliacaoPayload])
     .select('id')
     .single()
 
