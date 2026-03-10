@@ -27,6 +27,18 @@ const getStringArray = (value: unknown) => {
     .filter(Boolean)
 }
 
+const safeNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const safeRating = (value: unknown, fallback = 0) => {
+  const n = Math.round(safeNumber(value, fallback))
+  if (n < 0) return 0
+  if (n > 5) return 5
+  return n
+}
+
 const normalizeNameOrCity = (value: string) =>
   value
     .normalize('NFD')
@@ -139,11 +151,11 @@ export async function POST(request: Request) {
   const flags_negative = getStringArray(body.flags_negative ?? body.redFlags)
 
   const notas = {
-    comportamento: Number(body?.notas?.comportamento ?? body.comportamento ?? 0),
-    seguranca_emocional: Number(body?.notas?.seguranca_emocional ?? body.seguranca_emocional ?? 0),
-    respeito: Number(body?.notas?.respeito ?? body.respeito ?? 0),
-    carater: Number(body?.notas?.carater ?? body.carater ?? 0),
-    confianca: Number(body?.notas?.confianca ?? body.confianca ?? 0),
+    comportamento: safeRating(body?.notas?.comportamento ?? body.comportamento),
+    seguranca_emocional: safeRating(body?.notas?.seguranca_emocional ?? body.seguranca_emocional),
+    respeito: safeRating(body?.notas?.respeito ?? body.respeito),
+    carater: safeRating(body?.notas?.carater ?? body.carater),
+    confianca: safeRating(body?.notas?.confianca ?? body.confianca),
   }
 
   const identifierInputs = extractIdentifierInputs(body.identifiers)
