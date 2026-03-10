@@ -147,26 +147,72 @@ export async function POST(request: Request) {
   }
 
   const identifierInputs = extractIdentifierInputs(body.identifiers)
+  const identifierRecords = SUPPORTED_IDENTIFIER_PLATFORMS.reduce<
+    Array<{ platform: SupportedIdentifierPlatform; identifier_hash: string }>
+  >((acc, platform) => {
+    const rawIdentifier = identifierInputs[platform]
+    if (!rawIdentifier) return acc
+
+    const normalizedPlatform = normalizeIdentifierPlatform(platform)
+    if (!SUPPORTED_IDENTIFIER_PLATFORMS.includes(normalizedPlatform as SupportedIdentifierPlatform)) {
+      return acc
+    }
+
+    const identifierHash = hashIdentifier(rawIdentifier, normalizedPlatform)
+
+    if (!identifierHash) return acc
+
+    acc.push({
+      platform: normalizedPlatform as SupportedIdentifierPlatform,
+      identifier_hash: identifierHash,
+    })
+
+    return acc
+  }, [])
 
   let maleProfileId: string | null = null
+
+  for (const identifierRecord of identifierRecords) {
+    const lookupByIdentifier = await supabaseAdmin
+      .from('profile_identifiers')
+      .select('male_profile_id')
+      .eq('identifier_hash', identifierRecord.identifier_hash)
+      .limit(1)
+      .maybeSingle()
+
+    if (lookupByIdentifier.error) {
+      safeLogError('Erro ao buscar profile_identifiers', lookupByIdentifier.error, {
+        requestId,
+        platform: identifierRecord.platform,
+      })
+      return NextResponse.json({ error: 'Erro ao localizar perfil.' }, { status: 400 })
+    }
+
+    if (lookupByIdentifier.data?.male_profile_id) {
+      maleProfileId = lookupByIdentifier.data.male_profile_id
+      break
+    }
+  }
 
   const normalizedName = normalizeNameOrCity(displayName)
   const normalizedCity = normalizeNameOrCity(city)
 
-  const lookup = await supabaseAdmin
-    .from('male_profiles')
-    .select('id')
-    .eq('normalized_name', normalizedName)
-    .eq('normalized_city', normalizedCity)
-    .limit(1)
-    .maybeSingle()
+  if (!maleProfileId) {
+    const lookup = await supabaseAdmin
+      .from('male_profiles')
+      .select('id')
+      .eq('normalized_name', normalizedName)
+      .eq('normalized_city', normalizedCity)
+      .limit(1)
+      .maybeSingle()
 
-  if (lookup.error) {
-    safeLogError('Erro ao buscar male_profile', lookup.error, { requestId })
-    return NextResponse.json({ error: 'Erro ao localizar perfil.' }, { status: 400 })
+    if (lookup.error) {
+      safeLogError('Erro ao buscar male_profile', lookup.error, { requestId })
+      return NextResponse.json({ error: 'Erro ao localizar perfil.' }, { status: 400 })
+    }
+
+    maleProfileId = lookup.data?.id ?? null
   }
-
-  maleProfileId = lookup.data?.id ?? null
 
   if (!maleProfileId) {
 
@@ -187,6 +233,34 @@ export async function POST(request: Request) {
     }
 
     maleProfileId = insertProfile.data.id
+  }
+
+  if (identifierRecords.length > 0) {
+    const uniqueIdentifierRecords = Array.from(
+      new Map(
+        identifierRecords.map((item) => [
+          `${item.platform}:${item.identifier_hash}`,
+          {
+            male_profile_id: maleProfileId,
+            platform: item.platform,
+            identifier_hash: item.identifier_hash,
+          },
+        ])
+      ).values()
+    )
+
+    const upsertIdentifiers = await supabaseAdmin
+      .from('profile_identifiers')
+      .upsert(uniqueIdentifierRecords, {
+        onConflict: 'platform,identifier_hash',
+        ignoreDuplicates: true,
+      })
+
+    if (upsertIdentifiers.error) {
+      safeLogError('Erro ao salvar profile_identifiers', upsertIdentifiers.error, { requestId })
+      const mapped = toClientError(upsertIdentifiers.error, 'Erro ao salvar identificadores.')
+      return NextResponse.json({ error: mapped.message }, { status: mapped.status })
+    }
   }
 
   const avaliacaoPayload = {
