@@ -282,18 +282,17 @@ export async function POST(request: Request) {
     flags_negative,
   }
 
-  const { data: existingAvaliacao, error: existingAvaliacaoError } = await supabase
+  const { data: existingAvaliacao, error: existingError } = await supabase
     .from('avaliacoes')
     .select('id')
-    .eq('user_id', userId)
+    .eq('user_id', autoraId)
     .eq('male_profile_id', maleProfileId)
     .maybeSingle()
 
-  if (existingAvaliacaoError) {
-    safeLogError('Erro ao verificar duplicidade de avaliação', existingAvaliacaoError, {
-      requestId,
+  if (existingError) {
+    safeLogError('Erro ao verificar duplicidade de avaliação', existingError, {
       maleProfileId,
-      userId,
+      userId: autoraId,
     })
     return NextResponse.json(
       { error: 'Erro ao verificar avaliações existentes.' },
@@ -301,9 +300,9 @@ export async function POST(request: Request) {
     )
   }
 
-  if (existingAvaliacao?.id) {
+  if (existingAvaliacao) {
     return NextResponse.json(
-      { error: 'Você já avaliou esse perfil.' },
+      { error: 'Registro duplicado detectado.' },
       { status: 409 }
     )
   }
