@@ -298,6 +298,13 @@ export async function POST(request: Request) {
       p_user_id: userId,
       p_relato: relato,
       p_anomimo: anonimo,
+      p_comportamento: notas.comportamento,
+      p_seguranca_emocional: notas.seguranca_emocional,
+      p_respeito: notas.respeito,
+      p_carater: notas.carater,
+      p_confianca: notas.confianca,
+      p_flags_positive: flags_positive,
+      p_flags_negative: flags_negative,
     }
   )
 
