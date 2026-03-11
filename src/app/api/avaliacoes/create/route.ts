@@ -281,7 +281,7 @@ export async function POST(request: Request) {
     flags_negative,
   }
 
-  const insertA = await supabaseAdmin
+  const insertA = await supabase
     .from('avaliacoes')
     .insert([avaliacaoPayload])
     .select('id')
@@ -295,7 +295,7 @@ export async function POST(request: Request) {
 
   const avaliacaoId = insertA.data.id
 
-  const insertAutora = await supabaseAdmin
+  const insertAutora = await supabase
     .from('avaliacoes_autoras')
     .insert({
       avaliacao_id: avaliacaoId,
