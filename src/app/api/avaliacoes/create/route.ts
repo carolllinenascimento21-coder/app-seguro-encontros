@@ -270,8 +270,7 @@ export async function POST(request: Request) {
     autora_id: autoraId,
     user_id: autoraId,
     relato: relato || null,
-    anonimo,
-    is_anonymous: anonimo,
+    anonimo: anonimo,
     comportamento: notas.comportamento,
     seguranca_emocional: notas.seguranca_emocional,
     respeito: notas.respeito,
@@ -281,12 +280,6 @@ export async function POST(request: Request) {
     flags_positive,
     flags_negative,
   }
-
-  console.log('[avaliacaoPayload]', {
-    male_profile_id: maleProfileId,
-    autora_id: autoraId,
-    user_id: autoraId,
-  })
 
   const insertA = await supabaseAdmin
     .from('avaliacoes')
