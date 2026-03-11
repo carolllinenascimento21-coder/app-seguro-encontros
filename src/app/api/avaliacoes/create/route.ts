@@ -90,7 +90,6 @@ const toClientError = (
 }
 
 export async function POST(request: Request) {
-
   const requestId = crypto.randomUUID()
 
   const supabase = createRouteHandlerClient({ cookies })
@@ -226,7 +225,6 @@ export async function POST(request: Request) {
   }
 
   if (!maleProfileId) {
-
     const insertProfile = await supabaseAdmin
       .from('male_profiles')
       .insert({
@@ -275,17 +273,12 @@ export async function POST(request: Request) {
   }
 
   const avaliacaoPayload = {
-
     male_profile_id: maleProfileId,
-
     autora_id: autoraId,
     user_id: autoraId,
-
     relato: relato || null,
-
     anonimo,
     is_anonymous: anonimo,
-
     comportamento: notas.comportamento,
     seguranca_emocional: notas.seguranca_emocional,
     respeito: notas.respeito,
