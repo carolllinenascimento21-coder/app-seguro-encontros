@@ -110,19 +110,12 @@ export async function POST(request: Request) {
   if (authError || !user?.id) {
     safeLogError('Usuário não autenticado', authError, { requestId })
     return NextResponse.json(
-      { error: 'Faça login para publicar avaliação.' },
+      { error: 'Usuário inválido ao criar avaliação.' },
       { status: 401 }
     )
   }
 
   const autoraId = user.id
-
-  if (!autoraId) {
-    return NextResponse.json(
-      { error: 'Usuário inválido ao criar avaliação.' },
-      { status: 401 }
-    )
-  }
 
   let body: any
 
