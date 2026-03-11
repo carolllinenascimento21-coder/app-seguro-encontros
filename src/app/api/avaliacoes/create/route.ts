@@ -104,19 +104,18 @@ export async function POST(request: Request) {
   }
 
   const {
-    data: { session },
+    data: { user },
     error: authError,
-  } = await supabase.auth.getSession()
+  } = await supabase.auth.getUser()
 
-  if (authError || !session?.user?.id) {
-    safeLogError('Sessão inválida', authError, { requestId })
+  if (authError || !user?.id) {
+    safeLogError('Usuário não autenticado', authError, { requestId })
     return NextResponse.json(
       { error: 'Faça login para publicar avaliação.' },
       { status: 401 }
     )
   }
 
-  const user = session.user
   const autoraId = user.id
 
   if (!autoraId) {
@@ -233,7 +232,7 @@ export async function POST(request: Request) {
       .insert({
         display_name: displayName,
         city: city || null,
-        created_by: user.id,
+        created_by: autoraId,
       })
       .select('id')
       .single()
