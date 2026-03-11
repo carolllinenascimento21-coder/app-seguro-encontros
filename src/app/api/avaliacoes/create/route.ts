@@ -281,6 +281,32 @@ export async function POST(request: Request) {
     flags_negative,
   }
 
+  const existingAvaliacao = await supabase
+    .from('avaliacoes')
+    .select('id')
+    .eq('user_id', autoraId)
+    .eq('male_profile_id', maleProfileId)
+    .maybeSingle()
+
+  if (existingAvaliacao.error) {
+    safeLogError('Erro ao verificar duplicidade de avaliação', existingAvaliacao.error, {
+      requestId,
+      maleProfileId,
+      userId: autoraId,
+    })
+    return NextResponse.json(
+      { error: 'Erro ao verificar avaliações existentes.' },
+      { status: 400 }
+    )
+  }
+
+  if (existingAvaliacao.data?.id) {
+    return NextResponse.json(
+      { error: 'Você já avaliou esse perfil.' },
+      { status: 409 }
+    )
+  }
+
   const insertA = await supabase
     .from('avaliacoes')
     .insert([avaliacaoPayload])
