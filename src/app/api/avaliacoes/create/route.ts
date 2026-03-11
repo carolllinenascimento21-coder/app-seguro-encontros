@@ -266,33 +266,17 @@ export async function POST(request: Request) {
     }
   }
 
-  const avaliacaoPayload = {
-    male_profile_id: maleProfileId,
-    autora_id: autoraId,
-    user_id: userId,
-    relato: relato || null,
-    anonimo: anonimo,
-    comportamento: notas.comportamento,
-    seguranca_emocional: notas.seguranca_emocional,
-    respeito: notas.respeito,
-    carater: notas.carater,
-    confianca: notas.confianca,
-
-    flags_positive,
-    flags_negative,
-  }
-
-  const { data: existingAvaliacao, error: existingError } = await supabase
+  const { data: existingReview, error: existingError } = await supabase
     .from('avaliacoes')
     .select('id')
-    .eq('user_id', autoraId)
+    .eq('user_id', userId)
     .eq('male_profile_id', maleProfileId)
     .maybeSingle()
 
   if (existingError) {
     safeLogError('Erro ao verificar duplicidade de avaliação', existingError, {
       maleProfileId,
-      userId: autoraId,
+      userId,
     })
     return NextResponse.json(
       { error: 'Erro ao verificar avaliações existentes.' },
@@ -300,37 +284,27 @@ export async function POST(request: Request) {
     )
   }
 
-  if (existingAvaliacao) {
+  if (existingReview) {
     return NextResponse.json(
-      { error: 'Registro duplicado detectado.' },
+      { error: 'Você já avaliou este perfil.' },
       { status: 409 }
     )
   }
 
-  const insertA = await supabase
-    .from('avaliacoes')
-    .insert([avaliacaoPayload])
-    .select('id')
-    .single()
+  const { data: avaliacaoId, error: rpcError } = await supabase.rpc(
+    'create_avaliacao_transaction',
+    {
+      p_male_profile_id: maleProfileId,
+      p_user_id: userId,
+      p_relato: relato,
+      p_anomimo: anonimo,
+    }
+  )
 
-  if (insertA.error || !insertA.data) {
-    safeLogError('Erro ao inserir avaliação', insertA.error, { requestId })
-    const mapped = toClientError(insertA.error, 'Erro ao publicar avaliação.')
-    return NextResponse.json({ error: mapped.message }, { status: mapped.status })
-  }
+  if (rpcError) {
+    safeLogError('Erro ao criar avaliação via RPC', rpcError, { requestId })
 
-  const avaliacaoId = insertA.data.id
-
-  const insertAutora = await supabase
-    .from('avaliacoes_autoras')
-    .insert({
-      avaliacao_id: avaliacaoId,
-      autora_id: autoraId,
-    })
-
-  if (insertAutora.error) {
-    safeLogError('Erro ao vincular autora', insertAutora.error, { requestId })
-    const mapped = toClientError(insertAutora.error, 'Erro ao vincular autora.')
+    const mapped = toClientError(rpcError, 'Erro ao publicar avaliação.')
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 
