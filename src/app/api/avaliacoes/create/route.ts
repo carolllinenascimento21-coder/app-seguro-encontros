@@ -27,15 +27,12 @@ const getStringArray = (value: unknown) => {
     .filter(Boolean)
 }
 
-const safeNumber = (value: unknown, fallback = 0) => {
-  const n = Number(value)
-  return Number.isFinite(n) ? n : fallback
-}
 
-const safeRating = (value: unknown, fallback = 0) => {
-  const n = Math.round(safeNumber(value, fallback))
-  if (n < 0) return 0
-  if (n > 5) return 5
+const parseRating = (value: unknown) => {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  if (!Number.isInteger(n)) return null
+  if (n < 1 || n > 5) return null
   return n
 }
 
@@ -109,10 +106,7 @@ export async function POST(request: Request) {
 
   if (authError || !user?.id) {
     safeLogError('Usuário não autenticado', authError, { requestId })
-    return NextResponse.json(
-      { error: 'Usuário inválido ao criar avaliação.' },
-      { status: 401 }
-    )
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const userId = user.id
@@ -143,11 +137,21 @@ export async function POST(request: Request) {
   const flags_negative = getStringArray(body.flags_negative ?? body.redFlags)
 
   const notas = {
-    comportamento: safeRating(body?.notas?.comportamento ?? body.comportamento),
-    seguranca_emocional: safeRating(body?.notas?.seguranca_emocional ?? body.seguranca_emocional),
-    respeito: safeRating(body?.notas?.respeito ?? body.respeito),
-    carater: safeRating(body?.notas?.carater ?? body.carater),
-    confianca: safeRating(body?.notas?.confianca ?? body.confianca),
+    comportamento: parseRating(body?.notas?.comportamento ?? body.comportamento),
+    seguranca_emocional: parseRating(body?.notas?.seguranca_emocional ?? body.seguranca_emocional),
+    respeito: parseRating(body?.notas?.respeito ?? body.respeito),
+    carater: parseRating(body?.notas?.carater ?? body.carater),
+    confianca: parseRating(body?.notas?.confianca ?? body.confianca),
+  }
+
+  if (Object.values(notas).some((nota) => nota === null)) {
+    return NextResponse.json(
+      {
+        error:
+          'As notas comportamento, seguranca_emocional, respeito, carater e confianca devem ser inteiros entre 1 e 5.',
+      },
+      { status: 400 }
+    )
   }
 
   const identifierInputs = extractIdentifierInputs(body.identifiers)
@@ -266,32 +270,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data: existingReview, error: existingError } = await supabase
-    .from('avaliacoes')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('male_profile_id', maleProfileId)
-    .limit(1)
-    .maybeSingle()
-
-  if (existingError) {
-    safeLogError('Erro ao verificar duplicidade de avaliação', existingError, {
-      maleProfileId,
-      userId,
-    })
-    return NextResponse.json(
-      { error: 'Erro ao verificar avaliações existentes.' },
-      { status: 400 }
-    )
-  }
-
-  if (existingReview) {
-    return NextResponse.json(
-      { error: 'Você já avaliou este perfil.' },
-      { status: 409 }
-    )
-  }
-
   const { data, error: rpcError } = await supabase.rpc(
     'create_avaliacao_transaction',
     {
@@ -316,8 +294,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 
-  return NextResponse.json({
-    ok: true,
-    avaliacao_id: data,
-  })
+  return NextResponse.json({ success: true, avaliacao_id: data })
 }
