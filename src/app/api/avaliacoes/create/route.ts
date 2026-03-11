@@ -115,7 +115,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const autoraId = user.id
+  const userId = user.id
+  const autoraId = userId
 
   let body: any
 
@@ -268,7 +269,7 @@ export async function POST(request: Request) {
   const avaliacaoPayload = {
     male_profile_id: maleProfileId,
     autora_id: autoraId,
-    user_id: autoraId,
+    user_id: userId,
     relato: relato || null,
     anonimo: anonimo,
     comportamento: notas.comportamento,
@@ -281,18 +282,18 @@ export async function POST(request: Request) {
     flags_negative,
   }
 
-  const existingAvaliacao = await supabase
+  const { data: existingAvaliacao, error: existingAvaliacaoError } = await supabase
     .from('avaliacoes')
     .select('id')
-    .eq('user_id', autoraId)
+    .eq('user_id', userId)
     .eq('male_profile_id', maleProfileId)
     .maybeSingle()
 
-  if (existingAvaliacao.error) {
-    safeLogError('Erro ao verificar duplicidade de avaliação', existingAvaliacao.error, {
+  if (existingAvaliacaoError) {
+    safeLogError('Erro ao verificar duplicidade de avaliação', existingAvaliacaoError, {
       requestId,
       maleProfileId,
-      userId: autoraId,
+      userId,
     })
     return NextResponse.json(
       { error: 'Erro ao verificar avaliações existentes.' },
@@ -300,7 +301,7 @@ export async function POST(request: Request) {
     )
   }
 
-  if (existingAvaliacao.data?.id) {
+  if (existingAvaliacao?.id) {
     return NextResponse.json(
       { error: 'Você já avaliou esse perfil.' },
       { status: 409 }
