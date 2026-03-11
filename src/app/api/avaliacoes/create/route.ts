@@ -271,6 +271,7 @@ export async function POST(request: Request) {
     .select('id')
     .eq('user_id', userId)
     .eq('male_profile_id', maleProfileId)
+    .limit(1)
     .maybeSingle()
 
   if (existingError) {
@@ -291,20 +292,20 @@ export async function POST(request: Request) {
     )
   }
 
-  const { data: avaliacaoId, error: rpcError } = await supabase.rpc(
+  const { data, error: rpcError } = await supabase.rpc(
     'create_avaliacao_transaction',
     {
       p_male_profile_id: maleProfileId,
       p_user_id: userId,
       p_relato: relato,
-      p_anomimo: anonimo,
+      p_anonimo: anonimo,
       p_comportamento: notas.comportamento,
       p_seguranca_emocional: notas.seguranca_emocional,
       p_respeito: notas.respeito,
       p_carater: notas.carater,
       p_confianca: notas.confianca,
-      p_flags_positive: flags_positive,
-      p_flags_negative: flags_negative,
+      p_flags_positive: flags_positive ?? [],
+      p_flags_negative: flags_negative ?? [],
     }
   )
 
@@ -317,8 +318,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    requestId,
-    male_profile_id: maleProfileId,
-    avaliacao_id: avaliacaoId,
+    avaliacao_id: data,
   })
 }
