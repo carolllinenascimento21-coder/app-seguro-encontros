@@ -1,11 +1,10 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import Stripe from 'stripe'
 
 import { getStripeClient } from '@/lib/stripe'
 import { getSupabasePublicEnv, getMissingSupabaseEnvDetails } from '@/lib/env'
 import { getSiteUrl } from '@/lib/billing'
+import { createServerClient } from '@/lib/supabase/server'
 
 const PLAN_ALIAS_MAP: Record<
   string,
@@ -41,7 +40,7 @@ export async function POST(req: Request) {
     throw error
   }
 
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createServerClient()
 
   const {
     data: { user },
@@ -49,7 +48,7 @@ export async function POST(req: Request) {
 
   if (!user) {
     return NextResponse.json(
-      { error: 'Usuário não autenticado' },
+      { error: 'not_authenticated' },
       { status: 401 }
     )
   }
