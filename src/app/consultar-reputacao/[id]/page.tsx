@@ -71,7 +71,8 @@ export default async function Page({
 
   const hasActive =
     me?.has_active_plan === true &&
-    me?.subscription_status === 'active'
+    (me?.subscription_status === 'active' ||
+      me?.subscription_status === 'trialing')
 
   if (!hasActive) redirect('/planos')
 
