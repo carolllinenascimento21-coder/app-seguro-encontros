@@ -60,6 +60,7 @@ export function useAccessControl() {
         const res = await fetch('/api/can-query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ userId: user.id }),
         })
 

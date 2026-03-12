@@ -21,7 +21,7 @@ export async function POST() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('plan, free_queries_used, credits, has_active_plan, subscription_status')
+      .select('plan, current_plan_id, free_queries_used, credits, has_active_plan, subscription_status')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -34,7 +34,7 @@ export async function POST() {
       return NextResponse.json({ allowed: false, reason: 'no_plan' })
     }
 
-    const plan = profile.plan ?? FREE_PLAN
+    const plan = profile.current_plan_id ?? profile.plan ?? FREE_PLAN
     const freeQueriesUsed = profile.free_queries_used ?? 0
     const credits = profile.credits ?? 0
     const hasActivePlan =
