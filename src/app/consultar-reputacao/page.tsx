@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, MapPin, Star, AlertTriangle } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
+import { useAccessControl } from '@/hooks/use-access-control'
 
 interface PerfilResultado {
   male_profile_id: string
@@ -32,6 +33,7 @@ const BADGE_LABELS: Record<PerfilResultado['classification'], string> = {
 
 export default function ConsultarReputacao() {
   const router = useRouter()
+  const { checkAccess } = useAccessControl()
 
   const [nome, setNome] = useState('')
   const [cidade, setCidade] = useState('')
@@ -80,6 +82,16 @@ export default function ConsultarReputacao() {
     }
   }
 
+  const handleResultClick = async (maleProfileId: string) => {
+    const access = await checkAccess({ redirectOnBlock: true })
+
+    if (!access.allowed) {
+      return
+    }
+
+    router.push(`/consultar-reputacao/${maleProfileId}`)
+  }
+
   return (
     <div className="min-h-screen bg-black text-white pb-20">
       <div className="max-w-md mx-auto px-4 py-8">
@@ -120,7 +132,7 @@ export default function ConsultarReputacao() {
           {results.map((r) => (
             <div
               key={r.male_profile_id}
-              onClick={() => router.push(`/consultar-reputacao/${r.male_profile_id}`)}
+              onClick={() => handleResultClick(r.male_profile_id)}
               className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors cursor-pointer"
             >
               <div className="flex items-start justify-between mb-3">
