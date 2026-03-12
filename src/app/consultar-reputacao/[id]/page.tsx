@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
+import { FREE_PLAN } from '@/lib/billing'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Star, ShieldAlert } from 'lucide-react'
@@ -55,26 +56,33 @@ export default async function Page({
 }) {
   const supabase = await createServerClient()
 
-  // sessão
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (!session?.user) redirect('/login')
+  if (!user) redirect('/login')
 
-  // verificação plano REAL do seu banco
   const { data: me } = await supabase
     .from('profiles')
-    .select('has_active_plan, subscription_status')
-    .eq('id', session.user.id)
-    .single()
+    .select('plan, free_queries_used, credits, has_active_plan, subscription_status')
+    .eq('id', user.id)
+    .maybeSingle()
 
-  const hasActive =
+  const plan = me?.plan ?? FREE_PLAN
+  const freeQueriesUsed = me?.free_queries_used ?? 0
+  const credits = me?.credits ?? 0
+  const hasActivePlan =
     me?.has_active_plan === true &&
     (me?.subscription_status === 'active' ||
       me?.subscription_status === 'trialing')
 
-  if (!hasActive) redirect('/planos')
+  const allowed =
+    hasActivePlan ||
+    plan !== FREE_PLAN ||
+    freeQueriesUsed < 3 ||
+    credits > 0
+
+  if (!allowed) redirect('/planos')
 
   // perfil homem
   const { data: perfil } = await supabase

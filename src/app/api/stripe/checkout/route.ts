@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import Stripe from 'stripe'
 
 import { getStripeClient } from '@/lib/stripe'
 import { getSupabasePublicEnv, getMissingSupabaseEnvDetails } from '@/lib/env'
 import { getSiteUrl } from '@/lib/billing'
-import { createServerClient } from '@/lib/supabase/server'
 
 const PLAN_ALIAS_MAP: Record<
   string,
@@ -40,13 +41,23 @@ export async function POST(req: Request) {
     throw error
   }
 
-  const supabase = await createServerClient()
+  const cookieStore = await cookies()
+  const supabase = createRouteHandlerClient({ cookies })
+
+  const hasAuthCookies = cookieStore
+    .getAll()
+    .some((cookie) => cookie.name.includes('supabase') || cookie.name.startsWith('sb-'))
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser()
 
   if (!user) {
+    console.warn('[stripe-checkout] unauthorized request', {
+      hasAuthCookies,
+      userError: userError?.message,
+    })
     return NextResponse.json(
       { error: 'not_authenticated' },
       { status: 401 }
