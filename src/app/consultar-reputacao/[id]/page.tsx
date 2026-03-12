@@ -1,5 +1,4 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Star, ShieldAlert } from 'lucide-react'
@@ -54,7 +53,7 @@ export default async function Page({
 }: {
   params: { id: string }
 }) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = await createServerClient()
 
   // sessão
   const {
