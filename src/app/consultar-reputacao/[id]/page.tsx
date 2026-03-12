@@ -1,5 +1,4 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { FREE_PLAN } from '@/lib/billing'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Star, ShieldAlert } from 'lucide-react'
@@ -64,23 +63,15 @@ export default async function Page({
 
   const { data: me } = await supabase
     .from('profiles')
-    .select('plan, current_plan_id, free_queries_used, credits, has_active_plan, subscription_status')
+    .select('free_queries_used, has_active_plan')
     .eq('id', user.id)
     .maybeSingle()
 
-  const plan = me?.current_plan_id ?? me?.plan ?? FREE_PLAN
   const freeQueriesUsed = me?.free_queries_used ?? 0
-  const credits = me?.credits ?? 0
-  const hasActivePlan =
-    me?.has_active_plan === true &&
-    (me?.subscription_status === 'active' ||
-      me?.subscription_status === 'trialing')
+  const hasActivePlan = me?.has_active_plan === true
 
-  const allowed =
-    hasActivePlan ||
-    plan !== FREE_PLAN ||
-    freeQueriesUsed < 3 ||
-    credits > 0
+  // Permite o 3º acesso gratuito já consumido via /api/can-query no clique anterior.
+  const allowed = hasActivePlan || freeQueriesUsed <= 3
 
   if (!allowed) redirect('/planos')
 

@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 
-import { FREE_PLAN } from '@/lib/billing'
 import { createServerClient } from '@/lib/supabase/server'
+
+type ProfileAccessRow = {
+  has_active_plan: boolean | null
+  free_queries_used: number | null
+}
+
+const PROFILE_ACCESS_FIELDS = 'has_active_plan, free_queries_used'
 
 export async function POST() {
   try {
@@ -16,45 +22,69 @@ export async function POST() {
       if (userError) {
         console.error('can-query auth error', userError)
       }
-      return NextResponse.json({ allowed: false, reason: 'not_logged' })
+      return NextResponse.json({ allowed: false, reason: 'not_logged' }, { status: 401 })
     }
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('plan, current_plan_id, free_queries_used, credits, has_active_plan, subscription_status')
+      .select(PROFILE_ACCESS_FIELDS)
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle<ProfileAccessRow>()
 
-    if (profileError) {
-      console.error('can-query profile error', profileError)
-      return NextResponse.json({ allowed: false, reason: 'no_plan' })
+    if (profileError || !profile) {
+      if (profileError) {
+        console.error('can-query profile error', profileError)
+      }
+      return NextResponse.json({ allowed: false, reason: 'PROFILE_NOT_FOUND' }, { status: 404 })
     }
 
-    if (!profile) {
-      return NextResponse.json({ allowed: false, reason: 'no_plan' })
+    if (profile.has_active_plan === true) {
+      return NextResponse.json({ allowed: true })
     }
 
-    const plan = profile.current_plan_id ?? profile.plan ?? FREE_PLAN
     const freeQueriesUsed = profile.free_queries_used ?? 0
-    const credits = profile.credits ?? 0
-    const hasActivePlan =
-      profile.has_active_plan === true &&
-      (profile.subscription_status === 'active' ||
-        profile.subscription_status === 'trialing')
 
-    const allowed =
-      hasActivePlan ||
-      plan !== FREE_PLAN ||
-      freeQueriesUsed < 3 ||
-      credits > 0
-
-    if (!allowed) {
+    if (freeQueriesUsed >= 3) {
       return NextResponse.json({ allowed: false, reason: 'PAYWALL' })
+    }
+
+    const { data: updatedProfile, error: updateError } = await supabase
+      .from('profiles')
+      .update({ free_queries_used: freeQueriesUsed + 1 })
+      .eq('id', user.id)
+      .eq('free_queries_used', profile.free_queries_used)
+      .select(PROFILE_ACCESS_FIELDS)
+      .maybeSingle<ProfileAccessRow>()
+
+    if (updateError) {
+      console.error('can-query increment error', updateError)
+      return NextResponse.json({ allowed: false, reason: 'ACCESS_CHECK_FAILED' }, { status: 500 })
+    }
+
+    if (!updatedProfile) {
+      const { data: latestProfile, error: latestProfileError } = await supabase
+        .from('profiles')
+        .select(PROFILE_ACCESS_FIELDS)
+        .eq('id', user.id)
+        .maybeSingle<ProfileAccessRow>()
+
+      if (latestProfileError || !latestProfile) {
+        if (latestProfileError) {
+          console.error('can-query re-read error', latestProfileError)
+        }
+        return NextResponse.json({ allowed: false, reason: 'ACCESS_CHECK_FAILED' }, { status: 500 })
+      }
+
+      if (latestProfile.has_active_plan === true) {
+        return NextResponse.json({ allowed: true })
+      }
+
+      return NextResponse.json({ allowed: (latestProfile.free_queries_used ?? 0) <= 3 })
     }
 
     return NextResponse.json({ allowed: true })
   } catch (error) {
     console.error('can-query error', error)
-    return NextResponse.json({ allowed: false })
+    return NextResponse.json({ allowed: false, reason: 'ACCESS_CHECK_FAILED' }, { status: 500 })
   }
 }
