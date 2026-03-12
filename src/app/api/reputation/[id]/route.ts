@@ -5,7 +5,6 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
-const CONSULTA_WINDOW_MINUTES = 10
 
 export async function GET(
   _req: Request,
@@ -85,51 +84,29 @@ export async function GET(
     )
   }
 
-  // 🔹 Validar plano da usuária
+  // 🔹 Defesa de backend: validar assinatura / limite gratuito
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('plan')
+    .select('has_active_plan, free_queries_used')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (profileError) {
-    console.error('Erro ao validar plano do perfil', profileError)
+  if (profileError || !profile) {
+    console.error('Erro ao validar acesso no perfil', profileError)
     return NextResponse.json(
       { error: 'Erro ao validar acesso' },
       { status: 500 }
     )
   }
 
-  const userPlan = profile?.plan ?? 'free'
+  const hasActivePlan = profile.has_active_plan === true
+  const freeQueriesUsed = profile.free_queries_used ?? 0
 
-  // 🔹 Se for free, validar janela de consulta
-  if (userPlan === 'free') {
-    const since = new Date(
-      Date.now() - CONSULTA_WINDOW_MINUTES * 60 * 1000
-    ).toISOString()
-
-    const { data: consultas, error: consultasError } =
-      await supabaseAdmin
-        .from('consultas')
-        .select('id')
-        .eq('user_id', user.id)
-        .gte('created_at', since)
-        .limit(1)
-
-    if (consultasError) {
-      console.error('Erro ao validar consulta recente', consultasError)
-      return NextResponse.json(
-        { error: 'Erro ao validar acesso' },
-        { status: 500 }
-      )
-    }
-
-    if (!consultas || consultas.length === 0) {
-      return NextResponse.json(
-        { allowed: false, reason: 'PAYWALL' },
-        { status: 200 }
-      )
-    }
+  if (!hasActivePlan && freeQueriesUsed >= 3) {
+    return NextResponse.json(
+      { error: 'Acesso negado', reason: 'PAYWALL' },
+      { status: 403 }
+    )
   }
 
   // 🔹 Buscar perfil masculino
