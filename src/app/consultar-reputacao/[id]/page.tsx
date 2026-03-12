@@ -64,11 +64,11 @@ export default async function Page({
 
   const { data: me } = await supabase
     .from('profiles')
-    .select('plan, free_queries_used, credits, has_active_plan, subscription_status')
+    .select('plan, current_plan_id, free_queries_used, credits, has_active_plan, subscription_status')
     .eq('id', user.id)
     .maybeSingle()
 
-  const plan = me?.plan ?? FREE_PLAN
+  const plan = me?.current_plan_id ?? me?.plan ?? FREE_PLAN
   const freeQueriesUsed = me?.free_queries_used ?? 0
   const credits = me?.credits ?? 0
   const hasActivePlan =
