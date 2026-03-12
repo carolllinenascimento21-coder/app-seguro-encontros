@@ -66,6 +66,7 @@ export default function CheckoutClient() {
         const res = await fetch(checkoutRequest.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(checkoutRequest.body),
         })
 

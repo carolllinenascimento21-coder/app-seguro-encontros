@@ -21,7 +21,7 @@ export async function POST() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('plan, free_queries_used, credits')
+      .select('plan, free_queries_used, credits, has_active_plan, subscription_status')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -37,8 +37,13 @@ export async function POST() {
     const plan = profile.plan ?? FREE_PLAN
     const freeQueriesUsed = profile.free_queries_used ?? 0
     const credits = profile.credits ?? 0
+    const hasActivePlan =
+      profile.has_active_plan === true &&
+      (profile.subscription_status === 'active' ||
+        profile.subscription_status === 'trialing')
 
     const allowed =
+      hasActivePlan ||
       plan !== FREE_PLAN ||
       freeQueriesUsed < 3 ||
       credits > 0
