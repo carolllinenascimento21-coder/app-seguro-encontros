@@ -63,15 +63,19 @@ export default async function Page({
 
   const { data: me } = await supabase
     .from('profiles')
-    .select('free_queries_used, has_active_plan')
+    .select('free_queries_used, has_active_plan, current_plan_id, subscription_status')
     .eq('id', user.id)
     .maybeSingle()
 
   const freeQueriesUsed = me?.free_queries_used ?? 0
-  const hasActivePlan = me?.has_active_plan === true
+  const hasPaidSubscription =
+    me?.has_active_plan === true ||
+    me?.subscription_status === 'active' ||
+    me?.subscription_status === 'trialing' ||
+    (typeof me?.current_plan_id === 'string' && me.current_plan_id !== 'free')
 
   // Permite o 3º acesso gratuito já consumido via /api/can-query no clique anterior.
-  const allowed = hasActivePlan || freeQueriesUsed <= 3
+  const allowed = hasPaidSubscription || freeQueriesUsed <= 3
 
   if (!allowed) redirect('/planos')
 
