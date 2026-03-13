@@ -4,36 +4,6 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 const MAX_TERM_LENGTH = 80
-const RATE_LIMIT_WINDOW_MS = 60_000
-const RATE_LIMIT_MAX_REQUESTS = 20
-
-type SearchRateState = {
-  count: number
-  resetAt: number
-}
-
-const rateLimitStore = new Map<string, SearchRateState>()
-
-function isRateLimited(key: string) {
-  const now = Date.now()
-  const current = rateLimitStore.get(key)
-
-  if (!current || now > current.resetAt) {
-    rateLimitStore.set(key, {
-      count: 1,
-      resetAt: now + RATE_LIMIT_WINDOW_MS,
-    })
-    return false
-  }
-
-  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return true
-  }
-
-  current.count += 1
-  rateLimitStore.set(key, current)
-  return false
-}
 
 function normalize(value: string | null) {
   return (value ?? '')
@@ -46,6 +16,7 @@ function normalize(value: string | null) {
 export async function GET(req: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+
     const {
       data: { user },
       error: authError,
@@ -58,18 +29,41 @@ export async function GET(req: Request) {
       )
     }
 
-    if (isRateLimited(user.id)) {
+    const supabaseAdmin = getSupabaseAdminClient()
+
+    // busca perfil do usuário
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('free_queries_used, current_plan_id, subscription_status')
+      .eq('id', user.id)
+      .single()
+
+    const isPaid =
+      profile?.subscription_status === 'active' ||
+      profile?.subscription_status === 'trialing' ||
+      (profile?.current_plan_id && profile.current_plan_id !== 'free')
+
+    const freeQueriesUsed = profile?.free_queries_used ?? 0
+
+    if (!isPaid && freeQueriesUsed >= 3) {
       return NextResponse.json(
-        { success: false, message: 'Muitas consultas. Tente novamente em instantes.' },
-        { status: 429 }
+        {
+          success: false,
+          reason: 'PAYWALL',
+        },
+        { status: 403 }
       )
     }
 
     const { searchParams } = new URL(req.url)
+
     const nomeRaw = searchParams.get('nome')
     const cidadeRaw = searchParams.get('cidade')
 
-    if ((nomeRaw?.length ?? 0) > MAX_TERM_LENGTH || (cidadeRaw?.length ?? 0) > MAX_TERM_LENGTH) {
+    if (
+      (nomeRaw?.length ?? 0) > MAX_TERM_LENGTH ||
+      (cidadeRaw?.length ?? 0) > MAX_TERM_LENGTH
+    ) {
       return NextResponse.json(
         { success: false, message: 'Termo de busca muito longo' },
         { status: 400 }
@@ -85,8 +79,6 @@ export async function GET(req: Request) {
         { status: 400 }
       )
     }
-
-    const supabaseAdmin = getSupabaseAdminClient()
 
     let query = supabaseAdmin
       .from('male_profile_reputation_summary')
@@ -109,10 +101,26 @@ export async function GET(req: Request) {
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, results: data ?? [] })
+    // incrementa contador se não for pago
+    if (!isPaid) {
+      await supabaseAdmin
+        .from('profiles')
+        .update({
+          free_queries_used: freeQueriesUsed + 1,
+        })
+        .eq('id', user.id)
+    }
+
+    return NextResponse.json({
+      success: true,
+      results: data ?? [],
+    })
   } catch (err: any) {
     return NextResponse.json(
-      { success: false, message: err.message },
+      {
+        success: false,
+        message: err.message,
+      },
       { status: 500 }
     )
   }
