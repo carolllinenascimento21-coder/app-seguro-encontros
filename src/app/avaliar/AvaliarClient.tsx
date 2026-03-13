@@ -199,7 +199,13 @@ export default function AvaliarClient() {
       }
 
       resetForm()
-      router.push(`/consultar-reputacao/${data.male_profile_id}`)
+
+      if (data?.male_profile_id) {
+        router.push(`/consultar-reputacao/${data.male_profile_id}`)
+        return
+      }
+
+      router.push('/minhas-avaliacoes')
     } catch (error: any) {
       console.error(error)
       alert(error?.message || 'Erro ao publicar avaliação.')
