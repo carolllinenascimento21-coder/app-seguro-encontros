@@ -53,20 +53,29 @@ export default function ConsultarReputacao() {
     try {
       setLoading(true)
       setError(null)
+      setResults([])
 
       const params = new URLSearchParams()
 
-      if (nomeBusca) {
-        params.set('nome', nomeBusca)
-      }
-
-      if (cidadeBusca) {
-        params.set('cidade', cidadeBusca)
-      }
+      if (nomeBusca) params.set('nome', nomeBusca)
+      if (cidadeBusca) params.set('cidade', cidadeBusca)
 
       const res = await fetch(`/api/reputation/search?${params.toString()}`, {
         cache: 'no-store',
+        credentials: 'include',
       })
+
+      // 🔐 não logada
+      if (res.status === 401) {
+        router.push('/login')
+        return
+      }
+
+      // 💰 paywall
+      if (res.status === 403) {
+        router.push('/planos')
+        return
+      }
 
       const data = await res.json()
 
@@ -76,7 +85,9 @@ export default function ConsultarReputacao() {
 
       setResults(data.results ?? [])
     } catch (err: any) {
+      console.error('Erro na busca:', err)
       setError(err.message)
+      setResults([])
     } finally {
       setLoading(false)
     }
@@ -85,9 +96,7 @@ export default function ConsultarReputacao() {
   const handleResultClick = async (maleProfileId: string) => {
     const access = await checkAccess({ redirectOnBlock: true })
 
-    if (!access.allowed) {
-      return
-    }
+    if (!access.allowed) return
 
     router.push(`/consultar-reputacao/${maleProfileId}`)
   }
@@ -95,9 +104,13 @@ export default function ConsultarReputacao() {
   return (
     <div className="min-h-screen bg-black text-white pb-20">
       <div className="max-w-md mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-white mb-6">Consultar Reputação</h1>
+
+        <h1 className="text-2xl font-bold text-white mb-6">
+          Consultar Reputação
+        </h1>
 
         <div className="bg-white/5 border border-[#D4AF37]/20 rounded-xl p-5 mb-6">
+
           <input
             value={nome}
             onChange={(e) => setNome(e.target.value)}
@@ -120,13 +133,21 @@ export default function ConsultarReputacao() {
             <Search size={18} />
             {loading ? 'Buscando...' : 'Consultar'}
           </button>
+
         </div>
 
-        {error && <div className="text-red-400 text-sm mb-4 text-center">{error}</div>}
+        {error && (
+          <div className="text-red-400 text-sm mb-4 text-center">
+            {error}
+          </div>
+        )}
 
         <div className="space-y-4">
+
           {!loading && results.length === 0 && !error && (
-            <p className="text-gray-500 text-center text-sm">Nenhum resultado encontrado</p>
+            <p className="text-gray-500 text-center text-sm">
+              Nenhum resultado encontrado
+            </p>
           )}
 
           {results.map((r) => (
@@ -135,9 +156,14 @@ export default function ConsultarReputacao() {
               onClick={() => handleResultClick(r.male_profile_id)}
               className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors cursor-pointer"
             >
+
               <div className="flex items-start justify-between mb-3">
+
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-white mb-1">{r.name}</h3>
+                  <h3 className="text-lg font-semibold text-white mb-1">
+                    {r.name}
+                  </h3>
+
                   {r.city && (
                     <p className="text-sm text-gray-400 flex items-center gap-1">
                       <MapPin className="w-4 h-4" />
@@ -151,23 +177,38 @@ export default function ConsultarReputacao() {
                 >
                   {BADGE_LABELS[r.classification]}
                 </div>
+
               </div>
 
               <div className="flex items-center gap-4 mb-3">
+
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 text-[#D4AF37] fill-[#D4AF37]" />
-                  <span className="text-sm font-semibold text-white">{r.average_rating.toFixed(1)}</span>
+                  <span className="text-sm font-semibold text-white">
+                    {r.average_rating.toFixed(1)}
+                  </span>
                 </div>
-                <div className="text-sm text-gray-400">{r.total_reviews} avaliações</div>
-                <div className="text-sm text-gray-400">{r.positive_percentage}% confiável</div>
+
+                <div className="text-sm text-gray-400">
+                  {r.total_reviews} avaliações
+                </div>
+
+                <div className="text-sm text-gray-400">
+                  {r.positive_percentage}% confiável
+                </div>
+
               </div>
 
               <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 w-fit">
                 <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <span className="text-xs text-red-400">{r.alert_count} alerta(s) ativo(s)</span>
+                <span className="text-xs text-red-400">
+                  {r.alert_count} alerta(s) ativo(s)
+                </span>
               </div>
+
             </div>
           ))}
+
         </div>
       </div>
 
