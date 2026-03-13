@@ -87,7 +87,7 @@ export async function GET(
   // 🔹 Defesa de backend: validar assinatura / limite gratuito
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('has_active_plan, free_queries_used')
+    .select('has_active_plan, current_plan_id, subscription_status, free_queries_used')
     .eq('id', user.id)
     .maybeSingle()
 
@@ -99,10 +99,14 @@ export async function GET(
     )
   }
 
-  const hasActivePlan = profile.has_active_plan === true
+  const hasPaidSubscription =
+    profile.has_active_plan === true ||
+    profile.subscription_status === 'active' ||
+    profile.subscription_status === 'trialing' ||
+    (typeof profile.current_plan_id === 'string' && profile.current_plan_id !== 'free')
   const freeQueriesUsed = profile.free_queries_used ?? 0
 
-  if (!hasActivePlan && freeQueriesUsed >= 3) {
+  if (!hasPaidSubscription && freeQueriesUsed >= 3) {
     return NextResponse.json(
       { error: 'Acesso negado', reason: 'PAYWALL' },
       { status: 403 }

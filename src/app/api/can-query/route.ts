@@ -4,10 +4,23 @@ import { createServerClient } from '@/lib/supabase/server'
 
 type ProfileAccessRow = {
   has_active_plan: boolean | null
+  current_plan_id: string | null
+  subscription_status: string | null
   free_queries_used: number | null
 }
 
-const PROFILE_ACCESS_FIELDS = 'has_active_plan, free_queries_used'
+const PROFILE_ACCESS_FIELDS = 'has_active_plan, current_plan_id, subscription_status, free_queries_used'
+
+const hasPaidSubscription = (profile: ProfileAccessRow) => {
+  if (profile.has_active_plan === true) return true
+
+  const subscriptionStatus = profile.subscription_status?.toLowerCase()
+  if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
+    return true
+  }
+
+  return Boolean(profile.current_plan_id && profile.current_plan_id !== 'free')
+}
 
 export async function POST() {
   try {
@@ -50,7 +63,7 @@ export async function POST() {
     }
 
     // usuário com plano ativo → acesso liberado
-    if (profile.has_active_plan === true) {
+    if (hasPaidSubscription(profile)) {
       return NextResponse.json({ allowed: true })
     }
 

@@ -4,11 +4,22 @@ import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe/server'
 import { createServerClient } from '@/lib/supabase/server'
 
-const PLAN_PRICE_MAP = {
-  premium_monthly: 'STRIPE_PRICE_MONTHLY',
-  premium_yearly: 'STRIPE_PRICE_YEARLY',
-  premium_plus: 'STRIPE_PRICE_PLUS',
+const PLAN_PRICE_ENV_CANDIDATES = {
+  premium_monthly: ['STRIPE_PRICE_MONTHLY', 'STRIPE_PRICE_PREMIUM_MONTHLY', 'STRIPE_PRICE_PREMIUM_MENSAL'],
+  premium_yearly: ['STRIPE_PRICE_YEARLY', 'STRIPE_PRICE_PREMIUM_YEARLY', 'STRIPE_PRICE_PREMIUM_ANUAL'],
+  premium_plus: ['STRIPE_PRICE_PLUS', 'STRIPE_PRICE_PREMIUM_PLUS'],
 } as const
+
+type PlanId = keyof typeof PLAN_PRICE_ENV_CANDIDATES
+
+function resolvePriceId(plan: PlanId) {
+  const candidates = PLAN_PRICE_ENV_CANDIDATES[plan]
+  for (const envName of candidates) {
+    const value = process.env[envName]
+    if (value) return value
+  }
+  return null
+}
 
 export async function POST(req: Request) {
   try {
@@ -33,19 +44,18 @@ export async function POST(req: Request) {
       )
     }
 
-    const body = (await req.json()) as { plan?: string }
+    const body = (await req.json()) as { plan?: string; planId?: string }
+    const requestedPlan = body.planId ?? body.plan
 
-    const priceEnv =
-      body.plan && PLAN_PRICE_MAP[body.plan as keyof typeof PLAN_PRICE_MAP]
-
-    if (!priceEnv) {
+    if (!requestedPlan || !(requestedPlan in PLAN_PRICE_ENV_CANDIDATES)) {
       return NextResponse.json(
         { error: 'Plano inválido' },
         { status: 400 }
       )
     }
 
-    const priceId = process.env[priceEnv]
+    const plan = requestedPlan as PlanId
+    const priceId = resolvePriceId(plan)
 
     if (!priceId) {
       return NextResponse.json(
@@ -73,13 +83,13 @@ export async function POST(req: Request) {
 
         metadata: {
           user_id: user.id,
-          plan: body.plan ?? '',
+          plan,
         },
 
         subscription_data: {
           metadata: {
             user_id: user.id,
-            plan: body.plan ?? '',
+            plan,
           },
         },
 
@@ -87,7 +97,7 @@ export async function POST(req: Request) {
         cancel_url: `${siteUrl}/planos`,
       },
       {
-        idempotencyKey: `subscription-checkout:${user.id}:${body.plan}:${Math.floor(
+        idempotencyKey: `subscription-checkout:${user.id}:${plan}:${Math.floor(
           Date.now() / 30000
         )}`,
       }
