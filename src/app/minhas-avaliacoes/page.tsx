@@ -142,15 +142,21 @@ export default function MinhasAvaliacoes() {
         return
       }
 
-      const { error } = await supabase
+      const { data: deletedRows, error } = await supabase
         .from('avaliacoes')
         .delete()
         .eq('id', avaliacaoToDelete)
         .eq('user_id', session.user.id)
+        .select('id')
 
       if (error) {
         console.error(error)
         throw error
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        alert('Não foi possível excluir a avaliação. Tente novamente.')
+        return
       }
 
       setAvaliacoes((prev) => prev.filter((a) => a.id !== avaliacaoToDelete))

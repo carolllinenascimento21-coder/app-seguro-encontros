@@ -294,5 +294,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 
-  return NextResponse.json({ success: true, avaliacao_id: data })
+  return NextResponse.json({ success: true, avaliacao_id: data, male_profile_id: maleProfileId })
 }
