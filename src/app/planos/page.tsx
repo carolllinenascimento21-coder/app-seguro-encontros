@@ -40,8 +40,6 @@ export default function PlanosPage() {
 
       if (data?.url) {
         window.location.href = data.url
-      } else {
-        console.error('Stripe URL missing')
       }
     } catch (error) {
       console.error('Stripe checkout error', error)
@@ -72,6 +70,14 @@ export default function PlanosPage() {
   return (
     <div className="min-h-screen bg-[#000000] text-white relative overflow-hidden">
 
+      {/* fundo */}
+      <div className="absolute inset-0 opacity-5"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(212,175,55,0.1) 10px, rgba(212,175,55,0.1) 20px)'
+        }}
+      />
+
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
 
         {/* Header */}
@@ -92,9 +98,9 @@ export default function PlanosPage() {
           </p>
         </div>
 
-        {/* Paywall */}
+        {/* PAYWALL */}
         <div className="max-w-2xl mx-auto mb-16">
-          <div className="bg-[#0a0a0a] border-2 border-[#D4AF37] rounded-2xl p-8">
+          <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border-2 border-[#D4AF37] rounded-2xl p-8">
 
             <div className="flex items-center gap-3 mb-4">
               <AlertTriangle className="w-8 h-8 text-[#FFD700]" />
@@ -115,7 +121,7 @@ export default function PlanosPage() {
 
             <button
               onClick={scrollToPlans}
-              className="w-full bg-[#FFD700] text-black font-bold py-4 rounded-xl"
+              className="w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-4 px-8 rounded-xl"
             >
               Ver Planos
             </button>
@@ -124,7 +130,7 @@ export default function PlanosPage() {
         </div>
 
         {/* PLANOS */}
-        <div id="planos-section" className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+        <div id="planos-section" className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
 
           {/* PREMIUM MENSAL */}
           <div className="border border-[#D4AF37] rounded-2xl p-6">
@@ -132,7 +138,7 @@ export default function PlanosPage() {
               Premium Mensal
             </h3>
 
-            <p className="text-4xl font-bold text-white mb-6">
+            <p className="text-4xl font-bold mb-4">
               R$ 9,90
             </p>
 
@@ -145,13 +151,12 @@ export default function PlanosPage() {
           </div>
 
           {/* PREMIUM ANUAL */}
-          <div className="border-4 border-[#FFD700] rounded-2xl p-6">
-
+          <div className="border border-[#FFD700] rounded-2xl p-6">
             <h3 className="text-xl font-bold text-[#FFD700] mb-4">
               Premium Anual
             </h3>
 
-            <p className="text-4xl font-bold text-white mb-6">
+            <p className="text-4xl font-bold mb-4">
               R$ 79,90
             </p>
 
@@ -161,17 +166,15 @@ export default function PlanosPage() {
             >
               Assinar Anual
             </button>
-
           </div>
 
           {/* PREMIUM PLUS */}
           <div className="border border-[#C0C0C0] rounded-2xl p-6">
-
             <h3 className="text-xl font-bold text-[#C0C0C0] mb-4">
               Premium Plus
             </h3>
 
-            <p className="text-4xl font-bold text-white mb-6">
+            <p className="text-4xl font-bold mb-4">
               R$ 19,90
             </p>
 
@@ -181,7 +184,6 @@ export default function PlanosPage() {
             >
               Ativar Premium Plus
             </button>
-
           </div>
 
           {/* CRÉDITOS */}
@@ -216,7 +218,7 @@ export default function PlanosPage() {
 
         </div>
 
-        <div className="text-center">
+        <div className="text-center mt-12">
           <button
             onClick={() => router.back()}
             className="text-[#C0C0C0] underline"
