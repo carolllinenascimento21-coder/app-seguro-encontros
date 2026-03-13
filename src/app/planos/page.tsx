@@ -17,17 +17,31 @@ export default function PlanosPage() {
     plansSection?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (plan: string) => {
+  try {
     const res = await fetch('/api/stripe/checkout', {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ plan })
     })
+
+    if (!res.ok) {
+      console.error('Stripe checkout failed')
+      return
+    }
 
     const data = await res.json()
 
-    if (data.url) {
+    if (data?.url) {
       window.location.href = data.url
     }
+  } catch (error) {
+    console.error('Stripe checkout error', error)
   }
+}
 
   const startStripeCreditsCheckout = async (checkoutId: string) => {
     try {
@@ -178,7 +192,7 @@ export default function PlanosPage() {
 
               <button
                 type="button"
-                onClick={handleCheckout}
+                onClick={() => handleCheckout('premium_monthly')}
                 className="block w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all duration-300 text-center"
               >
                 Ativar Premium Mensal
@@ -240,7 +254,7 @@ export default function PlanosPage() {
 
               <button
                 type="button"
-                onClick={handleCheckout}
+                onClick={() => handleCheckout('premium_yearly')}
                 className="block w-full bg-gradient-to-r from-[#FFD700] to-[#D4AF37] text-black font-bold py-4 px-6 rounded-xl hover:shadow-[0_0_30px_rgba(255,215,0,0.7)] transition-all duration-300 transform hover:scale-105 text-center"
               >
                 Assinar Anual
@@ -288,7 +302,7 @@ export default function PlanosPage() {
 
               <button
                 type="button"
-                onClick={handleCheckout}
+                onClick={() => handleCheckout('premium_plus')}
                 className="block w-full bg-gradient-to-r from-[#C0C0C0] to-[#A8A8A8] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(192,192,192,0.5)] transition-all duration-300 text-center"
               >
                 Ativar Premium Plus
