@@ -62,39 +62,21 @@ export async function POST() {
       )
     }
 
-    // usuário com plano ativo → acesso liberado
+    // read-only: apenas informa elegibilidade, sem mutar cotas
     if (hasPaidSubscription(profile)) {
-      return NextResponse.json({ allowed: true })
+      return NextResponse.json({ allowed: true, profile })
     }
 
     const freeQueriesUsed = profile.free_queries_used ?? 0
 
     if (freeQueriesUsed < 3) {
-      // incrementa consulta gratuita
-      const { data: updatedProfile, error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          free_queries_used: freeQueriesUsed + 1,
-        })
-        .eq('id', user.id)
-        .select(PROFILE_ACCESS_FIELDS)
-        .maybeSingle<ProfileAccessRow>()
-
-      if (updateError) {
-        console.error('can-query increment error', updateError)
-
-        return NextResponse.json(
-          { allowed: false, reason: 'ACCESS_CHECK_FAILED' },
-          { status: 500 }
-        )
-      }
-
-      return NextResponse.json({ allowed: true })
+      return NextResponse.json({ allowed: true, profile })
     }
 
     return NextResponse.json({
       allowed: false,
       reason: 'PAYWALL',
+      profile,
     })
   } catch (error) {
     console.error('can-query error', error)
