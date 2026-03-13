@@ -3,7 +3,7 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
-import { getStripeClient } from '@/lib/stripe'
+import { stripe } from '@/lib/stripe/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
@@ -105,16 +105,11 @@ async function markStripeEvent(
 }
 
 export async function POST(req: Request) {
-  const signature = headers().get('stripe-signature')
+  const headerStore = await headers()
+  const signature = headerStore.get('stripe-signature')
 
   if (!signature || !webhookSecret) {
     return jsonErr('Webhook não configurado (signature/secret ausente).', 400)
-  }
-
-  const stripe = getStripeClient()
-  if (!stripe) {
-    console.error('[stripe-webhook] STRIPE_SECRET_KEY ausente.')
-    return jsonErr('Stripe não configurado.', 500)
   }
 
   // Stripe exige corpo RAW (req.text) para validar assinatura
