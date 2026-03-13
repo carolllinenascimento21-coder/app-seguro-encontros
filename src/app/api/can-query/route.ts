@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createServerClient } from '@/lib/supabase/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
 type ProfileAccessRow = {
   has_active_plan: boolean | null
@@ -9,12 +9,14 @@ type ProfileAccessRow = {
   free_queries_used: number | null
 }
 
-const PROFILE_ACCESS_FIELDS = 'has_active_plan, current_plan_id, subscription_status, free_queries_used'
+const PROFILE_ACCESS_FIELDS =
+  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 const hasPaidSubscription = (profile: ProfileAccessRow) => {
   if (profile.has_active_plan === true) return true
 
   const subscriptionStatus = profile.subscription_status?.toLowerCase()
+
   if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
     return true
   }
@@ -24,10 +26,7 @@ const hasPaidSubscription = (profile: ProfileAccessRow) => {
 
 export async function POST() {
   try {
-    // inicializa o contexto de cookies da requisição para o Supabase SSR
-    await cookies()
-
-    const supabase = await createServerClient()
+    const supabase = createRouteHandlerClient({ cookies })
 
     const {
       data: { user },
@@ -62,22 +61,27 @@ export async function POST() {
       )
     }
 
-    // read-only: apenas informa elegibilidade, sem mutar cotas
+    // Usuário com plano pago pode consultar ilimitado
     if (hasPaidSubscription(profile)) {
       return NextResponse.json({ allowed: true, profile })
     }
 
     const freeQueriesUsed = profile.free_queries_used ?? 0
 
+    // Plano free permite até 3 consultas
     if (freeQueriesUsed < 3) {
       return NextResponse.json({ allowed: true, profile })
     }
 
-    return NextResponse.json({
-      allowed: false,
-      reason: 'PAYWALL',
-      profile,
-    })
+    // Paywall: usuário free atingiu limite
+    return NextResponse.json(
+      {
+        allowed: false,
+        reason: 'PAYWALL',
+        profile,
+      },
+      { status: 403 }
+    )
   } catch (error) {
     console.error('can-query error', error)
 
