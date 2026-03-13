@@ -1,25 +1,11 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
+import { resolveSubscriptionPriceId, subscriptionPriceEnvCandidates } from '@/lib/billing'
 import { stripe } from '@/lib/stripe/server'
 import { createServerClient } from '@/lib/supabase/server'
 
-const PLAN_PRICE_ENV_CANDIDATES = {
-  premium_monthly: ['STRIPE_PRICE_MONTHLY', 'STRIPE_PRICE_PREMIUM_MONTHLY', 'STRIPE_PRICE_PREMIUM_MENSAL'],
-  premium_yearly: ['STRIPE_PRICE_YEARLY', 'STRIPE_PRICE_PREMIUM_YEARLY', 'STRIPE_PRICE_PREMIUM_ANUAL'],
-  premium_plus: ['STRIPE_PRICE_PLUS', 'STRIPE_PRICE_PREMIUM_PLUS'],
-} as const
-
-type PlanId = keyof typeof PLAN_PRICE_ENV_CANDIDATES
-
-function resolvePriceId(plan: PlanId) {
-  const candidates = PLAN_PRICE_ENV_CANDIDATES[plan]
-  for (const envName of candidates) {
-    const value = process.env[envName]
-    if (value) return value
-  }
-  return null
-}
+type PlanId = keyof typeof subscriptionPriceEnvCandidates
 
 export async function POST(req: Request) {
   try {
@@ -47,7 +33,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as { plan?: string; planId?: string }
     const requestedPlan = body.planId ?? body.plan
 
-    if (!requestedPlan || !(requestedPlan in PLAN_PRICE_ENV_CANDIDATES)) {
+    if (!requestedPlan || !(requestedPlan in subscriptionPriceEnvCandidates)) {
       return NextResponse.json(
         { error: 'Plano inválido' },
         { status: 400 }
@@ -55,7 +41,7 @@ export async function POST(req: Request) {
     }
 
     const plan = requestedPlan as PlanId
-    const priceId = resolvePriceId(plan)
+    const priceId = resolveSubscriptionPriceId(plan)
 
     if (!priceId) {
       return NextResponse.json(

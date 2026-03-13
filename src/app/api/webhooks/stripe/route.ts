@@ -3,29 +3,13 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
+import { resolveSubscriptionPlanFromPriceId } from '@/lib/billing'
 import { stripe } from '@/lib/stripe/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
-
-/**
- * Mapeie STRIPE PRICE ID -> plans.id (FK em profiles.current_plan_id)
- * Ajuste os valores para os IDs reais da sua tabela public.plans.
- */
-type PlanId = 'premium_monthly' | 'premium_yearly' | 'premium_plus' | 'free'
-
-const PRICE_TO_PLAN: Record<string, Exclude<PlanId, 'free'>> = {
-  // Assinatura mensal Confia+
-  'price_1Ssre07IHHkQsIacWeLkInUG': 'premium_monthly',
-
-  // Premium Plus Mensal
-  'price_1SssHT7IHHkQsIackFlCofn6': 'premium_plus',
-
-  // Premium anual
-  'price_1St4jv7IHHkQsIac8a8yKmJb': 'premium_yearly',
-}
 
 const HANDLED_EVENTS = new Set([
   'checkout.session.completed',
@@ -67,7 +51,7 @@ async function resolveUserIdFromCustomer({
 async function resolvePlanFromSubscription(subscription: Stripe.Subscription) {
   const priceId = subscription.items?.data?.[0]?.price?.id
   if (!priceId) return null
-  return PRICE_TO_PLAN[priceId] ?? null
+  return resolveSubscriptionPlanFromPriceId(priceId)
 }
 
 async function resolvePlanFromCheckoutSession(stripe: Stripe, sessionId: string) {
@@ -81,7 +65,7 @@ async function resolvePlanFromCheckoutSession(stripe: Stripe, sessionId: string)
   const priceId = typeof price === 'object' ? price?.id : null
 
   if (!priceId) return null
-  return PRICE_TO_PLAN[priceId] ?? null
+  return resolveSubscriptionPlanFromPriceId(priceId)
 }
 
 async function markStripeEvent(
@@ -147,14 +131,34 @@ export async function POST(req: Request) {
     const msg = String((eventInsertError as any).message || '')
     const code = (eventInsertError as any).code
 
-    // Unique violation → evento já processado (Stripe retry/replay)
+    // Unique violation → evento já registrado, decide pelo status salvo
     if (code === '23505' || msg.toLowerCase().includes('duplicate')) {
-      console.info(`[stripe-webhook] Evento duplicado ignorado: ${event.id}`)
-      return jsonOk({ duplicate: true })
+      const { data: existingEvent, error: existingEventError } = await supabaseAdmin
+        .from('stripe_events')
+        .select('status')
+        .eq('event_id', event.id)
+        .maybeSingle()
+
+      if (existingEventError) {
+        console.error('[stripe-webhook] Erro ao consultar stripe_event existente:', existingEventError)
+        return jsonErr('Erro interno ao consultar evento Stripe', 500)
+      }
+
+      const existingStatus = existingEvent?.status ?? 'processed'
+      if (existingStatus === 'processed' || existingStatus === 'skipped') {
+        console.info(`[stripe-webhook] Evento duplicado ignorado: ${event.id} status=${existingStatus}`)
+        return jsonOk({ duplicate: true, status: existingStatus })
+      }
+
+      console.warn(`[stripe-webhook] Reprocessando evento ${event.id} com status anterior=${existingStatus}`)
+      await markStripeEvent(supabaseAdmin, event.id, {
+        status: 'received',
+        error: null,
+      })
     }
 
     // Se a tabela não existir ainda, degrada com log (não quebra produção)
-    if (code === '42P01' || msg.toLowerCase().includes('does not exist')) {
+    else if (code === '42P01' || msg.toLowerCase().includes('does not exist')) {
       console.error(
         '[stripe-webhook] stripe_events não existe (migração pendente). Prosseguindo sem dedupe:',
         eventInsertError
@@ -206,11 +210,11 @@ export async function POST(req: Request) {
         if (!plan) {
           await markStripeEvent(supabaseAdmin, event.id, {
             status: 'skipped',
-            error: 'Não conseguiu resolver plano via price.id (PRICE_TO_PLAN).',
+            error: 'Não conseguiu resolver plano via price.id (env de planos).',
           })
           return jsonOk({
             received: true,
-            warning: 'Não consegui resolver o plano via price.id. Verifique PRICE_TO_PLAN.',
+            warning: 'Não consegui resolver o plano via price.id. Verifique envs STRIPE_PRICE_* do plano.',
           })
         }
 
