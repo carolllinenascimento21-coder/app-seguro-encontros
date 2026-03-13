@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? new URL(req.url).origin
 
     const session = await stripe.checkout.sessions.create(
       {
@@ -76,6 +76,13 @@ export async function POST(req: Request) {
           plan: body.plan ?? '',
         },
 
+        subscription_data: {
+          metadata: {
+            user_id: user.id,
+            plan: body.plan ?? '',
+          },
+        },
+
         success_url: `${siteUrl}/perfil?payment=success`,
         cancel_url: `${siteUrl}/planos`,
       },
@@ -85,6 +92,13 @@ export async function POST(req: Request) {
         )}`,
       }
     )
+
+    if (!session.url) {
+      return NextResponse.json(
+        { error: 'Checkout URL indisponível' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       url: session.url,

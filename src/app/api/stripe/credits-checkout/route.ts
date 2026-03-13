@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-import { getStripeClient } from '@/lib/stripe'
+import { stripe } from '@/lib/stripe/server'
 import { getSiteUrl } from '@/lib/billing'
 import { createServerClient } from '@/lib/supabase/server'
 
@@ -60,15 +60,6 @@ export async function POST(req: Request) {
   if (!priceId) {
     return NextResponse.json(
       { error: 'Preço não configurado' },
-      { status: 500 }
-    )
-  }
-
-  const stripe = getStripeClient()
-
-  if (!stripe) {
-    return NextResponse.json(
-      { error: 'Stripe não configurado' },
       { status: 500 }
     )
   }
