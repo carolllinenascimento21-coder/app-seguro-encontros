@@ -1,162 +1,31 @@
-import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import Stripe from 'stripe'
+import { NextResponse } from "next/server"
+import { stripe } from "@/lib/stripe/server"
 
-import { getStripeClient } from '@/lib/stripe'
-import { getSupabasePublicEnv, getMissingSupabaseEnvDetails } from '@/lib/env'
-import { getSiteUrl } from '@/lib/billing'
-import { createServerClient } from '@/lib/supabase/server'
-
-const PLAN_ALIAS_MAP: Record<
-  string,
-  'premium_monthly' | 'premium_yearly' | 'premium_plus'
-> = {
-  premium_mensal: 'premium_monthly',
-  premium_anual: 'premium_yearly',
-  premium_plus: 'premium_plus',
-  premium_monthly: 'premium_monthly',
-  premium_yearly: 'premium_yearly',
-}
-
-const PLAN_PRICE_ENV: Record<
-  'premium_monthly' | 'premium_yearly' | 'premium_plus',
-  string[]
-> = {
-  premium_monthly: ['STRIPE_PRICE_PREMIUM_MONTHLY', 'STRIPE_PRICE_PREMIUM_MENSAL'],
-  premium_yearly: ['STRIPE_PRICE_PREMIUM_YEARLY', 'STRIPE_PRICE_PREMIUM_ANUAL'],
-  premium_plus: ['STRIPE_PRICE_PREMIUM_PLUS'],
-}
-
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    getSupabasePublicEnv('api/stripe/checkout')
-  } catch (error) {
-    const envError = getMissingSupabaseEnvDetails(error)
-    if (envError) {
-      return NextResponse.json(
-        { error: envError.message },
-        { status: envError.status }
-      )
-    }
-    throw error
-  }
-
-  const cookieStore = await cookies()
-  const supabase = await createServerClient()
-
-  const hasAuthCookies = cookieStore
-    .getAll()
-    .some((cookie) => cookie.name.includes('supabase') || cookie.name.startsWith('sb-'))
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    console.warn('[stripe-checkout] unauthorized request', {
-      hasAuthCookies,
-      userError: userError?.message,
-    })
-    return NextResponse.json(
-      { error: 'not_authenticated' },
-      { status: 401 }
-    )
-  }
-
-  const body = await req.json()
-  const stripe = getStripeClient()
-
-  if (!stripe) {
-    return NextResponse.json(
-      { error: 'Stripe não configurado' },
-      { status: 500 }
-    )
-  }
-
-  const siteUrl = getSiteUrl()
-
-  try {
-    /* =====================================================
-       NORMALIZA PLANO
-    ===================================================== */
-    const normalizedPlan = PLAN_ALIAS_MAP[body.planId]
-
-    if (!normalizedPlan) {
-      return NextResponse.json(
-        { error: 'Plano inválido' },
-        { status: 400 }
-      )
-    }
-
-    const priceEnvCandidates = PLAN_PRICE_ENV[normalizedPlan]
-    const priceId = priceEnvCandidates
-      .map((envKey) => process.env[envKey])
-      .find((value) => Boolean(value))
-
-    if (!priceId) {
-      return NextResponse.json(
-        {
-          error: `Preço não configurado no ambiente (${priceEnvCandidates.join(' ou ')})`,
-        },
-        { status: 500 }
-      )
-    }
-
-    /* =====================================================
-       CRIA / RECUPERA CUSTOMER
-    ===================================================== */
-    const existingCustomer = await stripe.customers.list({
-      email: user.email!,
-      limit: 1,
-    })
-
-    const customer =
-      existingCustomer.data.length > 0
-        ? existingCustomer.data[0]
-        : await stripe.customers.create({
-            email: user.email!,
-            metadata: {
-              user_id: user.id,
-            },
-          })
-
-    /* =====================================================
-       CRIA SESSION
-    ===================================================== */
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: customer.id,
+      mode: "subscription",
+      payment_method_types: ["card"],
 
       line_items: [
         {
-          price: priceId,
-          quantity: 1,
-        },
+          price: process.env.STRIPE_PRICE_ID,
+          quantity: 1
+        }
       ],
 
-      success_url: `${siteUrl}/planos?status=success`,
-      cancel_url: `${siteUrl}/planos?status=cancel`,
-
-      metadata: {
-        user_id: user.id,
-        plan: normalizedPlan,
-      },
-
-      subscription_data: {
-        metadata: {
-          user_id: user.id,
-          plan: normalizedPlan,
-        },
-      },
+      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/perfil?payment=success`,
+      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/planos`
     })
 
-    return NextResponse.json({ url: session.url })
+    return NextResponse.json({
+      url: session.url
+    })
   } catch (error) {
-    console.error('[checkout] erro stripe:', error)
+    console.error("stripe checkout error", error)
 
     return NextResponse.json(
-      { error: 'Erro ao iniciar checkout' },
+      { error: "STRIPE_CHECKOUT_FAILED" },
       { status: 500 }
     )
   }

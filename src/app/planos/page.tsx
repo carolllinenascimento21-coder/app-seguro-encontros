@@ -4,9 +4,6 @@ import { Eye, Lock, Check, X, Shield, Zap, Crown, Star, AlertTriangle, ChevronDo
 import { useRouter } from 'next/navigation'
 
 const CHECKOUT_IDS = {
-  premiumMonthly: 'premium_monthly',
-  premiumPlusMonthly: 'premium_plus',
-  premiumAnnual: 'premium_yearly',
   credits3: 'credits_3',
   credits10: 'credits_10',
   credits25: 'credits_25',
@@ -20,21 +17,25 @@ export default function PlanosPage() {
     plansSection?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const startStripeCheckout = async (checkoutId: string) => {
-    try {
-      const isCreditPack = checkoutId.startsWith('credits_')
-      const endpoint = isCreditPack
-        ? '/api/stripe/credits-checkout'
-        : '/api/stripe/checkout'
-      const body = isCreditPack
-        ? { packId: checkoutId }
-        : { mode: 'subscription', planId: checkoutId }
+  const handleCheckout = async () => {
+    const res = await fetch('/api/stripe/checkout', {
+      method: 'POST'
+    })
 
-      const response = await fetch(endpoint, {
+    const data = await res.json()
+
+    if (data.url) {
+      window.location.href = data.url
+    }
+  }
+
+  const startStripeCreditsCheckout = async (checkoutId: string) => {
+    try {
+      const response = await fetch('/api/stripe/credits-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ packId: checkoutId }),
       })
       if (!response.ok) {
         return
@@ -177,7 +178,7 @@ export default function PlanosPage() {
 
               <button
                 type="button"
-                onClick={() => startStripeCheckout(CHECKOUT_IDS.premiumMonthly)}
+                onClick={handleCheckout}
                 className="block w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all duration-300 text-center"
               >
                 Ativar Premium Mensal
@@ -239,7 +240,7 @@ export default function PlanosPage() {
 
               <button
                 type="button"
-                onClick={() => startStripeCheckout(CHECKOUT_IDS.premiumAnnual)}
+                onClick={handleCheckout}
                 className="block w-full bg-gradient-to-r from-[#FFD700] to-[#D4AF37] text-black font-bold py-4 px-6 rounded-xl hover:shadow-[0_0_30px_rgba(255,215,0,0.7)] transition-all duration-300 transform hover:scale-105 text-center"
               >
                 Assinar Anual
@@ -287,7 +288,7 @@ export default function PlanosPage() {
 
               <button
                 type="button"
-                onClick={() => startStripeCheckout(CHECKOUT_IDS.premiumPlusMonthly)}
+                onClick={handleCheckout}
                 className="block w-full bg-gradient-to-r from-[#C0C0C0] to-[#A8A8A8] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(192,192,192,0.5)] transition-all duration-300 text-center"
               >
                 Ativar Premium Plus
@@ -308,7 +309,7 @@ export default function PlanosPage() {
               <div className="space-y-3 mb-6">
                 <button
                   type="button"
-                  onClick={() => startStripeCheckout(CHECKOUT_IDS.credits3)}
+                  onClick={() => startStripeCreditsCheckout(CHECKOUT_IDS.credits3)}
                   className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
                 >
                   <div className="flex justify-between items-center">
@@ -319,7 +320,7 @@ export default function PlanosPage() {
                 
                 <button
                   type="button"
-                  onClick={() => startStripeCheckout(CHECKOUT_IDS.credits10)}
+                  onClick={() => startStripeCreditsCheckout(CHECKOUT_IDS.credits10)}
                   className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
                 >
                   <div className="flex justify-between items-center">
@@ -330,7 +331,7 @@ export default function PlanosPage() {
                 
                 <button
                   type="button"
-                  onClick={() => startStripeCheckout(CHECKOUT_IDS.credits25)}
+                  onClick={() => startStripeCreditsCheckout(CHECKOUT_IDS.credits25)}
                   className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
                 >
                   <div className="flex justify-between items-center">
