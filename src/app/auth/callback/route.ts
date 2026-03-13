@@ -4,6 +4,15 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
+const DEFAULT_REDIRECT_PATH = '/home'
+
+function getSafeRedirectPath(next: string | null) {
+  if (!next) return DEFAULT_REDIRECT_PATH
+  if (!next.startsWith('/')) return DEFAULT_REDIRECT_PATH
+  if (next.startsWith('//')) return DEFAULT_REDIRECT_PATH
+  return next
+}
+
 export async function GET(request: NextRequest) {
   let supabaseEnv
   try {
@@ -23,12 +32,27 @@ export async function GET(request: NextRequest) {
 
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const next = getSafeRedirectPath(searchParams.get('next'))
 
-  if (code) {
-    const supabase = createRouteHandlerClient({ cookies })
-    await supabase.auth.exchangeCodeForSession(code)
+  if (!code) {
+    return NextResponse.redirect(`${origin}${next}`)
   }
 
-  // 🔑 Sempre entrega o controle ao middleware
-  return NextResponse.redirect(`${origin}/home`)
+  const supabase = createRouteHandlerClient({ cookies })
+  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+  if (exchangeError) {
+    console.error('auth callback exchange error', {
+      message: exchangeError.message,
+      status: exchangeError.status,
+      code: exchangeError.code,
+    })
+
+    const loginUrl = new URL('/login', origin)
+    loginUrl.searchParams.set('error', 'auth_callback_failed')
+    loginUrl.searchParams.set('next', next)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  return NextResponse.redirect(`${origin}${next}`)
 }

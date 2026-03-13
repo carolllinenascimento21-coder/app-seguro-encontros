@@ -1,5 +1,39 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+
+const MAX_TERM_LENGTH = 80
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX_REQUESTS = 20
+
+type SearchRateState = {
+  count: number
+  resetAt: number
+}
+
+const rateLimitStore = new Map<string, SearchRateState>()
+
+function isRateLimited(key: string) {
+  const now = Date.now()
+  const current = rateLimitStore.get(key)
+
+  if (!current || now > current.resetAt) {
+    rateLimitStore.set(key, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    })
+    return false
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true
+  }
+
+  current.count += 1
+  rateLimitStore.set(key, current)
+  return false
+}
 
 function normalize(value: string | null) {
   return (value ?? '')
@@ -11,9 +45,39 @@ function normalize(value: string | null) {
 
 export async function GET(req: Request) {
   try {
+    const supabase = createRouteHandlerClient({ cookies })
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, message: 'Não autorizada' },
+        { status: 401 }
+      )
+    }
+
+    if (isRateLimited(user.id)) {
+      return NextResponse.json(
+        { success: false, message: 'Muitas consultas. Tente novamente em instantes.' },
+        { status: 429 }
+      )
+    }
+
     const { searchParams } = new URL(req.url)
-    const nome = normalize(searchParams.get('nome'))
-    const cidade = normalize(searchParams.get('cidade'))
+    const nomeRaw = searchParams.get('nome')
+    const cidadeRaw = searchParams.get('cidade')
+
+    if ((nomeRaw?.length ?? 0) > MAX_TERM_LENGTH || (cidadeRaw?.length ?? 0) > MAX_TERM_LENGTH) {
+      return NextResponse.json(
+        { success: false, message: 'Termo de busca muito longo' },
+        { status: 400 }
+      )
+    }
+
+    const nome = normalize(nomeRaw)
+    const cidade = normalize(cidadeRaw)
 
     if (!nome && !cidade) {
       return NextResponse.json(
@@ -22,9 +86,9 @@ export async function GET(req: Request) {
       )
     }
 
-    const supabase = getSupabaseAdminClient()
+    const supabaseAdmin = getSupabaseAdminClient()
 
-    let query = supabase
+    let query = supabaseAdmin
       .from('male_profile_reputation_summary')
       .select(
         'male_profile_id, name, city, average_rating, total_reviews, positive_percentage, alert_count, classification'
