@@ -1,129 +1,435 @@
 'use client'
 
+import { Eye, Lock, Check, X, Shield, Zap, Crown, Star, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 
-type Plan = {
-  name: string
-  priceId: string
-  price: string
-  description: string
-}
-
-const plans: Plan[] = [
-  {
-    name: 'Premium Mensal',
-    priceId: 'price_premium_monthly',
-    price: 'R$ 29,90',
-    description: 'Consultas ilimitadas e acesso completo às avaliações',
-  },
-  {
-    name: 'Premium Anual',
-    priceId: 'price_premium_yearly',
-    price: 'R$ 197,00',
-    description: 'Melhor custo-benefício com acesso total durante 1 ano',
-  },
-  {
-    name: 'Premium Plus',
-    priceId: 'price_premium_plus',
-    price: 'R$ 39,90',
-    description: 'Alertas em tempo real e análise avançada de padrões',
-  },
-]
+const STRIPE_PRICES = {
+  premiumMonthly: 'price_1Ssre07IHHkQsIacWeLkInUG',
+  premiumPlusMonthly: 'price_1SssHT7IHHkQsIackFlCofn6',
+  premiumAnnual: 'price_1St4jv7IHHkQsIac8a8yKmJb',
+  credits3: 'price_1Sv4xr7IHHkQsIacMx3fvNx5',
+  credits10: 'price_1Sv5Bu7IHHkQsIactQqeH4QO',
+  credits25: 'price_1Sv5EK7IHHkQsIacjgZYWIBr',
+} as const
 
 export default function PlanosPage() {
-
   const router = useRouter()
-  const [loading, setLoading] = useState<string | null>(null)
 
-  const startCheckout = async (priceId: string) => {
+  const scrollToPlans = () => {
+    const plansSection = document.getElementById('planos-section')
+    plansSection?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const startStripeCheckout = async (priceId: string) => {
     try {
-
-      setLoading(priceId)
-
-      const res = await fetch('/api/checkout/create-session', {
+      const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          priceId,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId }),
       })
-
-      if (res.status === 401) {
-        router.push('/login')
+      if (!response.ok) {
         return
       }
-
-      const data = await res.json()
-
-      if (!data.url) {
-        throw new Error('Erro ao criar sessão de pagamento')
+      const data = await response.json()
+      if (data?.url) {
+        window.location.href = data.url
       }
-
-      window.location.href = data.url
-
-    } catch (err) {
-      console.error(err)
-      alert('Erro ao iniciar pagamento')
-    } finally {
-      setLoading(null)
+    } catch {
+      return
     }
   }
 
   return (
-    <div className="min-h-screen bg-black text-white px-4 py-10">
+    <div className="min-h-screen bg-[#000000] text-white relative overflow-hidden">
+      {/* Textura metálica de fundo */}
+      <div className="absolute inset-0 opacity-5" style={{
+        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(212,175,55,0.1) 10px, rgba(212,175,55,0.1) 20px)'
+      }}></div>
 
-      <div className="max-w-3xl mx-auto space-y-8">
+      {/* Pontos dourados flutuantes */}
+      <div className="absolute inset-0 pointer-events-none">
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 bg-[#D4AF37] rounded-full animate-pulse"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 3}s`,
+              opacity: Math.random() * 0.4 + 0.2
+            }}
+          />
+        ))}
+      </div>
 
-        <h1 className="text-3xl font-bold text-[#D4AF37] text-center">
-          Conheça os Planos Confia+
-        </h1>
+      <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
+        {/* Header com logo */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center justify-center gap-3 mb-4">
+            <div className="relative">
+              <Eye className="w-10 h-10 text-[#D4AF37]" />
+              <Lock className="w-5 h-5 text-[#C0C0C0] absolute -bottom-1 -right-1" />
+            </div>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-[#D4AF37] via-[#FFD700] to-[#D4AF37] bg-clip-text text-transparent mb-2">
+            Confia+
+          </h1>
+          <p className="text-[#C0C0C0] text-lg">Segurança e Proteção Feminina</p>
+        </div>
 
-        <p className="text-center text-gray-400">
-          Segurança e clareza para decisões conscientes
-        </p>
-
-        <div className="grid gap-6">
-
-          {plans.map((plan) => (
-
-            <div
-              key={plan.priceId}
-              className="border border-[#D4AF37] rounded-xl p-6 bg-black/40"
-            >
-
-              <h2 className="text-xl font-semibold text-[#D4AF37]">
-                {plan.name}
-              </h2>
-
-              <p className="text-gray-400 mt-2">
-                {plan.description}
+        {/* Paywall Emocional */}
+        <div className="max-w-2xl mx-auto mb-16">
+          <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border-2 border-[#D4AF37] rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+            {/* Brilho de fundo */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(212,175,55,0.1)_0%,_transparent_50%)]"></div>
+            
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle className="w-8 h-8 text-[#FFD700] animate-pulse" />
+                <h2 className="text-2xl font-bold text-[#FFD700]">Atenção</h2>
+              </div>
+              
+              <p className="text-xl text-white mb-3 font-semibold">
+                ⚠️ Este homem possui alertas importantes.
               </p>
-
-              <p className="text-2xl font-bold mt-4">
-                {plan.price}
+              
+              <p className="text-lg text-[#C0C0C0] mb-2">
+                Desbloqueie para ver detalhes completos.
+              </p>
+              
+              <p className="text-lg text-[#D4AF37] font-medium mb-6">
+                Proteja suas escolhas. Tome decisões inteligentes.
               </p>
 
               <button
-                onClick={() => startCheckout(plan.priceId)}
-                disabled={loading === plan.priceId}
-                className="mt-4 w-full bg-[#D4AF37] text-black font-bold py-3 rounded-lg"
+                onClick={scrollToPlans}
+                className="w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-4 px-8 rounded-xl hover:shadow-[0_0_30px_rgba(212,175,55,0.6)] transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
               >
-                {loading === plan.priceId
-                  ? 'Redirecionando...'
-                  : 'Assinar Plano'}
+                Ver Planos
+                <ChevronDown className="w-5 h-5 animate-bounce" />
               </button>
-
             </div>
-
-          ))}
-
+          </div>
         </div>
 
-      </div>
+        {/* Seção de Planos */}
+        <div id="planos-section" className="mb-16">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-4 bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] bg-clip-text text-transparent">
+            Escolha Seu Plano
+          </h2>
+          <p className="text-center text-[#C0C0C0] mb-12 text-lg">
+            Acesso completo à verdade. Proteção que você merece.
+          </p>
 
+          {/* Grid de Planos */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {/* Plano Premium Mensal */}
+            <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border border-[#D4AF37] rounded-2xl p-6 hover:shadow-[0_0_30px_rgba(212,175,55,0.3)] transition-all duration-300 transform hover:scale-105">
+              <div className="flex items-center gap-2 mb-4">
+                <Zap className="w-6 h-6 text-[#D4AF37]" />
+                <h3 className="text-xl font-bold text-[#D4AF37]">Premium Mensal</h3>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-4xl font-bold text-white">R$ 9,90</p>
+                <p className="text-[#C0C0C0]">/mês</p>
+              </div>
+
+              <ul className="space-y-3 mb-6">
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Pesquisas ilimitadas</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Acesso a todas as avaliações completas</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Alertas detalhados</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Relatos anônimos completos</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Histórico comportamental</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Red flags reveladas</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Sinais emocionais e padrões</span>
+                </li>
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => startStripeCheckout(STRIPE_PRICES.premiumMonthly)}
+                className="block w-full bg-gradient-to-r from-[#D4AF37] to-[#FFD700] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all duration-300 text-center"
+              >
+                Ativar Premium Mensal
+              </button>
+            </div>
+
+            {/* Plano Premium Anual - DESTAQUE */}
+            <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border-4 border-[#FFD700] rounded-2xl p-6 hover:shadow-[0_0_40px_rgba(255,215,0,0.5)] transition-all duration-300 transform hover:scale-105 relative lg:scale-110 lg:z-10">
+              {/* Selo "Mais Escolhido" */}
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                <div className="bg-gradient-to-r from-[#FFD700] to-[#D4AF37] text-black px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg">
+                  <Star className="w-4 h-4 fill-current" />
+                  MAIS ESCOLHIDO
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mb-4 mt-4">
+                <Crown className="w-6 h-6 text-[#FFD700]" />
+                <h3 className="text-xl font-bold text-[#FFD700]">Premium Anual</h3>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-4xl font-bold text-white">R$ 79,90</p>
+                <p className="text-[#FFD700] font-semibold">/ano</p>
+                <p className="text-sm text-[#D4AF37] mt-1">Equivalente a R$ 6,60 por mês</p>
+                <p className="text-xs text-[#C0C0C0] mt-1">💰 Economia anual de 33%</p>
+              </div>
+
+              <ul className="space-y-3 mb-6">
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
+                  <span className="text-white font-semibold">Tudo do plano mensal</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Avisos antecipados sobre novas avaliações</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Prioridade de segurança</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Pesquisas ilimitadas</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Acesso completo a avaliações</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Alertas e histórico completo</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Red flags e padrões emocionais</span>
+                </li>
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => startStripeCheckout(STRIPE_PRICES.premiumAnnual)}
+                className="block w-full bg-gradient-to-r from-[#FFD700] to-[#D4AF37] text-black font-bold py-4 px-6 rounded-xl hover:shadow-[0_0_30px_rgba(255,215,0,0.7)] transition-all duration-300 transform hover:scale-105 text-center"
+              >
+                Assinar Anual
+              </button>
+            </div>
+
+            {/* Plano Premium Plus */}
+            <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border border-[#C0C0C0] rounded-2xl p-6 hover:shadow-[0_0_30px_rgba(192,192,192,0.3)] transition-all duration-300 transform hover:scale-105">
+              <div className="flex items-center gap-2 mb-4">
+                <Shield className="w-6 h-6 text-[#C0C0C0]" />
+                <h3 className="text-xl font-bold text-[#C0C0C0]">Premium Plus</h3>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-4xl font-bold text-white">R$ 19,90</p>
+                <p className="text-[#C0C0C0]">/mês</p>
+              </div>
+
+              <ul className="space-y-3 mb-6">
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#C0C0C0] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Análise de padrões emocionais</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#C0C0C0] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Mapa de risco comportamental</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#C0C0C0] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Desbloqueio automático de alertas especiais</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#C0C0C0] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Detecta comportamento manipulador recorrente</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#C0C0C0] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Notificações de segurança em tempo real</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <Check className="w-5 h-5 text-[#C0C0C0] flex-shrink-0 mt-0.5" />
+                  <span className="text-[#C0C0C0]">Tudo do Premium Anual</span>
+                </li>
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => startStripeCheckout(STRIPE_PRICES.premiumPlusMonthly)}
+                className="block w-full bg-gradient-to-r from-[#C0C0C0] to-[#A8A8A8] text-black font-bold py-3 px-6 rounded-xl hover:shadow-[0_0_20px_rgba(192,192,192,0.5)] transition-all duration-300 text-center"
+              >
+                Ativar Premium Plus
+              </button>
+            </div>
+
+            {/* Créditos Avulsos */}
+            <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border border-[#D4AF37] rounded-2xl p-6 hover:shadow-[0_0_30px_rgba(212,175,55,0.3)] transition-all duration-300">
+              <div className="flex items-center gap-2 mb-4">
+                <Zap className="w-6 h-6 text-[#FFD700]" />
+                <h3 className="text-xl font-bold text-[#FFD700]">Créditos Avulsos</h3>
+              </div>
+              
+              <p className="text-sm text-[#C0C0C0] mb-6">
+                Os créditos desbloqueiam alertas críticos, denúncias graves, relatos sigilosos e comportamentos reincidentes.
+              </p>
+
+              <div className="space-y-3 mb-6">
+                <button
+                  type="button"
+                  onClick={() => startStripeCheckout(STRIPE_PRICES.credits3)}
+                  className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-white font-semibold">3 créditos</span>
+                    <span className="text-[#D4AF37] font-bold">R$ 6,90</span>
+                  </div>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => startStripeCheckout(STRIPE_PRICES.credits10)}
+                  className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-white font-semibold">10 créditos</span>
+                    <span className="text-[#D4AF37] font-bold">R$ 14,90</span>
+                  </div>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => startStripeCheckout(STRIPE_PRICES.credits25)}
+                  className="block bg-[#0a0a0a] border border-[#D4AF37]/30 rounded-lg p-3 hover:border-[#D4AF37] transition-all"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-white font-semibold">25 créditos</span>
+                    <span className="text-[#D4AF37] font-bold">R$ 27,90</span>
+                  </div>
+                  <div className="text-xs text-[#FFD700] mt-1">⭐ Melhor custo-benefício</div>
+                </button>
+              </div>
+
+              <div className="text-center text-sm text-[#C0C0C0] italic">
+                Clique no pacote desejado para comprar
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabela de Comparação */}
+        <div className="mb-16">
+          <h2 className="text-3xl font-bold text-center mb-8 bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] bg-clip-text text-transparent">
+            Compare os Planos
+          </h2>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] rounded-2xl overflow-hidden">
+              <thead>
+                <tr className="bg-[#0a0a0a]">
+                  <th className="text-left p-4 text-[#D4AF37] font-bold border-b border-[#D4AF37]/30">Recurso</th>
+                  <th className="text-center p-4 text-[#C0C0C0] font-bold border-b border-[#D4AF37]/30">Gratuito</th>
+                  <th className="text-center p-4 text-[#D4AF37] font-bold border-b border-[#D4AF37]/30">Premium Mensal</th>
+                  <th className="text-center p-4 text-[#FFD700] font-bold border-b border-[#D4AF37]/30">Premium Anual</th>
+                  <th className="text-center p-4 text-[#C0C0C0] font-bold border-b border-[#D4AF37]/30">Premium Plus</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-[#D4AF37]/10 hover:bg-[#0a0a0a]/50">
+                  <td className="p-4 text-[#C0C0C0]">Consultas diárias</td>
+                  <td className="text-center p-4 text-white">1</td>
+                  <td className="text-center p-4 text-[#D4AF37] font-semibold">Ilimitadas</td>
+                  <td className="text-center p-4 text-[#FFD700] font-semibold">Ilimitadas</td>
+                  <td className="text-center p-4 text-[#C0C0C0] font-semibold">Ilimitadas</td>
+                </tr>
+                <tr className="border-b border-[#D4AF37]/10 hover:bg-[#0a0a0a]/50">
+                  <td className="p-4 text-[#C0C0C0]">Ver detalhes das avaliações</td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#D4AF37] mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#FFD700] mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#C0C0C0] mx-auto" /></td>
+                </tr>
+                <tr className="border-b border-[#D4AF37]/10 hover:bg-[#0a0a0a]/50">
+                  <td className="p-4 text-[#C0C0C0]">Ver alertas graves</td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#D4AF37] mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#FFD700] mx-auto" /></td>
+                  <td className="text-center p-4 text-[#C0C0C0] text-sm">✔ (automático)</td>
+                </tr>
+                <tr className="border-b border-[#D4AF37]/10 hover:bg-[#0a0a0a]/50">
+                  <td className="p-4 text-[#C0C0C0]">Histórico comportamental</td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#D4AF37] mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#FFD700] mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#C0C0C0] mx-auto" /></td>
+                </tr>
+                <tr className="border-b border-[#D4AF37]/10 hover:bg-[#0a0a0a]/50">
+                  <td className="p-4 text-[#C0C0C0]">Notificações de risco</td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#FFD700] mx-auto" /></td>
+                  <td className="text-center p-4 text-[#C0C0C0] text-sm">✔ (tempo real)</td>
+                </tr>
+                <tr className="hover:bg-[#0a0a0a]/50">
+                  <td className="p-4 text-[#C0C0C0]">Análise de padrões</td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><X className="w-5 h-5 text-red-500 mx-auto" /></td>
+                  <td className="text-center p-4"><Check className="w-5 h-5 text-[#C0C0C0] mx-auto" /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Gatilho Final de Conversão */}
+        <div className="max-w-3xl mx-auto text-center mb-12">
+          <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border-2 border-[#D4AF37] rounded-2xl p-8 shadow-2xl">
+            <Shield className="w-16 h-16 text-[#D4AF37] mx-auto mb-4" />
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">
+              Proteja suas escolhas.
+            </h3>
+            <p className="text-lg text-[#C0C0C0] mb-4">
+              A informação certa pode salvar sua paz emocional.
+            </p>
+            <p className="text-xl text-[#D4AF37] font-semibold">
+              Assine o Confia+ e tenha acesso completo à verdade.
+            </p>
+          </div>
+        </div>
+
+        {/* Botão Voltar */}
+        <div className="text-center">
+          <button
+            onClick={() => router.back()}
+            className="text-[#C0C0C0] hover:text-[#D4AF37] transition-colors duration-300 underline"
+          >
+            Voltar
+          </button>
+        </div>
+      </div>
     </div>
   )
-}      
+}
