@@ -80,8 +80,8 @@ export async function POST(req: Request) {
         pack_id: body.packId ?? '',
       },
 
-      success_url: `${siteUrl}/creditos?status=success`,
-      cancel_url: `${siteUrl}/creditos?status=cancel`,
+      success_url: `${siteUrl}/planos?creditsCheckout=success`,
+      cancel_url: `${siteUrl}/planos?creditsCheckout=cancel`,
     },
     {
       idempotencyKey: `credits-checkout:${user.id}:${body.packId}:${Math.floor(

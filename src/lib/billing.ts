@@ -3,6 +3,41 @@ export const FREE_PLAN = 'free'
 export type SubscriptionPlanId = 'premium_mensal' | 'premium_anual' | 'premium_plus'
 export type CreditPackId = 'credits_3' | 'credits_10' | 'credits_25'
 
+export const subscriptionPriceEnvCandidates = {
+  premium_monthly: [
+    'STRIPE_PRICE_MONTHLY',
+    'STRIPE_PRICE_PREMIUM_MONTHLY',
+    'STRIPE_PRICE_PREMIUM_MENSAL',
+  ],
+  premium_yearly: [
+    'STRIPE_PRICE_YEARLY',
+    'STRIPE_PRICE_PREMIUM_YEARLY',
+    'STRIPE_PRICE_PREMIUM_ANUAL',
+  ],
+  premium_plus: ['STRIPE_PRICE_PLUS', 'STRIPE_PRICE_PREMIUM_PLUS'],
+} as const
+
+export type SubscriptionCheckoutPlanId = keyof typeof subscriptionPriceEnvCandidates
+
+export function resolveSubscriptionPriceId(planId: SubscriptionCheckoutPlanId) {
+  const candidates = subscriptionPriceEnvCandidates[planId]
+  for (const envName of candidates) {
+    const value = process.env[envName]
+    if (value) return value
+  }
+  return null
+}
+
+export function resolveSubscriptionPlanFromPriceId(priceId: string) {
+  for (const planId of Object.keys(subscriptionPriceEnvCandidates) as SubscriptionCheckoutPlanId[]) {
+    if (resolveSubscriptionPriceId(planId) === priceId) {
+      return planId
+    }
+  }
+
+  return null
+}
+
 export const subscriptionPriceEnvByPlan: Record<SubscriptionPlanId, string> = {
   premium_mensal: 'STRIPE_PRICE_PREMIUM_MENSAL',
   premium_anual: 'STRIPE_PRICE_PREMIUM_ANUAL',
