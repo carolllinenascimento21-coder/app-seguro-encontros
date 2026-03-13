@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies, headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import { createServerClient } from '@/lib/supabase/server'
 
 type ProfileAccessRow = {
@@ -11,11 +11,10 @@ const PROFILE_ACCESS_FIELDS = 'has_active_plan, free_queries_used'
 
 export async function POST() {
   try {
-    // importante: passar cookies e headers para o Supabase reconhecer a sessão
-    const supabase = await createServerClient({
-      cookies,
-      headers,
-    })
+    // inicializa o contexto de cookies da requisição para o Supabase SSR
+    await cookies()
+
+    const supabase = await createServerClient()
 
     const {
       data: { user },
@@ -57,34 +56,33 @@ export async function POST() {
 
     const freeQueriesUsed = profile.free_queries_used ?? 0
 
-    // limite de consultas gratuitas
-    if (freeQueriesUsed >= 3) {
-      return NextResponse.json({
-        allowed: false,
-        reason: 'PAYWALL',
-      })
+    if (freeQueriesUsed < 3) {
+      // incrementa consulta gratuita
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          free_queries_used: freeQueriesUsed + 1,
+        })
+        .eq('id', user.id)
+        .select(PROFILE_ACCESS_FIELDS)
+        .maybeSingle<ProfileAccessRow>()
+
+      if (updateError) {
+        console.error('can-query increment error', updateError)
+
+        return NextResponse.json(
+          { allowed: false, reason: 'ACCESS_CHECK_FAILED' },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({ allowed: true })
     }
 
-    // incrementa consulta gratuita
-    const { data: updatedProfile, error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        free_queries_used: freeQueriesUsed + 1,
-      })
-      .eq('id', user.id)
-      .select(PROFILE_ACCESS_FIELDS)
-      .maybeSingle<ProfileAccessRow>()
-
-    if (updateError) {
-      console.error('can-query increment error', updateError)
-
-      return NextResponse.json(
-        { allowed: false, reason: 'ACCESS_CHECK_FAILED' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({ allowed: true })
+    return NextResponse.json({
+      allowed: false,
+      reason: 'PAYWALL',
+    })
   } catch (error) {
     console.error('can-query error', error)
 
