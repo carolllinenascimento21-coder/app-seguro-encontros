@@ -3,49 +3,78 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+type PlanId = 'premium_monthly' | 'premium_yearly' | 'premium_plus'
+
 type Plan = {
-  name: string
+  id: PlanId
+  title: string
   price: string
-  priceId: string
+  period: string
+  subtitle: string
+  features: string[]
   highlight?: boolean
+  badge?: string
 }
 
 const plans: Plan[] = [
   {
-    name: 'Premium Mensal',
-    price: 'R$ 29,90',
-    priceId: 'price_premium_monthly'
+    id: 'premium_monthly',
+    title: 'Premium Mensal',
+    price: 'R$ 9,90',
+    period: '/mês',
+    subtitle: 'Ideal para quem quer clareza imediata.',
+    features: [
+      'Consultas ilimitadas',
+      'Acesso às avaliações completas',
+      'Histórico comportamental',
+      'Alertas relevantes',
+    ],
   },
   {
-    name: 'Premium Anual',
-    price: 'R$ 197,00',
-    priceId: 'price_premium_yearly',
-    highlight: true
+    id: 'premium_yearly',
+    title: 'Premium Anual',
+    price: 'R$ 79,90',
+    period: '/ano',
+    subtitle: 'Proteção total com melhor custo-benefício.',
+    features: [
+      'Tudo do Premium Mensal',
+      'Economia anual significativa',
+      'Acesso prioritário a novos alertas',
+      'Histórico completo e aprofundado',
+    ],
+    highlight: true,
+    badge: 'Mais escolhido',
   },
   {
-    name: 'Premium Plus',
-    price: 'R$ 39,90',
-    priceId: 'price_premium_plus'
-  }
+    id: 'premium_plus',
+    title: 'Premium Plus',
+    price: 'R$ 19,90',
+    period: '/mês',
+    subtitle: 'Para quem exige o nível máximo de proteção.',
+    features: [
+      'Tudo do Premium Anual',
+      'Alertas em tempo real',
+      'Análise de padrões emocionais',
+      'Detecção de comportamentos reincidentes',
+      'Desbloqueio automático de alertas críticos',
+    ],
+  },
 ]
 
 export default function PlanosPage() {
-
   const router = useRouter()
-  const [loading, setLoading] = useState<string | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null)
 
-  async function startCheckout(priceId: string) {
-
+  const handleCheckout = async (planId: PlanId) => {
     try {
+      setLoadingPlan(planId)
 
-      setLoading(priceId)
-
-      const res = await fetch('/api/checkout/create-session', {
+      const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ priceId })
+        body: JSON.stringify({ planId }),
       })
 
       if (res.status === 401) {
@@ -53,147 +82,138 @@ export default function PlanosPage() {
         return
       }
 
-      const data = await res.json()
+      const data = await res.json().catch(() => null)
 
-      if (!data.url) {
-        throw new Error('Erro no checkout')
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || 'Erro ao iniciar checkout')
+      }
+
+      if (!data?.url) {
+        throw new Error('URL do Stripe não retornada')
       }
 
       window.location.href = data.url
-
-    } catch (err) {
-
-      console.error(err)
-      alert('Erro ao iniciar pagamento')
-
+    } catch (error: any) {
+      console.error('Erro ao iniciar checkout:', error)
+      alert(error?.message || 'Erro ao iniciar pagamento')
     } finally {
-      setLoading(null)
+      setLoadingPlan(null)
     }
   }
 
   return (
-    <div className="min-h-screen bg-black text-white px-6 py-12">
+    <div className="min-h-screen bg-black text-white px-4 py-10">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-10 text-center">
+          <h1 className="text-4xl font-bold text-[#D4AF37]">Confia+</h1>
+          <p className="mt-3 text-xl font-semibold">
+            Segurança e clareza para decisões conscientes
+          </p>
+          <p className="mt-3 text-gray-300">
+            Antes de se envolver, informe-se. O Confia+ é uma plataforma criada
+            para mulheres que valorizam segurança emocional, transparência e proteção
+            ao conhecer alguém.
+          </p>
+        </div>
 
-      <div className="max-w-5xl mx-auto">
+        <div className="mb-12 rounded-2xl border border-[#D4AF37]/30 bg-[#111] p-6">
+          <h2 className="mb-4 text-2xl font-bold text-[#D4AF37]">Como funciona?</h2>
+          <div className="space-y-2 text-gray-200">
+            <p>1. Você cria uma conta gratuita</p>
+            <p>2. Consulta perfis e avaliações disponíveis</p>
+            <p>3. Desbloqueia informações conforme seu plano</p>
+            <p>4. Decide com mais segurança se vale a pena investir emocionalmente</p>
+          </div>
+        </div>
 
-        <h1 className="text-3xl font-bold text-[#D4AF37] text-center mb-3">
-          Conheça os Planos Confia+
-        </h1>
+        <h2 className="mb-6 text-3xl font-bold text-[#D4AF37]">Conheça os Planos</h2>
 
-        <p className="text-center text-gray-400 mb-10">
-          Segurança e clareza para decisões conscientes
-        </p>
-
-        {/* CARDS */}
-        <div className="grid md:grid-cols-3 gap-6 mb-14">
-
-          {plans.map(plan => (
-
+        <div className="grid gap-6 md:grid-cols-3">
+          {plans.map((plan) => (
             <div
-              key={plan.name}
-              className={`border rounded-xl p-6 ${
+              key={plan.id}
+              className={`rounded-2xl border p-6 ${
                 plan.highlight
-                  ? 'border-[#D4AF37] bg-[#111]'
-                  : 'border-gray-800 bg-[#111]'
+                  ? 'border-[#D4AF37] bg-[#161616] shadow-[0_0_0_1px_rgba(212,175,55,0.15)]'
+                  : 'border-[#D4AF37]/40 bg-[#111]'
               }`}
             >
-
-              {plan.highlight && (
-                <div className="text-xs text-center mb-2 text-[#D4AF37] font-semibold">
-                  MAIS ESCOLHIDO
+              {plan.badge && (
+                <div className="mb-4 inline-block rounded-full bg-[#D4AF37] px-3 py-1 text-xs font-bold text-black">
+                  {plan.badge}
                 </div>
               )}
 
-              <h2 className="text-xl font-semibold mb-3">
-                {plan.name}
-              </h2>
+              <h3 className="text-2xl font-bold text-[#D4AF37]">{plan.title}</h3>
+              <p className="mt-2 text-gray-300">{plan.subtitle}</p>
 
-              <p className="text-3xl font-bold mb-6">
-                {plan.price}
-              </p>
+              <div className="mt-5">
+                <span className="text-4xl font-bold">{plan.price}</span>
+                <span className="ml-1 text-gray-400">{plan.period}</span>
+              </div>
+
+              <ul className="mt-6 space-y-3 text-sm text-gray-200">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2">
+                    <span className="mt-0.5 text-[#D4AF37]">✔</span>
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
 
               <button
-                onClick={() => startCheckout(plan.priceId)}
-                disabled={loading === plan.priceId}
-                className="w-full bg-[#D4AF37] text-black font-bold py-3 rounded-lg"
+                onClick={() => handleCheckout(plan.id)}
+                disabled={loadingPlan === plan.id}
+                className="mt-8 w-full rounded-xl bg-[#D4AF37] py-3 font-bold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading === plan.priceId
-                  ? 'Redirecionando...'
-                  : 'Assinar Plano'}
+                {loadingPlan === plan.id ? 'Redirecionando...' : 'Assinar Plano'}
               </button>
-
             </div>
-
           ))}
-
         </div>
 
-        {/* TABELA COMPARATIVA */}
-        <div className="border border-gray-800 rounded-xl overflow-hidden">
+        <div className="mt-14 overflow-hidden rounded-2xl border border-[#D4AF37]/30">
+          <div className="grid grid-cols-4 bg-[#151515] text-sm font-bold text-white">
+            <div className="p-4">Recursos</div>
+            <div className="p-4 text-center">Gratuito</div>
+            <div className="p-4 text-center">Premium</div>
+            <div className="p-4 text-center">Premium Plus</div>
+          </div>
 
-          <table className="w-full text-sm">
-
-            <thead className="bg-[#111]">
-              <tr>
-                <th className="text-left p-4">Recursos</th>
-                <th className="p-4">Gratuito</th>
-                <th className="p-4 text-[#D4AF37]">Premium</th>
-                <th className="p-4 text-[#D4AF37]">Premium Plus</th>
-              </tr>
-            </thead>
-
-            <tbody>
-
-              <tr className="border-t border-gray-800">
-                <td className="p-4">Consultas</td>
-                <td className="text-center">3</td>
-                <td className="text-center">∞</td>
-                <td className="text-center">∞</td>
-              </tr>
-
-              <tr className="border-t border-gray-800">
-                <td className="p-4">Avaliações completas</td>
-                <td className="text-center">❌</td>
-                <td className="text-center">✔</td>
-                <td className="text-center">✔</td>
-              </tr>
-
-              <tr className="border-t border-gray-800">
-                <td className="p-4">Alertas de risco</td>
-                <td className="text-center">❌</td>
-                <td className="text-center">✔</td>
-                <td className="text-center">✔</td>
-              </tr>
-
-              <tr className="border-t border-gray-800">
-                <td className="p-4">Histórico comportamental</td>
-                <td className="text-center">❌</td>
-                <td className="text-center">✔</td>
-                <td className="text-center">✔</td>
-              </tr>
-
-              <tr className="border-t border-gray-800">
-                <td className="p-4">Análise avançada</td>
-                <td className="text-center">❌</td>
-                <td className="text-center">❌</td>
-                <td className="text-center">✔</td>
-              </tr>
-
-              <tr className="border-t border-gray-800">
-                <td className="p-4">Alertas em tempo real</td>
-                <td className="text-center">❌</td>
-                <td className="text-center">❌</td>
-                <td className="text-center">✔</td>
-              </tr>
-
-            </tbody>
-
-          </table>
-
+          {[
+            ['Consultas', 'Limitadas', 'Ilimitadas', 'Ilimitadas'],
+            ['Avaliações completas', '❌', '✔', '✔'],
+            ['Histórico comportamental', '❌', '✔', '✔'],
+            ['Alertas relevantes', '❌', '✔', '✔'],
+            ['Alertas em tempo real', '❌', '❌', '✔'],
+            ['Análise de padrões', '❌', '❌', '✔'],
+            ['Comportamentos reincidentes', '❌', '❌', '✔'],
+          ].map((row) => (
+            <div
+              key={row[0]}
+              className="grid grid-cols-4 border-t border-[#D4AF37]/20 bg-black text-sm text-gray-200"
+            >
+              <div className="p-4 font-medium text-white">{row[0]}</div>
+              <div className="p-4 text-center">{row[1]}</div>
+              <div className="p-4 text-center">{row[2]}</div>
+              <div className="p-4 text-center">{row[3]}</div>
+            </div>
+          ))}
         </div>
 
+        <div className="mt-14 rounded-2xl border border-[#D4AF37]/30 bg-[#111] p-6">
+          <h2 className="mb-4 text-2xl font-bold text-[#D4AF37]">Por que confiar no Confia+?</h2>
+          <div className="space-y-2 text-gray-200">
+            <p>🔒 Plataforma exclusiva para mulheres</p>
+            <p>🕶️ Total anonimato para quem avalia</p>
+            <p>📊 Dados agregados — sem exposição indevida</p>
+            <p>🛡️ Foco em proteção, não em julgamentos</p>
+          </div>
+          <p className="mt-6 text-gray-300">
+            O Confia+ não é um app de encontros. É uma ferramenta de segurança emocional.
+          </p>
+        </div>
       </div>
-
     </div>
   )
 }
