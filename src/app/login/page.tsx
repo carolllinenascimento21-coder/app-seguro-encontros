@@ -18,28 +18,34 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const supabase = createSupabaseClient()
-
-    if (!supabase) {
-      console.error('Supabase client não inicializado no login.')
-      setError('Serviço indisponível no momento. Tente novamente mais tarde.')
+    if (!email.trim() || !password.trim()) {
+      setError('Informe e-mail e senha.')
       setLoading(false)
       return
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const supabase = createSupabaseClient()
+
+    if (!supabase) {
+      setError('Serviço indisponível no momento.')
+      setLoading(false)
+      return
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: password.trim(),
     })
 
     if (error) {
-      // ✅ Tratamento específico para e-mail não confirmado
+      console.error('Erro no login:', error)
+
       if (
         error.message.toLowerCase().includes('email') &&
         error.message.toLowerCase().includes('confirm')
       ) {
         setError(
-          'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou spam e clique no link de confirmação.'
+          'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou spam.'
         )
       } else {
         setError('E-mail ou senha inválidos.')
@@ -49,43 +55,42 @@ export default function LoginPage() {
       return
     }
 
-    // ✅ Login ok → garante perfil completo antes do fluxo de navegação
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession()
+    const session = data?.session
 
-    if (sessionError && !isAuthSessionMissingError(sessionError)) {
-      console.error('Erro ao carregar sessão no login:', sessionError)
+    if (!session) {
+      setError('Erro ao iniciar sessão.')
+      setLoading(false)
+      return
     }
 
-    if (session) {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
 
-      if (isAuthSessionMissingError(userError)) {
+    if (userError && !isAuthSessionMissingError(userError)) {
+      console.error('Erro ao carregar usuário:', userError)
+    }
+
+    if (user) {
+      const { profile, error: profileError } = await ensureProfileForUser(
+        supabase,
+        user
+      )
+
+      if (profileError) {
+        console.error('Erro ao garantir perfil:', profileError)
+      }
+
+      if (
+        profile?.onboarding_completed === false ||
+        profile?.onboarding_completed === null
+      ) {
+        router.replace('/onboarding/selfie')
         return
       }
-
-      if (user) {
-        const { profile, error: profileError } = await ensureProfileForUser(
-          supabase,
-          user
-        )
-        if (profileError) {
-          console.error('Erro ao garantir perfil no login:', profileError)
-        }
-
-        if (profile?.onboarding_completed === false || profile?.onboarding_completed === null) {
-          router.replace('/onboarding/selfie')
-          return
-        }
-      }
     }
 
-    // ✅ Login ok → controle segue para o middleware
     router.replace('/home')
   }
 
