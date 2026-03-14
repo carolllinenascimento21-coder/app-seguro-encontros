@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createSupabaseClient } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase/browser'
 import { ensureProfileForUser } from '@/lib/profile-utils'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
 
