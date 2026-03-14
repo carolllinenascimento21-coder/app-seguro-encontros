@@ -56,13 +56,8 @@ function applyAuthCookies(target: NextResponse, source: NextResponse) {
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl
 
-  const isPublicRoute = PUBLIC_PATHS.some((route) =>
-    pathMatches(pathname, route)
-  )
-
-  const isProtectedRoute = PROTECTED_PATHS.some((route) =>
-    pathMatches(pathname, route)
-  )
+  const isPublicRoute = PUBLIC_PATHS.some((route) => pathMatches(pathname, route))
+  const isProtectedRoute = PROTECTED_PATHS.some((route) => pathMatches(pathname, route))
 
   const response = NextResponse.next({
     request: { headers: req.headers },
@@ -87,7 +82,8 @@ export async function middleware(req: NextRequest) {
   )
 
   /**
-   * 🔑 Atualiza sessão antes de verificar auth
+   * 🔑 IMPORTANTE
+   * Usar getSession() em vez de getUser() no middleware
    */
   const {
     data: { session },
@@ -96,7 +92,7 @@ export async function middleware(req: NextRequest) {
   const user = session?.user ?? null
 
   /**
-   * 🔐 Usuário não logado tentando acessar rota protegida
+   * 🔒 Usuário não logado tentando acessar rota protegida
    */
   if (isProtectedRoute && !user) {
     const loginUrl = new URL('/login', req.url)
@@ -104,21 +100,23 @@ export async function middleware(req: NextRequest) {
 
     const redirect = NextResponse.redirect(loginUrl)
     applyAuthCookies(redirect, response)
+
     return redirect
   }
 
+  /**
+   * 🔓 Usuário não logado em rota pública
+   */
   if (!user) {
     return response
   }
 
   /**
-   * 📷 Selfie gate
+   * 📸 Selfie Gate
    */
   const shouldCheckSelfie =
     isProtectedRoute &&
-    !SELFIE_GATE_EXCEPTIONS.some((route) =>
-      pathMatches(pathname, route)
-    )
+    !SELFIE_GATE_EXCEPTIONS.some((route) => pathMatches(pathname, route))
 
   if (shouldCheckSelfie) {
     const { data: profile, error } = await supabase
@@ -129,8 +127,7 @@ export async function middleware(req: NextRequest) {
 
     if (!error) {
       const hasVerifiedSelfie =
-        Boolean(profile?.selfie_verified) &&
-        Boolean(profile?.selfie_url)
+        Boolean(profile?.selfie_verified) && Boolean(profile?.selfie_url)
 
       if (!hasVerifiedSelfie) {
         const verifyUrl = new URL('/verify-selfie', req.url)
@@ -138,6 +135,7 @@ export async function middleware(req: NextRequest) {
 
         const redirect = NextResponse.redirect(verifyUrl)
         applyAuthCookies(redirect, response)
+
         return redirect
       }
     }
