@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 const MAX_TERM_LENGTH = 80
@@ -15,7 +14,7 @@ function normalize(value: string | null) {
 
 export async function GET(req: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createServerClient()
 
     const {
       data: { user },
@@ -31,7 +30,6 @@ export async function GET(req: Request) {
 
     const supabaseAdmin = getSupabaseAdminClient()
 
-    // busca perfil do usuário
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('free_queries_used, current_plan_id, subscription_status')
@@ -47,10 +45,7 @@ export async function GET(req: Request) {
 
     if (!isPaid && freeQueriesUsed >= 3) {
       return NextResponse.json(
-        {
-          success: false,
-          reason: 'PAYWALL',
-        },
+        { success: false, reason: 'PAYWALL' },
         { status: 403 }
       )
     }
@@ -86,13 +81,8 @@ export async function GET(req: Request) {
         'male_profile_id, name, city, average_rating, total_reviews, positive_percentage, alert_count, classification'
       )
 
-    if (nome) {
-      query = query.ilike('name', `%${nome}%`)
-    }
-
-    if (cidade) {
-      query = query.ilike('city', `%${cidade}%`)
-    }
+    if (nome) query = query.ilike('name', `%${nome}%`)
+    if (cidade) query = query.ilike('city', `%${cidade}%`)
 
     const { data, error } = await query
       .order('average_rating', { ascending: false })
@@ -101,7 +91,6 @@ export async function GET(req: Request) {
 
     if (error) throw error
 
-    // incrementa contador se não for pago
     if (!isPaid) {
       await supabaseAdmin
         .from('profiles')
