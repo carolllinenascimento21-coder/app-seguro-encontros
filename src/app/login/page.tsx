@@ -26,72 +26,75 @@ export default function LoginPage() {
 
     const supabase = createSupabaseClient()
 
-    if (!supabase) {
-      setError('Serviço indisponível no momento.')
-      setLoading(false)
-      return
-    }
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      })
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: password.trim(),
-    })
+      if (error) {
+        console.error('Erro no login:', error)
 
-    if (error) {
-      console.error('Erro no login:', error)
+        if (
+          error.message.toLowerCase().includes('email') &&
+          error.message.toLowerCase().includes('confirm')
+        ) {
+          setError(
+            'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou spam.'
+          )
+        } else {
+          setError('E-mail ou senha inválidos.')
+        }
 
-      if (
-        error.message.toLowerCase().includes('email') &&
-        error.message.toLowerCase().includes('confirm')
-      ) {
-        setError(
-          'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou spam.'
-        )
-      } else {
-        setError('E-mail ou senha inválidos.')
-      }
-
-      setLoading(false)
-      return
-    }
-
-    const session = data?.session
-
-    if (!session) {
-      setError('Erro ao iniciar sessão.')
-      setLoading(false)
-      return
-    }
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (userError && !isAuthSessionMissingError(userError)) {
-      console.error('Erro ao carregar usuário:', userError)
-    }
-
-    if (user) {
-      const { profile, error: profileError } = await ensureProfileForUser(
-        supabase,
-        user
-      )
-
-      if (profileError) {
-        console.error('Erro ao garantir perfil:', profileError)
-      }
-
-      if (
-        profile?.onboarding_completed === false ||
-        profile?.onboarding_completed === null
-      ) {
-        router.replace('/onboarding/selfie')
+        setLoading(false)
         return
       }
+
+      /**
+       * 🔑 FORÇA criação da sessão no cookie
+       */
+      await supabase.auth.getSession()
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError && !isAuthSessionMissingError(userError)) {
+        console.error('Erro ao carregar usuário:', userError)
+      }
+
+      if (user) {
+        const { profile, error: profileError } = await ensureProfileForUser(
+          supabase,
+          user
+        )
+
+        if (profileError) {
+          console.error('Erro ao garantir perfil:', profileError)
+        }
+
+        if (
+          profile?.onboarding_completed === false ||
+          profile?.onboarding_completed === null
+        ) {
+          router.refresh()
+          router.replace('/onboarding/selfie')
+          return
+        }
+      }
+
+      /**
+       * 🔑 Atualiza estado do App Router
+       */
+      router.refresh()
+      router.replace('/home')
+    } catch (err) {
+      console.error('Erro inesperado no login:', err)
+      setError('Erro inesperado. Tente novamente.')
     }
 
-    router.replace('/home')
+    setLoading(false)
   }
 
   return (
