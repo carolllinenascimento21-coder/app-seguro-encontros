@@ -3,19 +3,13 @@ import { createServerClient } from '@supabase/ssr'
 
 const PUBLIC_PATHS = [
   '/',
-  '/funil',
   '/login',
-  '/register',
   '/signup',
   '/cadastro',
   '/planos',
-  '/plans',
-  '/planos-publicos',
-  '/onboarding',
   '/auth/callback',
   '/reset-password',
   '/update-password',
-  '/verification-pending',
 ]
 
 const PROTECTED_PATHS = [
@@ -28,40 +22,14 @@ const PROTECTED_PATHS = [
   '/configuracoes',
   '/rede-apoio',
   '/modo-seguro',
-  '/comunidade',
-  '/checkout',
-  '/verificacao-selfie',
-  '/verify-selfie',
-]
-
-const SELFIE_GATE_EXCEPTIONS = [
-  '/verificacao-selfie',
-  '/verify-selfie',
-  '/auth/callback',
-  '/login',
-  '/reset-password',
-  '/update-password',
 ]
 
 function pathMatches(pathname: string, base: string) {
   return pathname === base || pathname.startsWith(`${base}/`)
 }
 
-function applyAuthCookies(target: NextResponse, source: NextResponse) {
-  for (const cookie of source.cookies.getAll()) {
-    target.cookies.set(cookie)
-  }
-}
-
 export async function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl
-
-  const isPublicRoute = PUBLIC_PATHS.some((route) => pathMatches(pathname, route))
-  const isProtectedRoute = PROTECTED_PATHS.some((route) => pathMatches(pathname, route))
-
-  const response = NextResponse.next({
-    request: { headers: req.headers },
-  })
+  const res = NextResponse.next()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -71,19 +39,18 @@ export async function middleware(req: NextRequest) {
         getAll() {
           return req.cookies.getAll()
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            req.cookies.set(name, value)
-            response.cookies.set(name, value, options)
-          })
+        setAll(cookies) {
+          cookies.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)
+          )
         },
       },
     }
   )
 
   /**
-   * 🔑 IMPORTANTE
-   * Usar getSession() em vez de getUser() no middleware
+   * 🔴 ESSENCIAL
+   * Atualiza sessão do Supabase
    */
   const {
     data: { session },
@@ -91,59 +58,21 @@ export async function middleware(req: NextRequest) {
 
   const user = session?.user ?? null
 
-  /**
-   * 🔒 Usuário não logado tentando acessar rota protegida
-   */
-  if (isProtectedRoute && !user) {
-    const loginUrl = new URL('/login', req.url)
-    loginUrl.searchParams.set('next', `${pathname}${search}`)
+  const pathname = req.nextUrl.pathname
 
-    const redirect = NextResponse.redirect(loginUrl)
-    applyAuthCookies(redirect, response)
+  const isProtected = PROTECTED_PATHS.some((p) =>
+    pathMatches(pathname, p)
+  )
 
-    return redirect
+  if (isProtected && !user) {
+    const redirectUrl = new URL('/login', req.url)
+    redirectUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  /**
-   * 🔓 Usuário não logado em rota pública
-   */
-  if (!user) {
-    return response
-  }
-
-  /**
-   * 📸 Selfie Gate
-   */
-  const shouldCheckSelfie =
-    isProtectedRoute &&
-    !SELFIE_GATE_EXCEPTIONS.some((route) => pathMatches(pathname, route))
-
-  if (shouldCheckSelfie) {
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('selfie_verified, selfie_url')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (!error) {
-      const hasVerifiedSelfie =
-        Boolean(profile?.selfie_verified) && Boolean(profile?.selfie_url)
-
-      if (!hasVerifiedSelfie) {
-        const verifyUrl = new URL('/verify-selfie', req.url)
-        verifyUrl.searchParams.set('next', `${pathname}${search}`)
-
-        const redirect = NextResponse.redirect(verifyUrl)
-        applyAuthCookies(redirect, response)
-
-        return redirect
-      }
-    }
-  }
-
-  return response
+  return res
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
