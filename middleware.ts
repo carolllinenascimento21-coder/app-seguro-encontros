@@ -56,10 +56,17 @@ function applyAuthCookies(target: NextResponse, source: NextResponse) {
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl
 
-  const isPublicRoute = PUBLIC_PATHS.some((route) => pathMatches(pathname, route))
-  const isProtectedRoute = PROTECTED_PATHS.some((route) => pathMatches(pathname, route))
+  const isPublicRoute = PUBLIC_PATHS.some((route) =>
+    pathMatches(pathname, route)
+  )
 
-  const response = NextResponse.next({ request: { headers: req.headers } })
+  const isProtectedRoute = PROTECTED_PATHS.some((route) =>
+    pathMatches(pathname, route)
+  )
+
+  const response = NextResponse.next({
+    request: { headers: req.headers },
+  })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -70,19 +77,27 @@ export async function middleware(req: NextRequest) {
           return req.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          for (const { name, value, options } of cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
             req.cookies.set(name, value)
             response.cookies.set(name, value, options)
-          }
+          })
         },
       },
     }
   )
 
+  /**
+   * 🔑 Atualiza sessão antes de verificar auth
+   */
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    data: { session },
+  } = await supabase.auth.getSession()
 
+  const user = session?.user ?? null
+
+  /**
+   * 🔐 Usuário não logado tentando acessar rota protegida
+   */
   if (isProtectedRoute && !user) {
     const loginUrl = new URL('/login', req.url)
     loginUrl.searchParams.set('next', `${pathname}${search}`)
@@ -96,9 +111,14 @@ export async function middleware(req: NextRequest) {
     return response
   }
 
+  /**
+   * 📷 Selfie gate
+   */
   const shouldCheckSelfie =
     isProtectedRoute &&
-    !SELFIE_GATE_EXCEPTIONS.some((route) => pathMatches(pathname, route))
+    !SELFIE_GATE_EXCEPTIONS.some((route) =>
+      pathMatches(pathname, route)
+    )
 
   if (shouldCheckSelfie) {
     const { data: profile, error } = await supabase
@@ -108,7 +128,10 @@ export async function middleware(req: NextRequest) {
       .maybeSingle()
 
     if (!error) {
-      const hasVerifiedSelfie = Boolean(profile?.selfie_verified) && Boolean(profile?.selfie_url)
+      const hasVerifiedSelfie =
+        Boolean(profile?.selfie_verified) &&
+        Boolean(profile?.selfie_url)
+
       if (!hasVerifiedSelfie) {
         const verifyUrl = new URL('/verify-selfie', req.url)
         verifyUrl.searchParams.set('next', `${pathname}${search}`)
@@ -118,10 +141,6 @@ export async function middleware(req: NextRequest) {
         return redirect
       }
     }
-  }
-
-  if (!isProtectedRoute && !isPublicRoute) {
-    return response
   }
 
   return response
