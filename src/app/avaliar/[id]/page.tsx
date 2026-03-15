@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Star, Check } from 'lucide-react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 
 // Se você já tem essas listas em /lib/flags, pode importar.
 // Se não tiver, pode manter aqui mesmo.
@@ -75,7 +75,10 @@ function clampStar(n: number) {
 }
 
 export default function AvaliarPerfilPage() {
-  const supabase = createClientComponentClient()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const params = useParams<{ id: string }>()
   const router = useRouter()
 
