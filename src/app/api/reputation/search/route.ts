@@ -75,8 +75,12 @@ export async function GET(req: Request) {
       )
     }
 
+    /**
+     * IMPORTANTE
+     * agora usando a view nova corrigida
+     */
     let query = supabaseAdmin
-      .from('male_profile_reputation_summary')
+      .from('male_profile_reputation_summary_v2')
       .select(
         'male_profile_id, name, city, average_rating, total_reviews, positive_percentage, alert_count, classification'
       )
@@ -89,8 +93,13 @@ export async function GET(req: Request) {
       .order('total_reviews', { ascending: false })
       .limit(30)
 
-    if (error) throw error
+    if (error) {
+      throw error
+    }
 
+    /**
+     * contabiliza consulta gratuita
+     */
     if (!isPaid) {
       await supabaseAdmin
         .from('profiles')
@@ -104,11 +113,14 @@ export async function GET(req: Request) {
       success: true,
       results: data ?? [],
     })
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'Erro interno no servidor'
+
     return NextResponse.json(
       {
         success: false,
-        message: err.message,
+        message,
       },
       { status: 500 }
     )
