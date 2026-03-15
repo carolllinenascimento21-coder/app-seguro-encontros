@@ -29,7 +29,11 @@ function pathMatches(pathname: string, base: string) {
 }
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
+  let res = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,16 +52,11 @@ export async function middleware(req: NextRequest) {
     }
   )
 
-  /**
-   * 🔴 ESSENCIAL
-   * Atualiza sessão do Supabase
-   */
   const {
     data: { session },
   } = await supabase.auth.getSession()
 
   const user = session?.user ?? null
-
   const pathname = req.nextUrl.pathname
 
   const isProtected = PROTECTED_PATHS.some((p) =>
