@@ -11,15 +11,12 @@ export async function GET(
 ) {
   try {
 
-    // validar ENV
     try {
       getSupabasePublicEnv('api/reputation/[id]')
     } catch (error) {
       const envError = getMissingSupabaseEnvDetails(error)
 
       if (envError) {
-        console.error(envError.message)
-
         return NextResponse.json(
           { error: envError.message },
           { status: envError.status }
@@ -53,20 +50,7 @@ export async function GET(
       }
     )
 
-    const {
-      data: { session }
-    } = await supabase.auth.getSession()
-
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Usuária não autenticada' },
-        { status: 401 }
-      )
-    }
-
-    const {
-      data: { user }
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json(
@@ -108,14 +92,14 @@ export async function GET(
     }
 
     // buscar perfil
-    const { data: maleProfile, error: maleProfileError } =
+    const { data: maleProfile } =
       await supabaseAdmin
         .from('male_profiles')
         .select('id,display_name,city')
         .eq('id', maleProfileId)
         .single()
 
-    if (maleProfileError || !maleProfile) {
+    if (!maleProfile) {
       return NextResponse.json(
         { error: 'Perfil não encontrado' },
         { status: 404 }
@@ -140,7 +124,7 @@ export async function GET(
         .order('created_at', { ascending: false })
 
     if (reviewsError) {
-      console.error('Erro ao carregar avaliações', reviewsError)
+      console.error(reviewsError)
 
       return NextResponse.json(
         { error: 'Erro ao carregar avaliações' },
@@ -162,37 +146,36 @@ export async function GET(
 
     let alertCount = 0
 
+    reviews?.forEach((r) => {
+
+      const comportamento = r.comportamento ?? 0
+      const seguranca = r.seguranca_emocional ?? 0
+      const respeito = r.respeito ?? 0
+      const carater = r.carater ?? 0
+      const confianca = r.confianca ?? 0
+
+      medias.comportamento += comportamento
+      medias.seguranca_emocional += seguranca
+      medias.respeito += respeito
+      medias.carater += carater
+      medias.confianca += confianca
+
+      const mediaIndividual =
+        (comportamento +
+          seguranca +
+          respeito +
+          carater +
+          confianca) / 5
+
+      somaMedia += mediaIndividual
+
+      if (r.flags_negative?.length) {
+        alertCount++
+      }
+
+    })
+
     if (total > 0) {
-
-      reviews.forEach((r) => {
-
-        const comportamento = r.comportamento ?? 0
-        const seguranca = r.seguranca_emocional ?? 0
-        const respeito = r.respeito ?? 0
-        const carater = r.carater ?? 0
-        const confianca = r.confianca ?? 0
-
-        medias.comportamento += comportamento
-        medias.seguranca_emocional += seguranca
-        medias.respeito += respeito
-        medias.carater += carater
-        medias.confianca += confianca
-
-        const mediaIndividual =
-          (comportamento +
-            seguranca +
-            respeito +
-            carater +
-            confianca) / 5
-
-        somaMedia += mediaIndividual
-
-        if (r.flags_negative && r.flags_negative.length > 0) {
-          alertCount++
-        }
-
-      })
-
       medias.comportamento /= total
       medias.seguranca_emocional /= total
       medias.respeito /= total
@@ -211,6 +194,14 @@ export async function GET(
       else classificacao = 'excelente'
     }
 
+    const relatos =
+      reviews
+        ?.filter((r) => r.notas)
+        .map((r) => ({
+          relato: r.notas,
+          created_at: r.created_at
+        })) ?? []
+
     return NextResponse.json({
 
       allowed: true,
@@ -221,35 +212,30 @@ export async function GET(
         city: maleProfile.city
       },
 
+      // formatos duplicados para compatibilidade
+      total,
       total_reviews: total,
 
-      media: Number(media.toFixed(2)),
+      media,
+      average: media,
 
-      medias_categoria: {
-        comportamento: Number(medias.comportamento.toFixed(2)),
-        seguranca_emocional: Number(medias.seguranca_emocional.toFixed(2)),
-        respeito: Number(medias.respeito.toFixed(2)),
-        carater: Number(medias.carater.toFixed(2)),
-        confianca: Number(medias.confianca.toFixed(2))
-      },
+      medias,
+      medias_categoria: medias,
 
       alertas: alertCount,
+      alerts: alertCount,
 
       classificacao,
+      classification: classificacao,
 
-      relatos:
-        reviews
-          ?.filter((r) => r.notas)
-          .map((r) => ({
-            relato: r.notas,
-            created_at: r.created_at
-          })) ?? []
+      relatos,
+      reviews: relatos
 
     })
 
   } catch (error) {
 
-    console.error('Erro interno no endpoint de reputação', error)
+    console.error(error)
 
     return NextResponse.json(
       { error: 'Erro interno no servidor' },
