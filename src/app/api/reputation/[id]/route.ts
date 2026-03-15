@@ -7,8 +7,9 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
-) {
+  context: { params: Promise<{ id: string }> }
+)
+ {
   try {
 
     try {
@@ -59,7 +60,7 @@ export async function GET(
       )
     }
 
-    const maleProfileId = params.id
+    const { id: maleProfileId } = await context.params
 
     if (!maleProfileId) {
       return NextResponse.json(
