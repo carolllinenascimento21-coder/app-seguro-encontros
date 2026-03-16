@@ -37,6 +37,13 @@ export async function GET(req: Request) {
 
     const supabaseAdmin = getSupabaseAdminClient()
 
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { success: false, message: 'Supabase admin não configurado' },
+        { status: 503 }
+      )
+    }
+
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('free_queries_used, current_plan_id, subscription_status')
@@ -118,8 +125,8 @@ export async function GET(req: Request) {
 
     if (profileIds.length > 0) {
       const { data: summaries, error: summariesError } = await supabaseAdmin
-        .from('male_profile_reputation_summary_v2')
-        .select('male_profile_id, total_reviews, average_rating, total_alerts')
+        .from('male_profile_reputation_summary')
+        .select('male_profile_id, total_reviews, average_rating, alert_count, positive_percentage')
         .in('male_profile_id', profileIds)
 
       if (summariesError) {
@@ -132,11 +139,8 @@ export async function GET(req: Request) {
           {
             total_reviews: Number(item.total_reviews ?? 0),
             average_rating: Number(item.average_rating ?? 0),
-            alert_count: Number(item.total_alerts ?? 0),
-            positive_percentage:
-              Number(item.average_rating ?? 0) > 0
-                ? Math.round((Number(item.average_rating) / 5) * 100)
-                : 0,
+            alert_count: Number(item.alert_count ?? 0),
+            positive_percentage: Number(item.positive_percentage ?? 0),
           },
         ])
       )
