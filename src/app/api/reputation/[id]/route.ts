@@ -56,12 +56,37 @@ export async function GET(
     let somaCarater = 0
     let somaConfianca = 0
 
+    let qtdComportamento = 0
+    let qtdSeguranca = 0
+    let qtdRespeito = 0
+    let qtdCarater = 0
+    let qtdConfianca = 0
+
     for (const r of reviewsList) {
-      somaComportamento += r.comportamento ?? 0
-      somaSeguranca += r.seguranca_emocional ?? 0
-      somaRespeito += r.respeito ?? 0
-      somaCarater += r.carater ?? 0
-      somaConfianca += r.confianca ?? 0
+      if (typeof r.comportamento === 'number') {
+        somaComportamento += r.comportamento
+        qtdComportamento += 1
+      }
+
+      if (typeof r.seguranca_emocional === 'number') {
+        somaSeguranca += r.seguranca_emocional
+        qtdSeguranca += 1
+      }
+
+      if (typeof r.respeito === 'number') {
+        somaRespeito += r.respeito
+        qtdRespeito += 1
+      }
+
+      if (typeof r.carater === 'number') {
+        somaCarater += r.carater
+        qtdCarater += 1
+      }
+
+      if (typeof r.confianca === 'number') {
+        somaConfianca += r.confianca
+        qtdConfianca += 1
+      }
 
       if (Array.isArray(r.flags_negative) && r.flags_negative.length > 0) {
         totalAlertas++
@@ -69,19 +94,19 @@ export async function GET(
     }
 
     const mediaComportamento =
-      totalReviews > 0 ? somaComportamento / totalReviews : 0
+      qtdComportamento > 0 ? somaComportamento / qtdComportamento : 0
 
     const mediaSeguranca =
-      totalReviews > 0 ? somaSeguranca / totalReviews : 0
+      qtdSeguranca > 0 ? somaSeguranca / qtdSeguranca : 0
 
     const mediaRespeito =
-      totalReviews > 0 ? somaRespeito / totalReviews : 0
+      qtdRespeito > 0 ? somaRespeito / qtdRespeito : 0
 
     const mediaCarater =
-      totalReviews > 0 ? somaCarater / totalReviews : 0
+      qtdCarater > 0 ? somaCarater / qtdCarater : 0
 
     const mediaConfianca =
-      totalReviews > 0 ? somaConfianca / totalReviews : 0
+      qtdConfianca > 0 ? somaConfianca / qtdConfianca : 0
 
     const mediaGeral =
       (mediaComportamento +

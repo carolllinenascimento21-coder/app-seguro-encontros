@@ -286,29 +286,42 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data, error: rpcError } = await supabase.rpc(
-    'create_avaliacao_transaction',
-    {
-      p_male_profile_id: maleProfileId,
-      p_user_id: userId,
-      p_relato: relato,
-      p_anonimo: anonimo,
-      p_comportamento: notas.comportamento,
-      p_seguranca_emocional: notas.seguranca_emocional,
-      p_respeito: notas.respeito,
-      p_carater: notas.carater,
-      p_confianca: notas.confianca,
-      p_flags_positive: flags_positive ?? [],
-      p_flags_negative: flags_negative ?? [],
-    }
-  )
+  const payload = {
+    male_profile_id: maleProfileId,
+    user_id: userId,
+    comportamento: notas.comportamento,
+    seguranca_emocional: notas.seguranca_emocional,
+    respeito: notas.respeito,
+    carater: notas.carater,
+    confianca: notas.confianca,
+    flags_negative: flags_negative ?? [],
+    flags_positive: flags_positive ?? [],
+    relato: relato || null,
+    notas: relato || null,
+    anonimo,
+    is_anonymous: anonimo,
+    publica: true,
+    status: 'public',
+  }
 
-  if (rpcError) {
-    safeLogError('Erro ao criar avaliação via RPC', rpcError, { requestId })
+  const { data: upsertedReview, error: upsertError } = await supabaseAdmin
+    .from('avaliacoes')
+    .upsert(payload, {
+      onConflict: 'user_id,male_profile_id',
+    })
+    .select('id')
+    .single()
 
-    const mapped = toClientError(rpcError, 'Erro ao publicar avaliação.')
+  if (upsertError) {
+    safeLogError('Erro ao criar/atualizar avaliação via upsert', upsertError, { requestId })
+
+    const mapped = toClientError(upsertError, 'Erro ao publicar avaliação.')
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 
-  return NextResponse.json({ success: true, avaliacao_id: data, male_profile_id: maleProfileId })
+  return NextResponse.json({
+    success: true,
+    avaliacao_id: upsertedReview?.id ?? null,
+    male_profile_id: maleProfileId,
+  })
 }
