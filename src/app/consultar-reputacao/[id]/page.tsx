@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { Star, ShieldAlert } from 'lucide-react'
 import { ReportReviewButton } from '@/components/ReportReviewButton'
 
+export const dynamic = 'force-dynamic'
+
 type Avaliacao = {
   id: string
   created_at: string
