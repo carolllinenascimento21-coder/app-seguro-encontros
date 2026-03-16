@@ -40,6 +40,7 @@ export default function ConsultarReputacao() {
   const [results, setResults] = useState<PerfilResultado[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [paywallMessage, setPaywallMessage] = useState<string | null>(null)
 
   const buscar = async () => {
     const nomeBusca = nome.trim()
@@ -53,6 +54,7 @@ export default function ConsultarReputacao() {
     try {
       setLoading(true)
       setError(null)
+      setPaywallMessage(null)
       setResults([])
 
       const params = new URLSearchParams()
@@ -73,7 +75,20 @@ export default function ConsultarReputacao() {
 
       // 💰 paywall
       if (res.status === 403) {
-        router.push('/planos')
+        const data = await res.json().catch(() => null)
+        const totalFound = Number(data?.total_found ?? 0)
+        const hasResults = Boolean(data?.has_results) || totalFound > 0
+
+        const message = hasResults
+          ? `Encontramos ${totalFound} resultado(s). Assine para desbloquear os perfis completos.`
+          : 'Você atingiu o limite gratuito. Assine para continuar consultando reputação.'
+
+        setPaywallMessage(message)
+
+        setTimeout(() => {
+          router.push('/planos')
+        }, 1200)
+
         return
       }
 
@@ -142,9 +157,16 @@ export default function ConsultarReputacao() {
           </div>
         )}
 
+
+        {paywallMessage && (
+          <div className="text-[#D4AF37] text-sm mb-4 text-center bg-[#D4AF37]/10 border border-[#D4AF37]/40 rounded-lg px-3 py-2">
+            {paywallMessage}
+          </div>
+        )}
+
         <div className="space-y-4">
 
-          {!loading && results.length === 0 && !error && (
+          {!loading && results.length === 0 && !error && !paywallMessage && (
             <p className="text-gray-500 text-center text-sm">
               Nenhum resultado encontrado
             </p>
