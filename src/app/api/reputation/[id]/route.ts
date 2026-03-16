@@ -5,6 +5,30 @@ import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 const CONSULTA_WINDOW_MINUTES = 10
 
+const CATEGORY_KEYS = [
+  'comportamento',
+  'seguranca_emocional',
+  'respeito',
+  'carater',
+  'confianca',
+] as const
+
+type CategoryKey = (typeof CATEGORY_KEYS)[number]
+
+type ReviewRow = {
+  created_at: string
+  rating: number | null
+  review_text: string | null
+  relato: string | null
+  notas: string | null
+  flags_negative: string[] | null
+  comportamento: number | null
+  seguranca_emocional: number | null
+  respeito: number | null
+  carater: number | null
+  confianca: number | null
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
@@ -116,20 +140,21 @@ export async function GET(
       .from('avaliacoes')
       .select(
         `
-          id,
-          relato,
           created_at,
+          rating,
+          review_text,
+          relato,
+          notas,
+          flags_negative,
           comportamento,
           seguranca_emocional,
           respeito,
           carater,
-          confianca,
-          flags_negative
+          confianca
         `
       )
       .eq('male_profile_id', maleProfileId)
       .eq('publica', true)
-      .eq('status', 'public')
       .order('created_at', { ascending: false })
 
     if (reviewsError) {
@@ -140,9 +165,51 @@ export async function GET(
       )
     }
 
-    const averageRating = Number(summary?.average_rating ?? 0)
-    const totalReviews = Number(summary?.total_reviews ?? 0)
-    const alertCount = Number(summary?.alert_count ?? 0)
+    const reviewRows = (reviews ?? []) as ReviewRow[]
+
+    const categoryTotals: Record<CategoryKey, { sum: number; count: number }> = {
+      comportamento: { sum: 0, count: 0 },
+      seguranca_emocional: { sum: 0, count: 0 },
+      respeito: { sum: 0, count: 0 },
+      carater: { sum: 0, count: 0 },
+      confianca: { sum: 0, count: 0 },
+    }
+
+    for (const review of reviewRows) {
+      for (const key of CATEGORY_KEYS) {
+        const value = review[key]
+        if (typeof value === 'number') {
+          categoryTotals[key].sum += value
+          categoryTotals[key].count += 1
+        }
+      }
+    }
+
+    const categoryAverages: Record<CategoryKey, number> = {
+      comportamento: 0,
+      seguranca_emocional: 0,
+      respeito: 0,
+      carater: 0,
+      confianca: 0,
+    }
+
+    for (const key of CATEGORY_KEYS) {
+      const { sum, count } = categoryTotals[key]
+      categoryAverages[key] = count > 0 ? Number((sum / count).toFixed(1)) : 0
+    }
+
+    const reputation = {
+      average_rating: Number(Number(summary?.average_rating ?? 0).toFixed(1)),
+      total_reviews: Number(summary?.total_reviews ?? 0),
+      alert_count: Number(summary?.alert_count ?? 0),
+    }
+
+    const normalizedReviews = reviewRows.map((review) => ({
+      rating: Number(review.rating ?? 0),
+      review_text: review.review_text ?? review.relato ?? review.notas ?? null,
+      created_at: review.created_at,
+      flags_negative: review.flags_negative ?? [],
+    }))
 
     return NextResponse.json({
       allowed: true,
@@ -151,20 +218,13 @@ export async function GET(
         display_name: maleProfile.display_name,
         city: maleProfile.city,
       },
-      average_rating: Number(averageRating.toFixed(1)),
-      total_reviews: totalReviews,
-      alerts: alertCount,
-      reviews: (reviews ?? []).map((review) => ({
-        id: review.id,
-        relato: review.relato,
-        created_at: review.created_at,
-        comportamento: review.comportamento,
-        seguranca_emocional: review.seguranca_emocional,
-        respeito: review.respeito,
-        carater: review.carater,
-        confianca: review.confianca,
-        flags_negative: review.flags_negative ?? [],
-      })),
+      reputation,
+      category_averages: categoryAverages,
+      reviews: normalizedReviews,
+      // Compatibilidade retroativa com o formato antigo
+      average_rating: reputation.average_rating,
+      total_reviews: reputation.total_reviews,
+      alerts: reputation.alert_count,
     })
   } catch (error) {
     console.error('Erro em /api/reputation/[id]:', error)
