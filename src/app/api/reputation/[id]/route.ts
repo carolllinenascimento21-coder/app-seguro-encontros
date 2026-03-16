@@ -1,141 +1,206 @@
-import { NextResponse } from "next/server"
-import { getSupabaseAdminClient } from "@/lib/supabaseAdmin"
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
+
+const CONSULTA_WINDOW_MINUTES = 10
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseAdminClient()
-
-    const maleProfileId = params.id
-
-    if (!maleProfileId) {
+    getSupabasePublicEnv('api/reputation/[id]')
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
       return NextResponse.json(
-        { error: "male_profile_id não informado" },
-        { status: 400 }
+        { error: envError.message },
+        { status: envError.status }
+      )
+    }
+    throw error
+  }
+
+  let supabaseAdmin
+
+  try {
+    supabaseAdmin = getSupabaseAdminClient()
+  } catch (error) {
+    const envError = getMissingSupabaseEnvDetails(error)
+    if (envError) {
+      console.error(envError.message)
+      return NextResponse.json(
+        { error: envError.message },
+        { status: envError.status }
+      )
+    }
+    throw error
+  }
+
+  if (!supabaseAdmin) {
+    return NextResponse.json(
+      { error: 'Supabase admin não configurado' },
+      { status: 503 }
+    )
+  }
+
+  const supabase = createRouteHandlerClient({ cookies })
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession()
+
+  if (sessionError || !session) {
+    return NextResponse.json(
+      { error: 'Usuária não autenticada' },
+      { status: 401 }
+    )
+  }
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json(
+      { error: 'Usuária não autenticada' },
+      { status: 401 }
+    )
+  }
+
+  const maleProfileId = params.id
+
+  if (!maleProfileId) {
+    return NextResponse.json(
+      { error: 'Perfil inválido' },
+      { status: 400 }
+    )
+  }
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('plan')
+    .eq('id', user.id)
+    .single()
+
+  if (profileError) {
+    console.error('Erro ao validar plano do perfil', profileError)
+    return NextResponse.json(
+      { error: 'Erro ao validar acesso' },
+      { status: 500 }
+    )
+  }
+
+  const userPlan = profile?.plan ?? 'free'
+
+  if (userPlan === 'free') {
+    const since = new Date(
+      Date.now() - CONSULTA_WINDOW_MINUTES * 60 * 1000
+    ).toISOString()
+
+    const { data: consultas, error: consultasError } =
+      await supabaseAdmin
+        .from('consultas')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('created_at', since)
+        .limit(1)
+
+    if (consultasError) {
+      console.error('Erro ao validar consulta recente', consultasError)
+      return NextResponse.json(
+        { error: 'Erro ao validar acesso' },
+        { status: 500 }
       )
     }
 
-    const { data: reviews, error } = await supabase
-      .from("avaliacoes")
+    if (!consultas || consultas.length === 0) {
+      return NextResponse.json(
+        { allowed: false, reason: 'PAYWALL' },
+        { status: 200 }
+      )
+    }
+  }
+
+  const { data: maleProfile, error: maleProfileError } =
+    await supabaseAdmin
+      .from('male_profiles')
+      .select('id, display_name, city')
+      .eq('id', maleProfileId)
+      .single()
+
+  if (maleProfileError || !maleProfile) {
+    return NextResponse.json(
+      { error: 'Perfil não encontrado' },
+      { status: 404 }
+    )
+  }
+
+  const { data: reviews, error: reviewsError } =
+    await supabaseAdmin
+      .from('avaliacoes')
       .select(`
-        id,
-        created_at,
-        publica,
-        status,
         comportamento,
         seguranca_emocional,
         respeito,
         carater,
         confianca,
         relato,
-        notas,
-        flags_negative,
-        flags_positive
+        created_at
       `)
-      .eq("male_profile_id", maleProfileId)
+      .eq('male_profile_id', maleProfileId)
+      .eq('publica', true)
+      .eq('status', 'public')
+      .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error("Erro ao buscar avaliações:", error)
-
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
-    }
-
-    const reviewsList = reviews ?? []
-
-    let totalReviews = reviewsList.length
-    let totalAlertas = 0
-
-    let somaComportamento = 0
-    let somaSeguranca = 0
-    let somaRespeito = 0
-    let somaCarater = 0
-    let somaConfianca = 0
-
-    let qtdComportamento = 0
-    let qtdSeguranca = 0
-    let qtdRespeito = 0
-    let qtdCarater = 0
-    let qtdConfianca = 0
-
-    for (const r of reviewsList) {
-      if (typeof r.comportamento === 'number') {
-        somaComportamento += r.comportamento
-        qtdComportamento += 1
-      }
-
-      if (typeof r.seguranca_emocional === 'number') {
-        somaSeguranca += r.seguranca_emocional
-        qtdSeguranca += 1
-      }
-
-      if (typeof r.respeito === 'number') {
-        somaRespeito += r.respeito
-        qtdRespeito += 1
-      }
-
-      if (typeof r.carater === 'number') {
-        somaCarater += r.carater
-        qtdCarater += 1
-      }
-
-      if (typeof r.confianca === 'number') {
-        somaConfianca += r.confianca
-        qtdConfianca += 1
-      }
-
-      if (Array.isArray(r.flags_negative) && r.flags_negative.length > 0) {
-        totalAlertas++
-      }
-    }
-
-    const mediaComportamento =
-      qtdComportamento > 0 ? somaComportamento / qtdComportamento : 0
-
-    const mediaSeguranca =
-      qtdSeguranca > 0 ? somaSeguranca / qtdSeguranca : 0
-
-    const mediaRespeito =
-      qtdRespeito > 0 ? somaRespeito / qtdRespeito : 0
-
-    const mediaCarater =
-      qtdCarater > 0 ? somaCarater / qtdCarater : 0
-
-    const mediaConfianca =
-      qtdConfianca > 0 ? somaConfianca / qtdConfianca : 0
-
-    const mediaGeral =
-      (mediaComportamento +
-        mediaSeguranca +
-        mediaRespeito +
-        mediaCarater +
-        mediaConfianca) / 5
-
-    return NextResponse.json({
-      total_reviews: totalReviews,
-      average_rating: Number(mediaGeral.toFixed(1)),
-      alertas: totalAlertas,
-
-      medias: {
-        comportamento: Number(mediaComportamento.toFixed(1)),
-        seguranca_emocional: Number(mediaSeguranca.toFixed(1)),
-        respeito: Number(mediaRespeito.toFixed(1)),
-        carater: Number(mediaCarater.toFixed(1)),
-        confianca: Number(mediaConfianca.toFixed(1)),
-      },
-
-      reviews: reviewsList,
-    })
-  } catch (err) {
-    console.error("Erro interno reputation route:", err)
-
+  if (reviewsError) {
+    console.error('Erro ao carregar avaliações', reviewsError)
     return NextResponse.json(
-      { error: "Erro interno do servidor" },
+      { error: 'Erro ao carregar avaliações' },
       { status: 500 }
     )
   }
+
+  const total = reviews?.length ?? 0
+
+  let media = 0
+
+  if (total > 0) {
+    const soma = reviews.reduce((acc, r) => {
+      const individual =
+        (
+          (r.comportamento ?? 0) +
+          (r.seguranca_emocional ?? 0) +
+          (r.respeito ?? 0) +
+          (r.carater ?? 0) +
+          (r.confianca ?? 0)
+        ) / 5
+
+      return acc + individual
+    }, 0)
+
+    media = soma / total
+  }
+
+  return NextResponse.json({
+    allowed: true,
+    profile: {
+      id: maleProfile.id,
+      display_name: maleProfile.display_name,
+      city: maleProfile.city,
+    },
+    total,
+    average: Number(media.toFixed(2)),
+    relatos:
+      reviews?.map((r) => ({
+        relato: r.relato,
+        created_at: r.created_at,
+      })) ?? [],
+  })
 }
