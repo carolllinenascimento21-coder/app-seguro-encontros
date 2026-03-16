@@ -61,13 +61,6 @@ export async function GET(req: Request) {
 
     const freeQueriesUsed = profile?.free_queries_used ?? 0
 
-    if (!isPaid && freeQueriesUsed >= 3) {
-      return NextResponse.json(
-        { success: false, reason: 'PAYWALL' },
-        { status: 403 }
-      )
-    }
-
     const { searchParams } = new URL(req.url)
 
     const nomeRaw = searchParams.get('nome')
@@ -90,6 +83,42 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { success: false, message: 'Informe um termo para busca' },
         { status: 400 }
+      )
+    }
+
+    if (!isPaid && freeQueriesUsed >= 3) {
+      let countQuery = supabaseAdmin
+        .from('male_profiles')
+        .select('*', { head: true, count: 'exact' })
+
+      if (nome) {
+        countQuery = countQuery.ilike('display_name', `%${nome}%`)
+      }
+
+      if (cidade) {
+        countQuery = countQuery.ilike('city', `%${cidade}%`)
+      }
+
+      const { count, error: countError } = await countQuery
+
+      if (countError) {
+        throw new Error(countError.message)
+      }
+
+      const totalFound = count ?? 0
+
+      return NextResponse.json(
+        {
+          success: false,
+          reason: 'PAYWALL',
+          total_found: totalFound,
+          has_results: totalFound > 0,
+          message:
+            totalFound > 0
+              ? `Encontramos ${totalFound} resultado(s). Assine para desbloquear os perfis.`
+              : 'Assine um plano para continuar com consultas ilimitadas.',
+        },
+        { status: 403 }
       )
     }
 
