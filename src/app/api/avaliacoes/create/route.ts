@@ -27,6 +27,8 @@ const getStringArray = (value: unknown) => {
     .filter(Boolean)
 }
 
+const IDENTIFIER_TABLE_CANDIDATES = ['male_profile_identifiers', 'profile_identifiers'] as const
+
 
 const parseRating = (value: unknown) => {
   const n = Number(value)
@@ -195,24 +197,34 @@ export async function POST(request: Request) {
   }, [])
 
   let maleProfileId: string | null = null
+  let identifiersTable: (typeof IDENTIFIER_TABLE_CANDIDATES)[number] = 'profile_identifiers'
 
   for (const identifierRecord of identifierRecords) {
-    const lookupByIdentifier = await supabaseAdmin
-      .from('profile_identifiers')
-      .select('male_profile_id')
-      .eq('identifier_hash', identifierRecord.identifier_hash)
-      .limit(1)
-      .maybeSingle()
+    let lookupByIdentifier: { data?: { male_profile_id?: string | null } | null; error?: SupabaseErrorLike | null } | null = null
 
-    if (lookupByIdentifier.error) {
-      safeLogError('Erro ao buscar profile_identifiers', lookupByIdentifier.error, {
+    for (const tableName of IDENTIFIER_TABLE_CANDIDATES) {
+      lookupByIdentifier = await supabaseAdmin
+        .from(tableName)
+        .select('male_profile_id')
+        .eq('identifier_hash', identifierRecord.identifier_hash)
+        .limit(1)
+        .maybeSingle()
+
+      if (!lookupByIdentifier.error) {
+        identifiersTable = tableName
+        break
+      }
+    }
+
+    if (lookupByIdentifier?.error) {
+      safeLogError('Erro ao buscar identificadores do perfil', lookupByIdentifier.error, {
         requestId,
         platform: identifierRecord.platform,
       })
       return NextResponse.json({ error: 'Erro ao localizar perfil.' }, { status: 400 })
     }
 
-    if (lookupByIdentifier.data?.male_profile_id) {
+    if (lookupByIdentifier?.data?.male_profile_id) {
       maleProfileId = lookupByIdentifier.data.male_profile_id
       break
     }
@@ -273,14 +285,17 @@ export async function POST(request: Request) {
     )
 
     const upsertIdentifiers = await supabaseAdmin
-      .from('profile_identifiers')
+      .from(identifiersTable)
       .upsert(uniqueIdentifierRecords, {
         onConflict: 'platform,identifier_hash',
         ignoreDuplicates: true,
       })
 
     if (upsertIdentifiers.error) {
-      safeLogError('Erro ao salvar profile_identifiers', upsertIdentifiers.error, { requestId })
+      safeLogError('Erro ao salvar identificadores do perfil', upsertIdentifiers.error, {
+        requestId,
+        identifiersTable,
+      })
       const mapped = toClientError(upsertIdentifiers.error, 'Erro ao salvar identificadores.')
       return NextResponse.json({ error: mapped.message }, { status: mapped.status })
     }
@@ -304,13 +319,35 @@ export async function POST(request: Request) {
     status: 'public',
   }
 
-  const { data: upsertedReview, error: upsertError } = await supabaseAdmin
+  const existingReview = await supabaseAdmin
     .from('avaliacoes')
-    .upsert(payload, {
-      onConflict: 'user_id,male_profile_id',
-    })
     .select('id')
-    .single()
+    .eq('user_id', userId)
+    .eq('male_profile_id', maleProfileId)
+    .limit(1)
+    .maybeSingle()
+
+  if (existingReview.error) {
+    safeLogError('Erro ao buscar avaliação existente', existingReview.error, { requestId })
+    const mapped = toClientError(existingReview.error, 'Erro ao verificar avaliação existente.')
+    return NextResponse.json({ error: mapped.message }, { status: mapped.status })
+  }
+
+  const reviewMutation = existingReview.data?.id
+    ? await supabaseAdmin
+        .from('avaliacoes')
+        .update(payload)
+        .eq('id', existingReview.data.id)
+        .select('id')
+        .single()
+    : await supabaseAdmin
+        .from('avaliacoes')
+        .insert(payload)
+        .select('id')
+        .single()
+
+  const upsertedReview = reviewMutation.data
+  const upsertError = reviewMutation.error
 
   if (upsertError) {
     safeLogError('Erro ao criar/atualizar avaliação via upsert', upsertError, { requestId })
@@ -319,9 +356,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
   }
 
+  const { data: reputationSummary, error: summaryError } = await supabaseAdmin
+    .from('male_profile_reputation_summary')
+    .select('average_rating, total_reviews')
+    .eq('male_profile_id', maleProfileId)
+    .maybeSingle()
+
+  if (summaryError) {
+    safeLogError('Erro ao carregar resumo de reputação após avaliação', summaryError, {
+      requestId,
+      maleProfileId,
+    })
+  }
+
   return NextResponse.json({
     success: true,
     avaliacao_id: upsertedReview?.id ?? null,
     male_profile_id: maleProfileId,
+    reputation_summary: reputationSummary
+      ? {
+          average_rating: Number(reputationSummary.average_rating ?? 0),
+          total_reviews: Number(reputationSummary.total_reviews ?? 0),
+        }
+      : null,
   })
 }

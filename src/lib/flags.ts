@@ -38,13 +38,12 @@ export const RED_FLAGS: FlagOption[] = [
   { slug: 'manipulacao_emocional', label: 'Manipulação emocional' },
   { slug: 'desrespeito', label: 'Desrespeito' },
   { slug: 'agressividade', label: 'Agressividade' },
-  { slug: 'falta_de_respeito', label: 'Falta de respeito' },
+  { slug: 'violencia_verbal', label: 'Violência verbal' },
   { slug: 'imaturidade_emocional', label: 'Imaturidade emocional' },
   { slug: 'traicao', label: 'Traição' },
   { slug: 'golpe_amoroso', label: 'Golpe amoroso' },
   { slug: 'stalking', label: 'Stalking' },
   { slug: 'comportamento_abusivo', label: 'Comportamento abusivo' },
-  { slug: 'liso', label: 'Liso' },
 ]
 
 const positiveLookup = createLookup(GREEN_FLAGS)
