@@ -238,9 +238,37 @@ export async function GET(
 
     console.error(error)
 
-    return NextResponse.json(
-      { error: 'Erro interno no servidor' },
-      { status: 500 }
-    )
+   return NextResponse.json({
+  allowed: true,
+
+  profile: {
+    id: maleProfile.id,
+    display_name: maleProfile.display_name,
+    city: maleProfile.city
+  },
+
+  summary: {
+    average_rating: Number(media.toFixed(1)),
+    total_reviews: total,
+    alert_count: alertCount,
+    classification: classificacao
+  },
+
+  category_averages: {
+    comportamento: Number(medias.comportamento.toFixed(1)),
+    seguranca_emocional: Number(medias.seguranca_emocional.toFixed(1)),
+    respeito: Number(medias.respeito.toFixed(1)),
+    carater: Number(medias.carater.toFixed(1)),
+    confianca: Number(medias.confianca.toFixed(1))
+  },
+
+  reports:
+    reviews
+      ?.filter((r) => r.notas)
+      .map((r) => ({
+        text: r.notas,
+        created_at: r.created_at
+      })) ?? []
+}) 
   }
 }
