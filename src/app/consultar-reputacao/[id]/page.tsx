@@ -15,6 +15,7 @@ type Avaliacao = {
   carater: number | null
   confianca: number | null
   relato: string | null
+  notas: string | null
   flags_negative: string[] | null
   flags_positive: string[] | null
   status: 'public' | 'pending_moderation' | 'hidden' | 'removed'
@@ -90,8 +91,8 @@ export default async function Page({
     return <div className="text-white p-10">Perfil não encontrado</div>
   }
 
-  // avaliações públicas
-  const { data: avaliacoes } = await supabase
+  // avaliações do perfil
+  const { data: avaliacoes, error: avaliacoesError } = await supabase
     .from('avaliacoes')
     .select(`
       id,
@@ -104,14 +105,17 @@ export default async function Page({
       carater,
       confianca,
       relato,
+      notas,
       flags_negative,
       flags_positive,
       status
     `)
     .eq('male_profile_id', params.id)
-    .eq('publica', true)
-    .eq('status', 'public')
     .order('created_at', { ascending: false })
+
+  if (avaliacoesError) {
+    console.error('Erro ao buscar avaliações na página de reputação:', avaliacoesError)
+  }
 
   const lista = avaliacoes ?? []
 
@@ -282,9 +286,9 @@ export default async function Page({
                     </span>
                   </div>
 
-                  {a.relato && (
+                  {(a.relato ?? a.notas) && (
                     <p className="text-sm text-gray-300 mt-3">
-                      {a.relato}
+                      {a.relato ?? a.notas}
                     </p>
                   )}
 
