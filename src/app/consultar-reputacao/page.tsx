@@ -102,7 +102,7 @@ export default function ConsultarReputacao() {
   }
 
   const premiumResults = results.filter((r): r is PerfilPremiumResultado => !r.locked)
-  const freeTeaserResults = results.filter((r): r is PerfilFreeResultado => r.locked && r.has_data)
+  const freeTeaserResults = results.filter((r) => r.has_data)
 
   const handleResultClick = (result: PerfilPremiumResultado) => {
     router.push(`/consultar-reputacao/${result.male_profile_id}`)
@@ -150,17 +150,17 @@ export default function ConsultarReputacao() {
 
           {isPremiumUser === false
             ? freeTeaserResults.map((r) => (
-                  <PremiumTeaserCard
-                    key={r.male_profile_id}
-                    subtitle="Há dados disponíveis para este perfil. Desbloqueie reputação, alertas e relatos."
-                  />
-                ))
+                <PremiumTeaserCard
+                  key={r.male_profile_id}
+                  subtitle={`Há dados disponíveis para ${r.name}. Desbloqueie reputação, alertas e relatos.`}
+                />
+              ))
             : premiumResults.map((r) => (
                 <div
                   key={r.male_profile_id}
                   onClick={() => handleResultClick(r)}
                   className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors cursor-pointer"
->
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-white mb-1">{r.name}</h3>
