@@ -4,11 +4,9 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
 
-const CONSULTA_WINDOW_MINUTES = 10
-
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createServerClient()
@@ -33,7 +31,7 @@ export async function GET(
       )
     }
 
-    const maleProfileId = params.id
+    const { id: maleProfileId } = await params
 
     if (!maleProfileId) {
       return NextResponse.json(
@@ -42,11 +40,11 @@ export async function GET(
       )
     }
 
-    const { data: profile, error: profileError } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('plan')
+      .select('current_plan_id')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
       console.error('Erro ao validar plano do perfil', profileError)
@@ -56,34 +54,29 @@ export async function GET(
       )
     }
 
-    const userPlan = profile?.plan ?? 'free'
+    const isPremiumUser = (profile?.current_plan_id ?? 'free') !== 'free'
 
-    if (userPlan === 'free') {
-      const since = new Date(
-        Date.now() - CONSULTA_WINDOW_MINUTES * 60 * 1000
-      ).toISOString()
+    if (!isPremiumUser) {
+      const { data: summary, error: summaryError } = await supabaseAdmin
+        .from('male_profile_reputation_summary')
+        .select('total_reviews, alert_count')
+        .eq('male_profile_id', maleProfileId)
+        .maybeSingle()
 
-      const { data: consultas, error: consultasError } = await supabaseAdmin
-        .from('consultas')
-        .select('id')
-        .eq('user_id', user.id)
-        .gte('created_at', since)
-        .limit(1)
-
-      if (consultasError) {
-        console.error('Erro ao validar consulta recente', consultasError)
+      if (summaryError) {
+        console.error('Erro ao validar resumo de reputação', summaryError)
         return NextResponse.json(
-          { error: 'Erro ao validar acesso' },
+          { error: 'Erro ao validar reputação' },
           { status: 500 }
         )
       }
 
-      if (!consultas || consultas.length === 0) {
-        return NextResponse.json(
-          { allowed: false, reason: 'PAYWALL' },
-          { status: 200 }
-        )
-      }
+      const hasData = Number(summary?.total_reviews ?? 0) > 0 || Number(summary?.alert_count ?? 0) > 0
+
+      return NextResponse.json({
+        has_data: hasData,
+        locked: true,
+      })
     }
 
     const result = await getDetailedReputation(supabaseAdmin, maleProfileId)

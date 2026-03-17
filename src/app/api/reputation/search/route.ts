@@ -37,22 +37,17 @@ export async function GET(req: Request) {
       )
     }
 
-    const { data: profile, error: profileError } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('free_queries_used, current_plan_id, subscription_status')
+      .select('current_plan_id')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
       throw new Error(profileError.message)
     }
 
-    const isPaid =
-      profile?.subscription_status === 'active' ||
-      profile?.subscription_status === 'trialing' ||
-      (profile?.current_plan_id && profile.current_plan_id !== 'free')
-
-    const freeQueriesUsed = profile?.free_queries_used ?? 0
+    const isPremiumUser = (profile?.current_plan_id ?? 'free') !== 'free'
 
     const { searchParams } = new URL(req.url)
 
@@ -76,42 +71,6 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { success: false, message: 'Informe um termo para busca' },
         { status: 400 }
-      )
-    }
-
-    if (!isPaid && freeQueriesUsed >= 3) {
-      let countQuery = supabaseAdmin
-        .from('male_profiles')
-        .select('*', { head: true, count: 'exact' })
-
-      if (nome) {
-        countQuery = countQuery.ilike('display_name', `%${nome}%`)
-      }
-
-      if (cidade) {
-        countQuery = countQuery.ilike('city', `%${cidade}%`)
-      }
-
-      const { count, error: countError } = await countQuery
-
-      if (countError) {
-        throw new Error(countError.message)
-      }
-
-      const totalFound = count ?? 0
-
-      return NextResponse.json(
-        {
-          success: false,
-          reason: 'PAYWALL',
-          total_found: totalFound,
-          has_results: totalFound > 0,
-          message:
-            totalFound > 0
-              ? `Encontramos ${totalFound} resultado(s). Assine para desbloquear os perfis.`
-              : 'Assine um plano para continuar com consultas ilimitadas.',
-        },
-        { status: 403 }
       )
     }
 
@@ -170,49 +129,37 @@ export async function GET(req: Request) {
       )
     }
 
-    const results = (maleProfiles ?? [])
-      .map((profileItem) => {
-        const summary = summaryMap.get(profileItem.id)
+    const results = (maleProfiles ?? []).map((profileItem) => {
+      const summary = summaryMap.get(profileItem.id)
+      const hasData = Number(summary?.total_reviews ?? 0) > 0 || Number(summary?.alert_count ?? 0) > 0
 
-        const totalReviews = summary?.total_reviews ?? 0
-        const averageRating = summary?.average_rating ?? 0
-        const alertCount = summary?.alert_count ?? 0
-        const positivePercentage = summary?.positive_percentage ?? 0
-        const classification = summary?.classification ?? 'confiavel'
-
+      if (!isPremiumUser) {
         return {
           male_profile_id: profileItem.id,
           name: profileItem.display_name ?? 'Sem nome',
           city: profileItem.city ?? null,
-          average_rating: averageRating,
-          total_reviews: totalReviews,
-          positive_percentage: positivePercentage,
-          alert_count: alertCount,
-          classification,
+          has_data: hasData,
+          locked: true,
         }
-      })
-      .sort((a, b) => {
-        if (b.average_rating !== a.average_rating) {
-          return b.average_rating - a.average_rating
-        }
-        return b.total_reviews - a.total_reviews
-      })
-
-    if (!isPaid) {
-      const { error: updateError } = await supabaseAdmin
-        .from('profiles')
-        .update({
-          free_queries_used: freeQueriesUsed + 1,
-        })
-        .eq('id', user.id)
-
-      if (updateError) {
-        throw new Error(updateError.message)
       }
-    }
+
+      return {
+        male_profile_id: profileItem.id,
+        name: profileItem.display_name ?? 'Sem nome',
+        city: profileItem.city ?? null,
+        average_rating: Number(summary?.average_rating ?? 0),
+        total_reviews: Number(summary?.total_reviews ?? 0),
+        positive_percentage: Number(summary?.positive_percentage ?? 0),
+        alert_count: Number(summary?.alert_count ?? 0),
+        classification: (summary?.classification ?? 'confiavel') as 'perigo' | 'atencao' | 'confiavel' | 'excelente',
+        has_data: hasData,
+        locked: false,
+      }
+    })
 
     return NextResponse.json({
       success: true,
+      is_premium_user: isPremiumUser,
       results,
     })
   } catch (err: any) {

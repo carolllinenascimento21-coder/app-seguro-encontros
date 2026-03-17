@@ -2,11 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, MapPin, Star, AlertTriangle } from 'lucide-react'
+import { Search, MapPin, Star, AlertTriangle, Lock } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
-import { useAccessControl } from '@/hooks/use-access-control'
 
-interface PerfilResultado {
+type PerfilPremiumResultado = {
   male_profile_id: string
   name: string
   city: string | null
@@ -15,16 +14,28 @@ interface PerfilResultado {
   positive_percentage: number
   alert_count: number
   classification: 'perigo' | 'atencao' | 'confiavel' | 'excelente'
+  has_data: boolean
+  locked: false
 }
 
-const BADGE_STYLES: Record<PerfilResultado['classification'], string> = {
+type PerfilFreeResultado = {
+  male_profile_id: string
+  name: string
+  city: string | null
+  has_data: boolean
+  locked: true
+}
+
+type PerfilResultado = PerfilPremiumResultado | PerfilFreeResultado
+
+const BADGE_STYLES: Record<PerfilPremiumResultado['classification'], string> = {
   perigo: 'text-red-500 bg-red-500/10 border-red-500/30',
   atencao: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30',
   confiavel: 'text-blue-500 bg-blue-500/10 border-blue-500/30',
   excelente: 'text-green-500 bg-green-500/10 border-green-500/30',
 }
 
-const BADGE_LABELS: Record<PerfilResultado['classification'], string> = {
+const BADGE_LABELS: Record<PerfilPremiumResultado['classification'], string> = {
   perigo: 'Perigo',
   atencao: 'Atenção',
   confiavel: 'Confiável',
@@ -33,7 +44,6 @@ const BADGE_LABELS: Record<PerfilResultado['classification'], string> = {
 
 export default function ConsultarReputacao() {
   const router = useRouter()
-  const { checkAccess } = useAccessControl()
 
   const [nome, setNome] = useState('')
   const [cidade, setCidade] = useState('')
@@ -67,28 +77,8 @@ export default function ConsultarReputacao() {
         credentials: 'include',
       })
 
-      // 🔐 não logada
       if (res.status === 401) {
         router.push('/login')
-        return
-      }
-
-      // 💰 paywall
-      if (res.status === 403) {
-        const data = await res.json().catch(() => null)
-        const totalFound = Number(data?.total_found ?? 0)
-        const hasResults = Boolean(data?.has_results) || totalFound > 0
-
-        const message = hasResults
-          ? `Encontramos ${totalFound} resultado(s). Assine para desbloquear os perfis completos.`
-          : 'Você atingiu o limite gratuito. Assine para continuar consultando reputação.'
-
-        setPaywallMessage(message)
-
-        setTimeout(() => {
-          router.push('/planos')
-        }, 1200)
-
         return
       }
 
@@ -99,6 +89,10 @@ export default function ConsultarReputacao() {
       }
 
       setResults(data.results ?? [])
+
+      if (data.is_premium_user === false) {
+        setPaywallMessage('Encontramos perfis com sinais relevantes. Ative um plano para ver as informações completas.')
+      }
     } catch (err: any) {
       console.error('Erro na busca:', err)
       setError(err.message)
@@ -108,24 +102,21 @@ export default function ConsultarReputacao() {
     }
   }
 
-  const handleResultClick = async (maleProfileId: string) => {
-    const access = await checkAccess({ redirectOnBlock: true })
+  const handleResultClick = (result: PerfilResultado) => {
+    if (result.locked) {
+      router.push('/planos')
+      return
+    }
 
-    if (!access.allowed) return
-
-    router.push(`/consultar-reputacao/${maleProfileId}`)
+    router.push(`/consultar-reputacao/${result.male_profile_id}`)
   }
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
       <div className="max-w-md mx-auto px-4 py-8">
-
-        <h1 className="text-2xl font-bold text-white mb-6">
-          Consultar Reputação
-        </h1>
+        <h1 className="text-2xl font-bold text-white mb-6">Consultar Reputação</h1>
 
         <div className="bg-white/5 border border-[#D4AF37]/20 rounded-xl p-5 mb-6">
-
           <input
             value={nome}
             onChange={(e) => setNome(e.target.value)}
@@ -148,15 +139,9 @@ export default function ConsultarReputacao() {
             <Search size={18} />
             {loading ? 'Buscando...' : 'Consultar'}
           </button>
-
         </div>
 
-        {error && (
-          <div className="text-red-400 text-sm mb-4 text-center">
-            {error}
-          </div>
-        )}
-
+        {error && <div className="text-red-400 text-sm mb-4 text-center">{error}</div>}
 
         {paywallMessage && (
           <div className="text-[#D4AF37] text-sm mb-4 text-center bg-[#D4AF37]/10 border border-[#D4AF37]/40 rounded-lg px-3 py-2">
@@ -165,72 +150,88 @@ export default function ConsultarReputacao() {
         )}
 
         <div className="space-y-4">
-
           {!loading && results.length === 0 && !error && !paywallMessage && (
-            <p className="text-gray-500 text-center text-sm">
-              Nenhum resultado encontrado
-            </p>
+            <p className="text-gray-500 text-center text-sm">Nenhum resultado encontrado</p>
           )}
 
           {results.map((r) => (
             <div
               key={r.male_profile_id}
-              onClick={() => handleResultClick(r.male_profile_id)}
+              onClick={() => handleResultClick(r)}
               className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors cursor-pointer"
             >
+              {r.locked ? (
+                <>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white mb-1">{r.name}</h3>
+                      {r.city && (
+                        <p className="text-sm text-gray-400 flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          {r.city}
+                        </p>
+                      )}
+                    </div>
+                    <div className="px-3 py-1 rounded-full text-xs font-semibold border text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/40">
+                      Resultados encontrados
+                    </div>
+                  </div>
 
-              <div className="flex items-start justify-between mb-3">
+                  <p className="text-sm text-gray-300">Encontramos informações relevantes sobre este perfil.</p>
 
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-white mb-1">
-                    {r.name}
-                  </h3>
-
-                  {r.city && (
-                    <p className="text-sm text-gray-400 flex items-center gap-1">
-                      <MapPin className="w-4 h-4" />
-                      {r.city}
-                    </p>
+                  {r.has_data && (
+                    <ul className="mt-3 space-y-1 text-xs text-yellow-200">
+                      <li>• Usuárias estão consultando este perfil agora</li>
+                      <li>• Novas avaliações recentes disponíveis</li>
+                      <li>• Pode conter alertas importantes</li>
+                    </ul>
                   )}
-                </div>
 
-                <div
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border ${BADGE_STYLES[r.classification]}`}
-                >
-                  {BADGE_LABELS[r.classification]}
-                </div>
+                  <button className="mt-4 w-full bg-[#D4AF37] text-black font-bold py-2.5 rounded-lg flex items-center justify-center gap-2">
+                    <Lock className="w-4 h-4" />
+                    Ver detalhes
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white mb-1">{r.name}</h3>
 
-              </div>
+                      {r.city && (
+                        <p className="text-sm text-gray-400 flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          {r.city}
+                        </p>
+                      )}
+                    </div>
 
-              <div className="flex items-center gap-4 mb-3">
+                    <div
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border ${BADGE_STYLES[r.classification]}`}
+                    >
+                      {BADGE_LABELS[r.classification]}
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-1">
-                  <Star className="w-4 h-4 text-[#D4AF37] fill-[#D4AF37]" />
-                  <span className="text-sm font-semibold text-white">
-                    {r.average_rating.toFixed(1)}
-                  </span>
-                </div>
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="flex items-center gap-1">
+                      <Star className="w-4 h-4 text-[#D4AF37] fill-[#D4AF37]" />
+                      <span className="text-sm font-semibold text-white">{r.average_rating.toFixed(1)}</span>
+                    </div>
 
-                <div className="text-sm text-gray-400">
-                  {r.total_reviews} avaliações
-                </div>
+                    <div className="text-sm text-gray-400">{r.total_reviews} avaliações</div>
 
-                <div className="text-sm text-gray-400">
-                  {r.positive_percentage}% confiável
-                </div>
+                    <div className="text-sm text-gray-400">{r.positive_percentage}% confiável</div>
+                  </div>
 
-              </div>
-
-              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 w-fit">
-                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <span className="text-xs text-red-400">
-                  {r.alert_count} alerta(s) ativo(s)
-                </span>
-              </div>
-
+                  <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 w-fit">
+                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                    <span className="text-xs text-red-400">{r.alert_count} alerta(s) ativo(s)</span>
+                  </div>
+                </>
+              )}
             </div>
           ))}
-
         </div>
       </div>
 
