@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, MapPin, Star, AlertTriangle, Lock } from 'lucide-react'
+import { Search, MapPin, Star, AlertTriangle } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
+import { PremiumTeaserCard } from '@/components/paywall/PremiumTeaserCard'
 
 type PerfilPremiumResultado = {
   male_profile_id: string
@@ -50,7 +51,8 @@ export default function ConsultarReputacao() {
   const [results, setResults] = useState<PerfilResultado[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [paywallMessage, setPaywallMessage] = useState<string | null>(null)
+  const [isPremiumUser, setIsPremiumUser] = useState<boolean | null>(null)
+  const [hasSearched, setHasSearched] = useState(false)
 
   const buscar = async () => {
     const nomeBusca = nome.trim()
@@ -64,7 +66,7 @@ export default function ConsultarReputacao() {
     try {
       setLoading(true)
       setError(null)
-      setPaywallMessage(null)
+      setHasSearched(true)
       setResults([])
 
       const params = new URLSearchParams()
@@ -89,10 +91,7 @@ export default function ConsultarReputacao() {
       }
 
       setResults(data.results ?? [])
-
-      if (data.is_premium_user === false) {
-        setPaywallMessage('Encontramos perfis com sinais relevantes. Ative um plano para ver as informações completas.')
-      }
+      setIsPremiumUser(Boolean(data.is_premium_user))
     } catch (err: any) {
       console.error('Erro na busca:', err)
       setError(err.message)
@@ -102,12 +101,10 @@ export default function ConsultarReputacao() {
     }
   }
 
-  const handleResultClick = (result: PerfilResultado) => {
-    if (result.locked) {
-      router.push('/planos')
-      return
-    }
+  const premiumResults = results.filter((r): r is PerfilPremiumResultado => !r.locked)
+  const freeTeaserResults = results.filter((r): r is PerfilFreeResultado => r.locked && r.has_data)
 
+  const handleResultClick = (result: PerfilPremiumResultado) => {
     router.push(`/consultar-reputacao/${result.male_profile_id}`)
   }
 
@@ -143,57 +140,27 @@ export default function ConsultarReputacao() {
 
         {error && <div className="text-red-400 text-sm mb-4 text-center">{error}</div>}
 
-        {paywallMessage && (
-          <div className="text-[#D4AF37] text-sm mb-4 text-center bg-[#D4AF37]/10 border border-[#D4AF37]/40 rounded-lg px-3 py-2">
-            {paywallMessage}
-          </div>
-        )}
-
         <div className="space-y-4">
-          {!loading && results.length === 0 && !error && !paywallMessage && (
+          {!loading && hasSearched && !error && (
+            (isPremiumUser === false
+              ? freeTeaserResults.length === 0
+              : premiumResults.length === 0) &&
             <p className="text-gray-500 text-center text-sm">Nenhum resultado encontrado</p>
           )}
 
-          {results.map((r) => (
-            <div
-              key={r.male_profile_id}
-              onClick={() => handleResultClick(r)}
-              className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              {r.locked ? (
-                <>
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-white mb-1">{r.name}</h3>
-                      {r.city && (
-                        <p className="text-sm text-gray-400 flex items-center gap-1">
-                          <MapPin className="w-4 h-4" />
-                          {r.city}
-                        </p>
-                      )}
-                    </div>
-                    <div className="px-3 py-1 rounded-full text-xs font-semibold border text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/40">
-                      Resultados encontrados
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-300">Encontramos informações relevantes sobre este perfil.</p>
-
-                  {r.has_data && (
-                    <ul className="mt-3 space-y-1 text-xs text-yellow-200">
-                      <li>• Usuárias estão consultando este perfil agora</li>
-                      <li>• Novas avaliações recentes disponíveis</li>
-                      <li>• Pode conter alertas importantes</li>
-                    </ul>
-                  )}
-
-                  <button className="mt-4 w-full bg-[#D4AF37] text-black font-bold py-2.5 rounded-lg flex items-center justify-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    Ver detalhes
-                  </button>
-                </>
-              ) : (
-                <>
+          {isPremiumUser === false
+            ? freeTeaserResults.map((r) => (
+                  <PremiumTeaserCard
+                    key={r.male_profile_id}
+                    subtitle="Há dados disponíveis para este perfil. Desbloqueie reputação, alertas e relatos."
+                  />
+                ))
+            : premiumResults.map((r) => (
+                <div
+                  key={r.male_profile_id}
+                  onClick={() => handleResultClick(r)}
+                  className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors cursor-pointer"
+>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-white mb-1">{r.name}</h3>
@@ -228,10 +195,8 @@ export default function ConsultarReputacao() {
                     <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
                     <span className="text-xs text-red-400">{r.alert_count} alerta(s) ativo(s)</span>
                   </div>
-                </>
-              )}
-            </div>
-          ))}
+                </div>
+              ))}
         </div>
       </div>
 

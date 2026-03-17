@@ -5,7 +5,7 @@ import { Star, ShieldAlert } from 'lucide-react'
 import { ReportReviewButton } from '@/components/ReportReviewButton'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
-import { PaywallCard } from '@/components/paywall/PaywallCard'
+import { PremiumDetailLock } from '@/components/paywall/PremiumDetailLock'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,7 +82,7 @@ export default async function Page({
             <p className="text-gray-400 text-sm">{maleProfile.city ?? 'Cidade não informada'}</p>
           </div>
 
-          <PaywallCard hasData={hasData} />
+          <PremiumDetailLock hasData={hasData} />
         </div>
       </div>
     )
