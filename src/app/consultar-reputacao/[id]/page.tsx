@@ -5,6 +5,7 @@ import { Star, ShieldAlert } from 'lucide-react'
 import { ReportReviewButton } from '@/components/ReportReviewButton'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
+import { PaywallCard } from '@/components/paywall/PaywallCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,8 +27,9 @@ function statusLabel(classification: 'perigo' | 'atencao' | 'confiavel' | 'excel
 export default async function Page({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const supabase = await createServerClient()
   const supabaseAdmin = getSupabaseAdminClient()
 
@@ -43,26 +45,50 @@ export default async function Page({
 
   const { data: me } = await supabase
     .from('profiles')
-    .select('free_queries_used, has_active_plan, current_plan_id, subscription_status')
+    .select('current_plan_id')
     .eq('id', user.id)
     .maybeSingle()
 
-  const freeQueriesUsed = me?.free_queries_used ?? 0
-  const hasPaidSubscription =
-    me?.has_active_plan === true ||
-    me?.subscription_status === 'active' ||
-    me?.subscription_status === 'trialing' ||
-    (typeof me?.current_plan_id === 'string' && me.current_plan_id !== 'free')
+  const isPremiumUser = (me?.current_plan_id ?? 'free') !== 'free'
 
-  const allowed = hasPaidSubscription || freeQueriesUsed <= 3
+  const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
+    .from('male_profiles')
+    .select('id, display_name, city')
+    .eq('id', id)
+    .maybeSingle()
 
-  if (!allowed) redirect('/planos')
-
-  const result = await getDetailedReputation(supabaseAdmin, params.id)
-
-  if (result.status === 404) {
+  if (maleProfileError || !maleProfile) {
     return <div className="text-white p-10">Perfil não encontrado</div>
   }
+
+  if (!isPremiumUser) {
+    const { data: summary } = await supabaseAdmin
+      .from('male_profile_reputation_summary')
+      .select('total_reviews, alert_count')
+      .eq('male_profile_id', id)
+      .maybeSingle()
+
+    const hasData = Number(summary?.total_reviews ?? 0) > 0 || Number(summary?.alert_count ?? 0) > 0
+
+    return (
+      <div className="min-h-screen bg-black text-white pb-20">
+        <div className="max-w-md mx-auto px-4 pt-6">
+          <Link href="/consultar-reputacao" className="text-gray-400 text-sm">
+            ← Voltar
+          </Link>
+
+          <div className="mt-4 bg-[#111] p-5 rounded-2xl border border-gray-800">
+            <h1 className="text-xl font-semibold">{maleProfile.display_name}</h1>
+            <p className="text-gray-400 text-sm">{maleProfile.city ?? 'Cidade não informada'}</p>
+          </div>
+
+          <PaywallCard hasData={hasData} />
+        </div>
+      </div>
+    )
+  }
+
+  const result = await getDetailedReputation(supabaseAdmin, id)
 
   if (result.status !== 200 || !result.data) {
     return <div className="text-white p-10">Erro ao carregar reputação</div>
