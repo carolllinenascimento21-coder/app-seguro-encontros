@@ -17,6 +17,11 @@ type SupabaseErrorLike = {
   hint?: string
 }
 
+type IdentifierLookupRow = {
+  male_profile_id?: string | null
+  profile_id?: string | null
+}
+
 const getString = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const getStringArray = (value: unknown) => {
@@ -197,36 +202,77 @@ export async function POST(request: Request) {
   }, [])
 
   let maleProfileId: string | null = null
-  let identifiersTable: (typeof IDENTIFIER_TABLE_CANDIDATES)[number] = 'profile_identifiers'
+  let identifiersTable: (typeof IDENTIFIER_TABLE_CANDIDATES)[number] = 'male_profile_identifiers'
 
-  for (const identifierRecord of identifierRecords) {
-    let lookupByIdentifier: { data?: { male_profile_id?: string | null } | null; error?: SupabaseErrorLike | null } | null = null
+  const findMaleProfileByLegacyProfileId = async (legacyProfileId: string) => {
+    const byId = await supabaseAdmin
+      .from('male_profiles')
+      .select('id')
+      .eq('id', legacyProfileId)
+      .limit(1)
+      .maybeSingle()
 
-    for (const tableName of IDENTIFIER_TABLE_CANDIDATES) {
-      lookupByIdentifier = await supabaseAdmin
-        .from(tableName)
-        .select('male_profile_id')
-        .eq('identifier_hash', identifierRecord.identifier_hash)
-        .limit(1)
-        .maybeSingle()
-
-      if (!lookupByIdentifier.error) {
-        identifiersTable = tableName
-        break
-      }
+    if (byId.error) {
+      safeLogError('Erro ao converter profile_id legado para male_profile_id', byId.error, {
+        requestId,
+        legacyProfileId,
+      })
+      return null
     }
 
-    if (lookupByIdentifier?.error) {
-      safeLogError('Erro ao buscar identificadores do perfil', lookupByIdentifier.error, {
+    return byId.data?.id ?? null
+  }
+
+  for (const identifierRecord of identifierRecords) {
+    const lookupMale = await supabaseAdmin
+      .from('male_profile_identifiers')
+      .select('male_profile_id')
+      .eq('identifier_hash', identifierRecord.identifier_hash)
+      .limit(1)
+      .maybeSingle<IdentifierLookupRow>()
+
+    if (!lookupMale.error && lookupMale.data?.male_profile_id) {
+      maleProfileId = lookupMale.data.male_profile_id
+      identifiersTable = 'male_profile_identifiers'
+      break
+    }
+
+    if (lookupMale.error) {
+      safeLogError('Falha no fallback em male_profile_identifiers', lookupMale.error, {
         requestId,
         platform: identifierRecord.platform,
       })
-      return NextResponse.json({ error: 'Erro ao localizar perfil.' }, { status: 400 })
     }
 
-    if (lookupByIdentifier?.data?.male_profile_id) {
-      maleProfileId = lookupByIdentifier.data.male_profile_id
+    const lookupLegacy = await supabaseAdmin
+      .from('profile_identifiers')
+      .select('male_profile_id,profile_id')
+      .eq('identifier_hash', identifierRecord.identifier_hash)
+      .limit(1)
+      .maybeSingle<IdentifierLookupRow>()
+
+    if (lookupLegacy.error) {
+      safeLogError('Falha no fallback em profile_identifiers (legado)', lookupLegacy.error, {
+        requestId,
+        platform: identifierRecord.platform,
+      })
+      continue
+    }
+
+    if (lookupLegacy.data?.male_profile_id) {
+      maleProfileId = lookupLegacy.data.male_profile_id
+      identifiersTable = 'profile_identifiers'
       break
+    }
+
+    if (lookupLegacy.data?.profile_id) {
+      const convertedMaleProfileId = await findMaleProfileByLegacyProfileId(lookupLegacy.data.profile_id)
+
+      if (convertedMaleProfileId) {
+        maleProfileId = convertedMaleProfileId
+        identifiersTable = 'profile_identifiers'
+        break
+      }
     }
   }
 
@@ -243,11 +289,12 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (lookup.error) {
-      safeLogError('Erro ao buscar male_profile', lookup.error, { requestId })
-      return NextResponse.json({ error: 'Erro ao localizar perfil.' }, { status: 400 })
+      safeLogError('Erro ao buscar male_profile por nome/cidade, criando automaticamente', lookup.error, {
+        requestId,
+      })
+    } else {
+      maleProfileId = lookup.data?.id ?? null
     }
-
-    maleProfileId = lookup.data?.id ?? null
   }
 
   if (!maleProfileId) {
@@ -296,9 +343,12 @@ export async function POST(request: Request) {
         requestId,
         identifiersTable,
       })
-      const mapped = toClientError(upsertIdentifiers.error, 'Erro ao salvar identificadores.')
-      return NextResponse.json({ error: mapped.message }, { status: mapped.status })
     }
+  }
+
+  if (!maleProfileId) {
+    safeLogError('male_profile_id ausente antes de salvar avaliação', null, { requestId })
+    return NextResponse.json({ error: 'Erro ao preparar avaliação.' }, { status: 500 })
   }
 
   const payload = {
@@ -319,32 +369,13 @@ export async function POST(request: Request) {
     status: 'public',
   }
 
-  const existingReview = await supabaseAdmin
+  const reviewMutation = await supabaseAdmin
     .from('avaliacoes')
+    .upsert(payload, {
+      onConflict: 'user_id,male_profile_id',
+    })
     .select('id')
-    .eq('user_id', userId)
-    .eq('male_profile_id', maleProfileId)
-    .limit(1)
-    .maybeSingle()
-
-  if (existingReview.error) {
-    safeLogError('Erro ao buscar avaliação existente', existingReview.error, { requestId })
-    const mapped = toClientError(existingReview.error, 'Erro ao verificar avaliação existente.')
-    return NextResponse.json({ error: mapped.message }, { status: mapped.status })
-  }
-
-  const reviewMutation = existingReview.data?.id
-    ? await supabaseAdmin
-        .from('avaliacoes')
-        .update(payload)
-        .eq('id', existingReview.data.id)
-        .select('id')
-        .single()
-    : await supabaseAdmin
-        .from('avaliacoes')
-        .insert(payload)
-        .select('id')
-        .single()
+    .single()
 
   const upsertedReview = reviewMutation.data
   const upsertError = reviewMutation.error
