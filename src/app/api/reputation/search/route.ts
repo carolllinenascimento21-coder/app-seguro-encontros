@@ -12,13 +12,6 @@ function normalize(value: string | null) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function getClassification(averageRating: number, alertCount: number) {
-  if (alertCount > 0 || averageRating < 2.5) return 'perigo'
-  if (averageRating < 3.5) return 'atencao'
-  if (averageRating < 4.5) return 'confiavel'
-  return 'excelente'
-}
-
 export async function GET(req: Request) {
   try {
     const supabase = await createServerClient()
@@ -149,13 +142,14 @@ export async function GET(req: Request) {
         average_rating: number
         alert_count: number
         positive_percentage: number
+        classification: 'perigo' | 'atencao' | 'confiavel' | 'excelente'
       }
     >()
 
     if (profileIds.length > 0) {
       const { data: summaries, error: summariesError } = await supabaseAdmin
         .from('male_profile_reputation_summary')
-        .select('male_profile_id, total_reviews, average_rating, alert_count, positive_percentage')
+        .select('male_profile_id, total_reviews, average_rating, alert_count, positive_percentage, classification')
         .in('male_profile_id', profileIds)
 
       if (summariesError) {
@@ -170,6 +164,7 @@ export async function GET(req: Request) {
             average_rating: Number(item.average_rating ?? 0),
             alert_count: Number(item.alert_count ?? 0),
             positive_percentage: Number(item.positive_percentage ?? 0),
+            classification: (item.classification ?? 'confiavel') as 'perigo' | 'atencao' | 'confiavel' | 'excelente',
           },
         ])
       )
@@ -183,6 +178,7 @@ export async function GET(req: Request) {
         const averageRating = summary?.average_rating ?? 0
         const alertCount = summary?.alert_count ?? 0
         const positivePercentage = summary?.positive_percentage ?? 0
+        const classification = summary?.classification ?? 'confiavel'
 
         return {
           male_profile_id: profileItem.id,
@@ -192,7 +188,7 @@ export async function GET(req: Request) {
           total_reviews: totalReviews,
           positive_percentage: positivePercentage,
           alert_count: alertCount,
-          classification: getClassification(averageRating, alertCount),
+          classification,
         }
       })
       .sort((a, b) => {
