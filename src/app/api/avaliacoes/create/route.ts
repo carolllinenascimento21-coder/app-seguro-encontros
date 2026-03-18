@@ -30,10 +30,14 @@ const safeNumber = (v: unknown) => {
 
 const getStringArray = (value: unknown) => {
   if (!Array.isArray(value)) return [] as string[]
-  return value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim())
-    .filter(Boolean)
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  )
 }
 
 const IDENTIFIER_TABLE_CANDIDATES = ['male_profile_identifiers', 'profile_identifiers'] as const
@@ -91,6 +95,14 @@ const toClientError = (
 
   if (error.code === '23505') {
     return { status: 409, message: 'Registro duplicado detectado.' }
+  }
+
+  if (error.code === '22P02') {
+    return { status: 400, message: 'Formato inválido em um ou mais campos da avaliação.' }
+  }
+
+  if (error.code === '42703' || error.code === 'PGRST204') {
+    return { status: 500, message: 'Inconsistência de schema ao salvar avaliação.' }
   }
 
   return { status: defaultStatus, message: fallbackMessage }
@@ -385,6 +397,7 @@ export async function POST(request: Request) {
       5
     ).toFixed(1)
   )
+  const legacyNotas = Math.round(rating)
 
   const payload = {
     male_profile_id: maleProfileId,
@@ -394,10 +407,10 @@ export async function POST(request: Request) {
     respeito: notas.respeito,
     carater: notas.carater,
     confianca: notas.confianca,
-    flags_negative: flags_negative ?? [],
-    flags_positive: flags_positive ?? [],
+    flags_negative,
+    flags_positive,
     relato: relato || null,
-    notas: relato || null,
+    notas: legacyNotas,
     review_text: relato || null,
     rating,
     anonimo,
@@ -423,6 +436,11 @@ export async function POST(request: Request) {
 
     const mapped = toClientError(upsertError, 'Erro ao publicar avaliação.')
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
+  }
+
+  if (!upsertedReview?.id) {
+    safeLogError('Upsert concluído sem id de avaliação', null, { requestId, maleProfileId })
+    return NextResponse.json({ error: 'Erro ao confirmar publicação da avaliação.' }, { status: 500 })
   }
 
   const { data: reputationSummary, error: summaryError } = await supabaseAdmin
