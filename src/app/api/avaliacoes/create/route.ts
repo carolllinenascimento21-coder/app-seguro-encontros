@@ -105,6 +105,10 @@ const toClientError = (
     return { status: 500, message: 'Inconsistência de schema ao salvar avaliação.' }
   }
 
+  if (error.code === '42P10') {
+    return { status: 500, message: 'Configuração de upsert inválida para avaliações.' }
+  }
+
   return { status: defaultStatus, message: fallbackMessage }
 }
 
@@ -161,6 +165,8 @@ export async function POST(request: Request) {
 
   const displayName = getString(body.nome ?? body.name)
   const city = getString(body.cidade ?? body.city)
+  const telefone = getString(body.telefone ?? body.phone)
+  const contato = getString(body.contato ?? body.contact)
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
   const incomingMaleProfileId = getString(body.male_profile_id ?? body.maleProfileId)
@@ -387,21 +393,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Erro ao preparar avaliação.' }, { status: 500 })
   }
 
-  const rating = Number(
-    (
-      (notas.comportamento +
-        notas.seguranca_emocional +
-        notas.respeito +
-        notas.carater +
-        notas.confianca) /
-      5
-    ).toFixed(1)
-  )
-  const legacyNotas = Math.round(rating)
+  const flags = Array.from(new Set([...flags_positive, ...flags_negative]))
 
   const payload = {
     male_profile_id: maleProfileId,
     user_id: userId,
+    autora_id: autoraId,
+    nome: displayName,
+    cidade: city || null,
+    telefone: telefone || null,
+    contato: contato || null,
+    flags,
     comportamento: notas.comportamento,
     seguranca_emocional: notas.seguranca_emocional,
     respeito: notas.respeito,
@@ -410,13 +412,9 @@ export async function POST(request: Request) {
     flags_negative,
     flags_positive,
     relato: relato || null,
-    notas: legacyNotas,
-    review_text: relato || null,
-    rating,
+    notas: relato || null,
     anonimo,
-    is_anonymous: anonimo,
     publica: true,
-    status: 'public',
   }
 
   const reviewMutation = await supabaseAdmin
@@ -431,8 +429,10 @@ export async function POST(request: Request) {
   const upsertError = reviewMutation.error
 
   if (upsertError) {
-    console.error('CREATE AVALIACAO ERROR:', upsertError)
-    safeLogError('Erro ao criar/atualizar avaliação via upsert', upsertError, { requestId })
+    safeLogError('Erro ao criar/atualizar avaliação via upsert', upsertError, {
+      requestId,
+      payload,
+    })
 
     const mapped = toClientError(upsertError, 'Erro ao publicar avaliação.')
     return NextResponse.json({ error: mapped.message }, { status: mapped.status })
