@@ -157,7 +157,20 @@ export async function getDetailedReputation(
         .filter((review) => Boolean(toReviewText(review)))
         .map((review) => ({
           id: review.id,
-          rating: safeNumber(review.rating),
+          const calcRating = (review: ReviewRow) => {
+            const values = [
+            review.comportamento,
+            review.seguranca_emocional,
+            review.respeito,
+            review.carater,
+            review.confianca,
+          ].filter((v) => typeof v === 'number') as number[]
+
+  if (values.length === 0) return 0
+
+  const avg = values.reduce((a, b) => a + b, 0) / values.length
+  return Number(avg.toFixed(1))
+}
           review_text: toReviewText(review),
           created_at: review.created_at,
           flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
@@ -165,7 +178,20 @@ export async function getDetailedReputation(
         })),
       reviews: reviewRows.map((review) => ({
         id: review.id,
-        rating: safeNumber(review.rating),
+        const calcRating = (review: ReviewRow) => {
+          const values = [
+          review.comportamento,
+          review.seguranca_emocional,
+          review.respeito,
+          review.carater,
+          review.confianca,
+        ].filter((v) => typeof v === 'number') as number[]
+
+  if (values.length === 0) return 0
+
+  const avg = values.reduce((a, b) => a + b, 0) / values.length
+  return Number(avg.toFixed(1))
+}
         review_text: toReviewText(review),
         created_at: review.created_at,
         flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
