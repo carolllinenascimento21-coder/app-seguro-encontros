@@ -69,12 +69,9 @@ export async function getDetailedReputation(
       `
         id,
         created_at,
-        rating,
-        review_text,
         relato,
         notas,
         flags_negative,
-        is_anonymous,
         comportamento,
         seguranca_emocional,
         respeito,
@@ -83,7 +80,7 @@ export async function getDetailedReputation(
       `
     )
     .eq('male_profile_id', maleProfileId)
-    .or('status.eq.public,publica.eq.true,publica.is.null')
+    .eq('publica', true)
     .order('created_at', { ascending: false })
 
   if (reviewsError) {
