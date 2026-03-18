@@ -34,6 +34,11 @@ type SummaryRow = {
 const toReviewText = (review: ReviewRow) =>
   review.review_text ?? review.relato ?? review.notas ?? null
 
+const safeNumber = (value: unknown) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 export async function getDetailedReputation(
   supabaseAdmin: any,
   maleProfileId: string
@@ -134,9 +139,9 @@ export async function getDetailedReputation(
     .sort((a, b) => b.count - a.count)
 
   const reputation = {
-    average_rating: Number(Number(summaryRow?.average_rating ?? 0).toFixed(1)),
-    total_reviews: Number(summaryRow?.total_reviews ?? 0),
-    alert_count: Number(summaryRow?.alert_count ?? 0),
+    average_rating: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
+    total_reviews: safeNumber(summaryRow?.total_reviews),
+    alert_count: safeNumber(summaryRow?.alert_count),
     classification: summaryRow?.classification ?? 'confiavel',
   }
 
@@ -155,29 +160,28 @@ export async function getDetailedReputation(
         .filter((review) => Boolean(toReviewText(review)))
         .map((review) => ({
           id: review.id,
-          rating: Number(review.rating ?? 0),
+          rating: safeNumber(review.rating),
           review_text: toReviewText(review),
           created_at: review.created_at,
-          flags_negative: review.flags_negative ?? [],
+          flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
           is_anonymous: Boolean(review.is_anonymous),
         })),
       reviews: reviewRows.map((review) => ({
         id: review.id,
-        rating: Number(review.rating ?? 0),
+        rating: safeNumber(review.rating),
         review_text: toReviewText(review),
         created_at: review.created_at,
-        flags_negative: review.flags_negative ?? [],
+        flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
         is_anonymous: Boolean(review.is_anonymous),
       })),
-      average_rating: Number(Number(summaryRow?.average_rating ?? 0).toFixed(1)),
-      media: Number(Number(summaryRow?.average_rating ?? 0).toFixed(1)),
-      total_reviews: Number(summaryRow?.total_reviews ?? 0),
-      total: Number(summaryRow?.total_reviews ?? 0),
-      alerts: Number(summaryRow?.alert_count ?? 0),
-      alert_count: Number(summaryRow?.alert_count ?? 0),
+      average_rating: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
+      media: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
+      total_reviews: safeNumber(summaryRow?.total_reviews),
+      total: safeNumber(summaryRow?.total_reviews),
+      alerts: safeNumber(summaryRow?.alert_count),
+      alert_count: safeNumber(summaryRow?.alert_count),
       classificacao: summaryRow?.classification ?? 'confiavel',
       classification: summaryRow?.classification ?? 'confiavel',
     },
   }
 }
-
