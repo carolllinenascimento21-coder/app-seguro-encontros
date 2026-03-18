@@ -23,6 +23,10 @@ type IdentifierLookupRow = {
 }
 
 const getString = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+const safeNumber = (v: unknown) => {
+  const parsed = Number(v)
+  return Number.isFinite(parsed) ? parsed : 0
+}
 
 const getStringArray = (value: unknown) => {
   if (!Array.isArray(value)) return [] as string[]
@@ -36,10 +40,9 @@ const IDENTIFIER_TABLE_CANDIDATES = ['male_profile_identifiers', 'profile_identi
 
 
 const parseRating = (value: unknown) => {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return null
-  if (!Number.isInteger(n)) return null
-  if (n < 1 || n > 5) return null
+  const n = safeNumber(value)
+  if (!Number.isInteger(n)) return 0
+  if (n < 1 || n > 5) return 0
   return n
 }
 
@@ -148,6 +151,7 @@ export async function POST(request: Request) {
   const city = getString(body.cidade ?? body.city)
   const relato = getString(body.relato)
   const anonimo = Boolean(body.anonimo)
+  const incomingMaleProfileId = getString(body.male_profile_id ?? body.maleProfileId)
 
   if (!displayName) {
     return NextResponse.json(
@@ -167,7 +171,7 @@ export async function POST(request: Request) {
     confianca: parseRating(body?.notas?.confianca ?? body.confianca),
   }
 
-  if (Object.values(notas).some((nota) => nota === null)) {
+  if (Object.values(notas).some((nota) => nota <= 0)) {
     return NextResponse.json(
       {
         error:
@@ -203,6 +207,24 @@ export async function POST(request: Request) {
 
   let maleProfileId: string | null = null
   let identifiersTable: (typeof IDENTIFIER_TABLE_CANDIDATES)[number] = 'male_profile_identifiers'
+
+  if (incomingMaleProfileId) {
+    const existingProfile = await supabaseAdmin
+      .from('male_profiles')
+      .select('id')
+      .eq('id', incomingMaleProfileId)
+      .limit(1)
+      .maybeSingle()
+
+    if (existingProfile.error) {
+      safeLogError('Erro ao validar male_profile_id informado', existingProfile.error, {
+        requestId,
+        incomingMaleProfileId,
+      })
+    } else {
+      maleProfileId = existingProfile.data?.id ?? null
+    }
+  }
 
   const findMaleProfileByLegacyProfileId = async (legacyProfileId: string) => {
     const byId = await supabaseAdmin
@@ -280,13 +302,15 @@ export async function POST(request: Request) {
   const normalizedCity = normalizeNameOrCity(city)
 
   if (!maleProfileId) {
-    const lookup = await supabaseAdmin
+    const lookupQuery = supabaseAdmin
       .from('male_profiles')
       .select('id')
       .eq('normalized_name', normalizedName)
-      .eq('normalized_city', normalizedCity)
       .limit(1)
-      .maybeSingle()
+
+    const lookup = normalizedCity
+      ? await lookupQuery.eq('normalized_city', normalizedCity).maybeSingle()
+      : await lookupQuery.is('normalized_city', null).maybeSingle()
 
     if (lookup.error) {
       safeLogError('Erro ao buscar male_profile por nome/cidade, criando automaticamente', lookup.error, {
@@ -351,6 +375,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Erro ao preparar avaliação.' }, { status: 500 })
   }
 
+  const rating = Number(
+    (
+      (notas.comportamento +
+        notas.seguranca_emocional +
+        notas.respeito +
+        notas.carater +
+        notas.confianca) /
+      5
+    ).toFixed(1)
+  )
+
   const payload = {
     male_profile_id: maleProfileId,
     user_id: userId,
@@ -363,6 +398,8 @@ export async function POST(request: Request) {
     flags_positive: flags_positive ?? [],
     relato: relato || null,
     notas: relato || null,
+    review_text: relato || null,
+    rating,
     anonimo,
     is_anonymous: anonimo,
     publica: true,
@@ -381,6 +418,7 @@ export async function POST(request: Request) {
   const upsertError = reviewMutation.error
 
   if (upsertError) {
+    console.error('CREATE AVALIACAO ERROR:', upsertError)
     safeLogError('Erro ao criar/atualizar avaliação via upsert', upsertError, { requestId })
 
     const mapped = toClientError(upsertError, 'Erro ao publicar avaliação.')

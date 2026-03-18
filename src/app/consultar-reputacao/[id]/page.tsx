@@ -90,20 +90,36 @@ export default async function Page({
 
   const result = await getDetailedReputation(supabaseAdmin, id)
 
-  if (result.status !== 200 || !result.data) {
+  if (!result || result.status !== 200 || !result.data) {
     return <div className="text-white p-10">Erro ao carregar reputação</div>
   }
 
-  const data = result.data
-  const perfil = data.profile
-  const mediaGeral = Number(data.reputation.average_rating ?? 0)
-  const totalAvaliacoes = Number(data.reputation.total_reviews ?? 0)
+  const data = result?.data ?? {}
+  const perfil = data?.profile ?? {}
+  const reputation = data?.reputation ?? {}
+  const mediaGeral = Number(reputation?.average_rating ?? 0)
+  const totalAvaliacoes = Number(reputation?.total_reviews ?? 0)
   const somaEstrelas = mediaGeral * totalAvaliacoes
-  const status = statusLabel(data.reputation.classification)
+  const status = statusLabel(
+    reputation?.classification === 'excelente' ||
+      reputation?.classification === 'confiavel' ||
+      reputation?.classification === 'atencao' ||
+      reputation?.classification === 'perigo'
+      ? reputation.classification
+      : 'confiavel'
+  )
 
   const mediasCategorias = data.category_averages ?? {}
-  const alertasOrdenados = data.alertas ?? []
-  const relatos = data.relatos ?? []
+  const alertasOrdenados = Array.isArray(data?.alertas)
+    ? data.alertas
+    : Array.isArray(data?.alerts)
+      ? data.alerts
+      : []
+  const relatos = Array.isArray(data?.relatos)
+    ? data.relatos
+    : Array.isArray(data?.reviews)
+      ? data.reviews
+      : []
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
@@ -117,19 +133,23 @@ export default async function Page({
             {status.text}
           </div>
 
-          <h1 className="text-xl font-semibold">{perfil.display_name}</h1>
+          <h1 className="text-xl font-semibold">{perfil.display_name ?? 'Perfil sem nome'}</h1>
           <p className="text-gray-400 text-sm">{perfil.city ?? 'Cidade não informada'}</p>
         </div>
 
         <div className="mt-5 bg-[#111] border border-yellow-600/40 rounded-2xl p-6 text-center">
           <div className="flex justify-center items-center gap-2 text-yellow-400">
             <Star size={28} fill="currentColor" />
-            <span className="text-4xl font-bold">{mediaGeral.toFixed(1)}</span>
+            <span className="text-4xl font-bold">
+              {Number.isFinite(mediaGeral) ? mediaGeral.toFixed(1) : '0.0'}
+            </span>
           </div>
 
           <p className="text-sm text-gray-400 mt-2">{totalAvaliacoes} avaliações</p>
 
-          <p className="text-xs text-gray-500 mt-1">Soma total das estrelas: {somaEstrelas.toFixed(1)}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Soma total das estrelas: {Number.isFinite(somaEstrelas) ? somaEstrelas.toFixed(1) : '0.0'}
+          </p>
         </div>
 
         <div className="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-5">
@@ -142,15 +162,18 @@ export default async function Page({
             <p className="text-gray-500 text-sm mt-3">Nenhum alerta registrado.</p>
           ) : (
             <div className="mt-4 space-y-3">
-              {alertasOrdenados.map((item) => (
+              {Array.isArray(alertasOrdenados) &&
+                alertasOrdenados.map((item, index) => (
                 <div
-                  key={item.flag}
+                  key={item?.flag ?? `alerta-${index}`}
                   className="flex justify-between bg-black/40 p-3 rounded-lg border border-gray-800"
                 >
-                  <span className="text-red-300 capitalize">{item.flag.replaceAll('_', ' ')}</span>
-                  <span className="text-xs text-gray-400">citado {item.count}x</span>
+                  <span className="text-red-300 capitalize">
+                    {String(item?.flag ?? 'alerta').replaceAll('_', ' ')}
+                  </span>
+                  <span className="text-xs text-gray-400">citado {Number(item?.count ?? 0)}x</span>
                 </div>
-              ))}
+                ))}
             </div>
           )}
         </div>
@@ -165,7 +188,9 @@ export default async function Page({
               <div key={cat.key} className="mb-4">
                 <div className="flex justify-between text-sm mb-1">
                   <span>{cat.label}</span>
-                  <span className="text-yellow-400">{value.toFixed(1)}/5</span>
+                  <span className="text-yellow-400">
+                    {Number.isFinite(value) ? value.toFixed(1) : '0.0'}/5
+                  </span>
                 </div>
 
                 <div className="w-full bg-gray-800 h-2 rounded-full">
@@ -188,21 +213,24 @@ export default async function Page({
             <div className="text-gray-500 text-sm">Ainda não há relatos.</div>
           ) : (
             <div className="space-y-4">
-              {relatos.map((a) => (
-                <div key={a.id} className="bg-[#111] border border-gray-800 p-5 rounded-2xl">
+              {Array.isArray(relatos) &&
+                relatos.map((a, index) => (
+                <div key={a?.id ?? `relato-${index}`} className="bg-[#111] border border-gray-800 p-5 rounded-2xl">
                   <div className="flex justify-between items-center text-yellow-400 text-sm font-semibold">
                     <div className="flex items-center gap-1">
                       <Star size={14} fill="currentColor" />
-                      {a.rating.toFixed(1)}
+                      {Number.isFinite(Number(a?.rating)) ? Number(a?.rating).toFixed(1) : '0.0'}
                     </div>
                     <span className="text-xs text-gray-400">
-                      {new Date(a.created_at).toLocaleDateString('pt-BR')}
+                      {a?.created_at
+                        ? new Date(a.created_at).toLocaleDateString('pt-BR')
+                        : 'Data indisponível'}
                     </span>
                   </div>
 
-                  {a.review_text && <p className="text-sm text-gray-300 mt-3">{a.review_text}</p>}
+                  {a?.review_text && <p className="text-sm text-gray-300 mt-3">{a.review_text}</p>}
 
-                  {a.flags_negative.length > 0 && (
+                  {Array.isArray(a?.flags_negative) && a.flags_negative.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3">
                       {a.flags_negative.map((flag) => (
                         <span
@@ -216,18 +244,18 @@ export default async function Page({
                   )}
 
                   <p className="text-xs text-gray-500 mt-3">
-                    {a.is_anonymous ? 'Avaliação anônima' : 'Avaliação identificada'}
+                    {a?.is_anonymous ? 'Avaliação anônima' : 'Avaliação identificada'}
                   </p>
 
-                  <ReportReviewButton avaliacaoId={a.id} />
+                  {typeof a?.id === 'string' && <ReportReviewButton avaliacaoId={a.id} />}
                 </div>
-              ))}
+                ))}
             </div>
           )}
         </div>
 
         <Link
-          href={`/avaliar/${perfil.id}`}
+          href={`/avaliar/${perfil.id ?? id}`}
           className="mt-10 block text-center bg-yellow-500 text-black font-bold py-3 rounded-xl"
         >
           Avaliar Este Perfil
