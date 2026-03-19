@@ -11,8 +11,6 @@ type CategoryKey = (typeof CATEGORY_KEYS)[number]
 type ReviewRow = {
   id: string
   created_at: string
-  rating: number | null
-  review_text: string | null
   relato: string | null
   notas: string | null
   flags_negative: string[] | null
@@ -31,34 +29,26 @@ type SummaryRow = {
   classification: 'perigo' | 'atencao' | 'confiavel' | 'excelente' | null
 }
 
-const toReviewText = (review: ReviewRow) =>
-  review.review_text ?? review.relato ?? review.notas ?? null
+const toReviewText = (review: ReviewRow) => review.relato ?? review.notas ?? null
 
 const safeNumber = (value: unknown) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-/**
- * 🔥 NOVO: cálculo de rating fallback (caso não exista no banco)
- */
 const computeRating = (review: ReviewRow) => {
-  if (typeof review.rating === 'number') {
-    return Number(review.rating.toFixed(1))
-  }
-
   const values = [
     review.comportamento,
     review.seguranca_emocional,
     review.respeito,
     review.carater,
     review.confianca,
-  ].filter((v): v is number => typeof v === 'number')
+  ].filter((value): value is number => typeof value === 'number')
 
   if (values.length === 0) return 0
 
-  const avg = values.reduce((acc, v) => acc + v, 0) / values.length
-  return Number(avg.toFixed(1))
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length
+  return Number(average.toFixed(1))
 }
 
 export async function getDetailedReputation(
@@ -85,25 +75,21 @@ export async function getDetailedReputation(
     return { error: 'Erro ao carregar reputação', status: 500 as const }
   }
 
-  /**
-   * 🔥 CORREÇÃO: adicionamos rating no select
-   */
   const { data: reviews, error: reviewsError } = await supabaseAdmin
     .from('avaliacoes')
     .select(
       `
         id,
         created_at,
-        rating,
         relato,
         notas,
         flags_negative,
+        is_anonymous,
         comportamento,
         seguranca_emocional,
         respeito,
         carater,
-        confianca,
-        is_anonymous
+        confianca
       `
     )
     .eq('male_profile_id', maleProfileId)
@@ -180,10 +166,6 @@ export async function getDetailedReputation(
       reputation,
       category_averages: categoryAverages,
       alertas,
-
-      /**
-       * 🔥 RELATOS CORRIGIDOS
-       */
       relatos: reviewRows
         .filter((review) => Boolean(toReviewText(review)))
         .map((review) => ({
@@ -191,23 +173,17 @@ export async function getDetailedReputation(
           rating: computeRating(review),
           review_text: toReviewText(review),
           created_at: review.created_at,
-          flags_negative: Array.isArray(review.flags_negative)
-            ? review.flags_negative
-            : [],
+          flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
           is_anonymous: Boolean(review.is_anonymous),
         })),
-
       reviews: reviewRows.map((review) => ({
         id: review.id,
         rating: computeRating(review),
         review_text: toReviewText(review),
         created_at: review.created_at,
-        flags_negative: Array.isArray(review.flags_negative)
-          ? review.flags_negative
-          : [],
+        flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
         is_anonymous: Boolean(review.is_anonymous),
       })),
-
       average_rating: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
       media: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
       total_reviews: safeNumber(summaryRow?.total_reviews),
