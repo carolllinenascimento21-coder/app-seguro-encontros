@@ -1,26 +1,11 @@
 import Link from 'next/link'
-import { Eye, Lock, Shield, AlertTriangle, Star } from 'lucide-react'
+import { Eye, Lock, Shield, AlertTriangle, Star, Search } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 export const revalidate = 60
 
 type Classification = 'perigo' | 'atencao' | 'confiavel' | 'excelente'
-
-type SummaryRow = {
-  male_profile_id: string
-  average_rating: number | null
-  total_reviews: number | null
-  alert_count: number | null
-  classification: Classification | null
-}
-
-type MaleProfileRow = {
-  id: string
-  display_name: string | null
-  city: string | null
-  is_active: boolean | null
-}
 
 type Perfil = {
   id: string
@@ -48,7 +33,7 @@ const getReputacaoColor = (nivel: Classification) => {
     case 'perigo':
       return 'text-red-500 bg-red-500/10 border-red-500/30'
     default:
-      return 'text-blue-500 bg-blue-500/10 border-blue-500/30'
+      return ''
   }
 }
 
@@ -63,68 +48,76 @@ const getReputacaoLabel = (nivel: Classification) => {
     case 'perigo':
       return 'Perigo'
     default:
-      return 'Confiável'
+      return ''
   }
 }
 
-async function getHomePerfis(): Promise<Perfil[]> {
+async function getHomePerfis(search?: string): Promise<Perfil[]> {
   const supabase = getSupabaseAdminClient()
 
-  const { data: summaryData, error: summaryError } = await supabase
+  // 1️⃣ buscar resumo
+  const { data: summaryData } = await supabase
     .from('male_profile_reputation_summary')
     .select('male_profile_id, average_rating, total_reviews, alert_count, classification')
     .gt('total_reviews', 0)
     .order('average_rating', { ascending: false })
-    .limit(20)
+    .limit(50)
 
-  if (summaryError || !summaryData?.length) {
-    console.error('Erro ao buscar resumo dos perfis:', summaryError)
-    return []
-  }
+  if (!summaryData?.length) return []
 
-  const summaries = summaryData as SummaryRow[]
-  const ids = summaries.map((item) => item.male_profile_id).filter(Boolean)
+  const ids = summaryData.map((item) => item.male_profile_id)
 
-  const { data: maleProfilesData, error: maleProfilesError } = await supabase
+  // 2️⃣ buscar perfis com filtro
+  let query = supabase
     .from('male_profiles')
     .select('id, display_name, city, is_active')
     .in('id', ids)
+    .eq('is_active', true)
 
-  if (maleProfilesError) {
-    console.error('Erro ao buscar male_profiles:', maleProfilesError)
-    return []
+  if (search && search.trim() !== '') {
+    query = query.ilike('display_name', `%${search}%`)
   }
 
-  const profiles = (maleProfilesData ?? []) as MaleProfileRow[]
-  const profileMap = new Map(profiles.map((profile) => [profile.id, profile]))
+  const { data: profilesData } = await query
 
-  const perfis = summaries
-    .map((summary) => {
+  const profileMap = new Map(
+    (profilesData ?? []).map((p) => [p.id, p])
+  )
+
+  // 3️⃣ merge
+  return summaryData
+    .map((summary: any) => {
       const profile = profileMap.get(summary.male_profile_id)
-      if (!profile || profile.is_active === false) return null
+      if (!profile) return null
 
       return {
         id: profile.id,
-        display_name: profile.display_name?.trim() || 'Perfil sem nome',
-        city: profile.city?.trim() || 'Cidade não informada',
+        display_name: profile.display_name ?? 'Sem nome',
+        city: profile.city ?? 'Sem cidade',
         average_rating: Number(safeNumber(summary.average_rating).toFixed(1)),
         total_reviews: safeNumber(summary.total_reviews),
         alert_count: safeNumber(summary.alert_count),
         classification: summary.classification ?? 'confiavel',
-      } satisfies Perfil
+      }
     })
-    .filter((item): item is Perfil => Boolean(item))
-
-  return perfis
+    .filter(Boolean) as Perfil[]
 }
 
-export default async function HomePage() {
-  const perfis = await getHomePerfis()
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: { search?: string }
+}) {
+  const search = searchParams?.search || ''
+  const perfis = await getHomePerfis(search)
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
+
+      {/* Header */}
       <header className="bg-gradient-to-b from-black to-black/95 border-b border-[#D4AF37]/20 sticky top-0 z-40">
         <div className="max-w-md mx-auto px-4 py-6">
+
           <div className="flex items-center justify-center gap-3 mb-6">
             <div className="relative">
               <Eye className="w-8 h-8 text-[#D4AF37]" />
@@ -135,72 +128,49 @@ export default async function HomePage() {
             </h1>
           </div>
 
-          <div className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl px-4 py-3 text-gray-500">
-            Busca será conectada aos dados reais na próxima etapa
-          </div>
+          {/* 🔍 BUSCA REAL */}
+          <form>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                name="search"
+                defaultValue={search}
+                placeholder="Buscar por nome..."
+                className="w-full bg-white/5 border border-[#D4AF37]/30 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#D4AF37]"
+              />
+            </div>
+          </form>
+
         </div>
       </header>
 
+      {/* Conteúdo */}
       <div className="max-w-md mx-auto px-4 py-6">
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-gradient-to-br from-[#D4AF37]/10 to-transparent border border-[#D4AF37]/20 rounded-xl p-4 text-center">
-            <Shield className="w-6 h-6 text-[#D4AF37] mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{perfis.length}</p>
-            <p className="text-xs text-gray-400">Perfis</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/20 rounded-xl p-4 text-center">
-            <Star className="w-6 h-6 text-green-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">
-              {perfis.reduce((acc, perfil) => acc + perfil.total_reviews, 0)}
-            </p>
-            <p className="text-xs text-gray-400">Avaliações</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-red-500/10 to-transparent border border-red-500/20 rounded-xl p-4 text-center">
-            <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">
-              {perfis.reduce((acc, perfil) => acc + perfil.alert_count, 0)}
-            </p>
-            <p className="text-xs text-gray-400">Alertas</p>
-          </div>
-        </div>
-
-        <div className="mb-6">
-          <Link
-            href="/avaliar"
-            className="block w-full bg-gradient-to-r from-[#D4AF37] to-[#C0C0C0] text-black font-semibold py-4 rounded-xl text-center hover:opacity-90 transition-opacity"
-          >
-            + Avaliar um Homem
-          </Link>
-        </div>
 
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-[#D4AF37] mb-4">
-            Perfis Recentes
+            {search ? `Resultados para "${search}"` : 'Perfis Recentes'}
           </h2>
 
           {perfis.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
-              Nenhum perfil com avaliações encontrado
+              Nenhum perfil encontrado
             </div>
           ) : (
             perfis.map((perfil) => (
               <Link
                 key={perfil.id}
                 href={`/consultar-reputacao/${perfil.id}`}
-                className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition-colors"
+                className="block bg-white/5 border border-[#D4AF37]/20 rounded-xl p-4 hover:bg-white/10 transition"
               >
-                <div className="flex items-start justify-between mb-3 gap-3">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-white mb-1 truncate">
-                      {perfil.display_name}
-                    </h3>
-                    <p className="text-sm text-gray-400 truncate">{perfil.city}</p>
+                <div className="flex justify-between mb-3">
+                  <div>
+                    <h3 className="font-semibold">{perfil.display_name}</h3>
+                    <p className="text-sm text-gray-400">{perfil.city}</p>
                   </div>
 
                   <div
-                    className={`px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${getReputacaoColor(
+                    className={`px-3 py-1 text-xs rounded-full border ${getReputacaoColor(
                       perfil.classification
                     )}`}
                   >
@@ -208,31 +178,14 @@ export default async function HomePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 mb-3 flex-wrap">
+                <div className="flex gap-4 text-sm">
                   <div className="flex items-center gap-1">
                     <Star className="w-4 h-4 text-[#D4AF37] fill-[#D4AF37]" />
-                    <span className="text-sm font-semibold text-white">
-                      {perfil.average_rating.toFixed(1)}
-                    </span>
+                    {perfil.average_rating.toFixed(1)}
                   </div>
-
-                  <div className="text-sm text-gray-400">
-                    {perfil.total_reviews} avaliações
-                  </div>
-
-                  <div className="text-sm text-gray-400">
-                    {perfil.alert_count} alertas
-                  </div>
+                  <div>{perfil.total_reviews} avaliações</div>
+                  <div>{perfil.alert_count} alertas</div>
                 </div>
-
-                {perfil.alert_count > 0 && (
-                  <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                    <span className="text-xs text-red-400">
-                      {perfil.alert_count} alerta(s) ativo(s)
-                    </span>
-                  </div>
-                )}
               </Link>
             ))
           )}
