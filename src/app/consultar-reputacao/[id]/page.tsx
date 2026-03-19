@@ -22,7 +22,7 @@ const TRUST_LABELS = [
   'Relato confidencial',
   'Experiência real',
   'Depoimento validado',
-] as const
+]
 
 function getTrustLabel(id: string, isAnonymous?: boolean) {
   if (!isAnonymous) return 'Avaliação identificada'
@@ -60,6 +60,16 @@ export default async function Page({
   } = await supabase.auth.getUser()
 
   if (!user) redirect('/login')
+
+  // 🔥 NOVO — verifica se já avaliou
+  const { data: minhaAvaliacao } = await supabase
+    .from('avaliacoes')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('male_profile_id', id)
+    .maybeSingle()
+
+  const jaAvaliei = Boolean(minhaAvaliacao?.id)
 
   const { data: me } = await supabase
     .from('profiles')
@@ -150,10 +160,9 @@ export default async function Page({
           ← Voltar
         </Link>
 
+        {/* HEADER */}
         <div className="mt-4 bg-[#111] p-5 rounded-2xl border border-gray-800 relative">
-          <div
-            className={`absolute top-4 right-4 px-3 py-1 text-xs rounded-full text-white ${status.color}`}
-          >
+          <div className={`absolute top-4 right-4 px-3 py-1 text-xs rounded-full text-white ${status.color}`}>
             {status.text}
           </div>
 
@@ -161,21 +170,22 @@ export default async function Page({
           <p className="text-gray-400 text-sm">{perfil.city ?? 'Cidade não informada'}</p>
         </div>
 
+        {/* MÉDIA */}
         <div className="mt-5 bg-[#111] border border-yellow-600/40 rounded-2xl p-6 text-center">
           <div className="flex justify-center items-center gap-2 text-yellow-400">
             <Star size={28} fill="currentColor" />
             <span className="text-4xl font-bold">
-              {Number.isFinite(mediaGeral) ? mediaGeral.toFixed(1) : '0.0'}
+              {mediaGeral.toFixed(1)}
             </span>
           </div>
 
           <p className="text-sm text-gray-400 mt-2">{totalAvaliacoes} avaliações</p>
-
           <p className="text-xs text-gray-500 mt-1">
-            Soma total das estrelas: {Number.isFinite(somaEstrelas) ? somaEstrelas.toFixed(1) : '0.0'}
+            Soma total das estrelas: {somaEstrelas.toFixed(1)}
           </p>
         </div>
 
+        {/* ALERTAS */}
         <div className="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-5">
           <div className="flex items-center gap-2 text-red-400 font-semibold">
             <ShieldAlert size={16} />
@@ -187,12 +197,9 @@ export default async function Page({
           ) : (
             <div className="mt-4 space-y-3">
               {alertasOrdenados.map((item, index) => (
-                <div
-                  key={item?.flag ?? `alerta-${index}`}
-                  className="flex justify-between bg-black/40 p-3 rounded-lg border border-gray-800"
-                >
+                <div key={index} className="flex justify-between bg-black/40 p-3 rounded-lg border border-gray-800">
                   <span className="text-red-300 capitalize">
-                    {String(item?.flag ?? 'alerta').replaceAll('_', ' ')}
+                    {String(item?.flag ?? '').replaceAll('_', ' ')}
                   </span>
                   <span className="text-xs text-gray-400">
                     citado {Number(item?.count ?? 0)}x
@@ -203,96 +210,50 @@ export default async function Page({
           )}
         </div>
 
-        <div className="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-5">
-          <h2 className="text-yellow-400 font-semibold mb-4">Média por Categoria</h2>
+        {/* RELATOS */}
+        <div className="mt-6">
+          <h2 className="text-yellow-400 font-semibold mb-4">Relatos das Usuárias</h2>
 
-          {categorias.map((cat) => {
-            const value = Number(mediasCategorias[cat.key as keyof typeof mediasCategorias] ?? 0)
+          {relatos.map((a, index) => {
+            const label = getTrustLabel(
+              typeof a?.id === 'string' ? a.id : String(index),
+              Boolean(a?.is_anonymous)
+            )
 
             return (
-              <div key={cat.key} className="mb-4">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>{cat.label}</span>
-                  <span className="text-yellow-400">
-                    {Number.isFinite(value) ? value.toFixed(1) : '0.0'}/5
+              <div key={index} className="bg-[#111] border border-gray-800 p-5 rounded-2xl mb-4">
+                <div className="flex justify-between text-yellow-400 text-sm font-semibold">
+                  <div className="flex items-center gap-1">
+                    <Star size={14} fill="currentColor" />
+                    {Number(a?.rating ?? 0).toFixed(1)}
+                  </div>
+
+                  <span className="text-xs text-gray-400">
+                    {a?.created_at ? new Date(a.created_at).toLocaleDateString('pt-BR') : ''}
                   </span>
                 </div>
 
-                <div className="w-full bg-gray-800 h-2 rounded-full">
-                  <div
-                    className="bg-yellow-500 h-2 rounded-full"
-                    style={{ width: `${(value / 5) * 100}%` }}
-                  />
+                {a?.review_text && (
+                  <p className="text-sm text-gray-300 mt-3">{a.review_text}</p>
+                )}
+
+                <div className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
+                  <span className="text-green-400 text-[10px]">✔</span>
+                  <span className="text-[10px] text-gray-300">{label}</span>
                 </div>
+
+                {typeof a?.id === 'string' && <ReportReviewButton avaliacaoId={a.id} />}
               </div>
             )
           })}
         </div>
 
-        <div className="mt-6">
-          <h2 className="text-yellow-400 font-semibold mb-4">Relatos das Usuárias</h2>
-
-          {relatos.length === 0 ? (
-            <div className="text-gray-500 text-sm">Ainda não há relatos.</div>
-          ) : (
-            <div className="space-y-4">
-              {relatos.map((a, index) => {
-                const label = getTrustLabel(
-                  typeof a?.id === 'string' ? a.id : String(index),
-                  Boolean(a?.is_anonymous)
-                )
-
-                return (
-                  <div
-                    key={a?.id ?? `relato-${index}`}
-                    className="bg-[#111] border border-gray-800 p-5 rounded-2xl"
-                  >
-                    <div className="flex justify-between items-center text-yellow-400 text-sm font-semibold">
-                      <div className="flex items-center gap-1">
-                        <Star size={14} fill="currentColor" />
-                        {Number.isFinite(Number(a?.rating)) ? Number(a?.rating).toFixed(1) : '0.0'}
-                      </div>
-
-                      <span className="text-xs text-gray-400">
-                        {a?.created_at
-                          ? new Date(a.created_at).toLocaleDateString('pt-BR')
-                          : 'Data indisponível'}
-                      </span>
-                    </div>
-
-                    {a?.review_text && <p className="text-sm text-gray-300 mt-3">{a.review_text}</p>}
-
-                    {Array.isArray(a?.flags_negative) && a.flags_negative.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {a.flags_negative.map((flag: string) => (
-                          <span
-                            key={flag}
-                            className="px-3 py-1 text-xs bg-red-600/20 text-red-400 rounded-full border border-red-600/30"
-                          >
-                            {flag.replaceAll('_', ' ')}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
-                      <span className="text-green-400 text-[10px]">✔</span>
-                      <span className="text-[10px] text-gray-300">{label}</span>
-                    </div>
-
-                    {typeof a?.id === 'string' && <ReportReviewButton avaliacaoId={a.id} />}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
+        {/* BOTÃO INTELIGENTE */}
         <Link
-          href={`/avaliar/${perfil.id ?? id}`}
+          href={jaAvaliei ? `/minhas-avaliacoes` : `/avaliar/${perfil.id ?? id}`}
           className="mt-10 block text-center bg-yellow-500 text-black font-bold py-3 rounded-xl"
         >
-          Avaliar Este Perfil
+          {jaAvaliei ? 'Editar Minha Avaliação' : 'Avaliar Este Perfil'}
         </Link>
       </div>
     </div>
