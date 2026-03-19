@@ -21,6 +21,7 @@ export default function TermosPage() {
         </header>
 
         <div className="space-y-6 text-sm leading-7 text-zinc-200 sm:text-base">
+
           <section>
             <h2 className="text-lg font-semibold text-white">1. Aceitação</h2>
             <p>
@@ -28,6 +29,7 @@ export default function TermosPage() {
               não concordar com qualquer cláusula, não prossiga com o cadastro ou utilização dos recursos.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">2. Elegibilidade e conduta</h2>
             <p>
@@ -36,6 +38,7 @@ export default function TermosPage() {
               terceiros.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">3. Conteúdo gerado por usuárias (UGC)</h2>
             <p>
@@ -45,6 +48,7 @@ export default function TermosPage() {
               privacidade e reputação de terceiros.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">4. Aviso sobre avaliações e reputação</h2>
             <p>
@@ -53,6 +57,7 @@ export default function TermosPage() {
               cautela e análise de contexto.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">5. Sistema de denúncia de conteúdo</h2>
             <p>
@@ -61,6 +66,7 @@ export default function TermosPage() {
               inclusive por terceiros afetados.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">6. Processo de moderação</h2>
             <p>
@@ -69,6 +75,7 @@ export default function TermosPage() {
               adotar medidas adicionais, como suspensão de contas e comunicação às autoridades competentes.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">7. Segurança e responsabilidade da conta</h2>
             <p>
@@ -76,6 +83,7 @@ export default function TermosPage() {
               realizadas em sua conta. Em caso de uso indevido, comunique a equipe de suporte imediatamente.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">8. Limites do serviço e responsabilidade da plataforma</h2>
             <p>
@@ -85,6 +93,7 @@ export default function TermosPage() {
               automaticamente o conteúdo publicado por usuárias.
             </p>
           </section>
+
           <section>
             <h2 className="text-lg font-semibold text-white">9. Alterações e contato</h2>
             <p>
@@ -94,6 +103,28 @@ export default function TermosPage() {
             <p className="mt-2">Contato: contato@confiamais.com.br</p>
             <p>Canal para solicitação de revisão/remoção: suporte@confiamais.com.br</p>
           </section>
+
+          {/* 🔥 NOVA SEÇÃO CRÍTICA */}
+          <section>
+            <h2 className="text-lg font-semibold text-white">10. Natureza da plataforma e isenção de responsabilidade</h2>
+            <p>
+              O Confia+ atua como uma plataforma intermediadora de conteúdo gerado por usuárias, não realizando verificação
+              prévia, validação factual ou auditoria das avaliações publicadas.
+            </p>
+            <p className="mt-2">
+              As informações disponibilizadas refletem exclusivamente a opinião pessoal das usuárias que as publicaram, não
+              constituindo afirmações oficiais, garantias ou recomendações da plataforma.
+            </p>
+            <p className="mt-2">
+              O Confia+ não se responsabiliza pelo conteúdo gerado por usuárias, mas se compromete a agir de forma diligente
+              na análise de denúncias e na remoção de conteúdos que violem este Termo, a legislação aplicável ou direitos de terceiros.
+            </p>
+            <p className="mt-2">
+              Ao utilizar a plataforma, o usuário reconhece que deve avaliar as informações com senso crítico e que decisões
+              baseadas em avaliações são de sua exclusiva responsabilidade.
+            </p>
+          </section>
+
         </div>
       </article>
     </main>
