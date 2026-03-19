@@ -76,7 +76,8 @@ export async function getDetailedReputation(
         seguranca_emocional,
         respeito,
         carater,
-        confianca
+        confianca,
+        rating
       `
     )
     .eq('male_profile_id', maleProfileId)
