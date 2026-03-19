@@ -251,6 +251,10 @@ export default async function Page({
         <p className="text-xs text-gray-500 mb-3">
          Conteúdos gerados por usuárias. Sujeitos à moderação e remoção conforme nossos termos.
         </p>
+
+        <p className="text-xs text-gray-500 mt-8 text-center">
+          As avaliações refletem opiniões pessoais das usuárias e não constituem afirmações de fato verificadas.
+        </p>
         
         {/* BOTÃO INTELIGENTE */}
         <Link
