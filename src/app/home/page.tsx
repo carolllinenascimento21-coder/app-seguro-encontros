@@ -17,6 +17,12 @@ type Perfil = {
   classification: Classification
 }
 
+type Stats = {
+  total_profiles: number
+  total_reviews: number
+  total_alerts: number
+}
+
 const safeNumber = (value: unknown) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -52,22 +58,38 @@ const getReputacaoLabel = (nivel: Classification) => {
   }
 }
 
-async function getHomePerfis(search?: string): Promise<Perfil[]> {
+async function getHomeData(search?: string) {
   const supabase = getSupabaseAdminClient()
 
-  // 1️⃣ buscar resumo
-  const { data: summaryData } = await supabase
-    .from('male_profile_reputation_summary')
-    .select('male_profile_id, average_rating, total_reviews, alert_count, classification')
-    .gt('total_reviews', 0)
-    .order('average_rating', { ascending: false })
-    .limit(50)
+  // 🔥 EXECUTA EM PARALELO (performance)
+  const [summaryRes, statsProfilesRes, statsReviewsRes] = await Promise.all([
 
-  if (!summaryData?.length) return []
+    // PERFIS
+    supabase
+      .from('male_profile_reputation_summary')
+      .select('male_profile_id, average_rating, total_reviews, alert_count, classification')
+      .gt('total_reviews', 0)
+      .order('average_rating', { ascending: false })
+      .limit(50),
+
+    // TOTAL DE PERFIS
+    supabase
+      .from('male_profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true),
+
+    // TOTAL DE AVALIAÇÕES
+    supabase
+      .from('avaliacoes')
+      .select('id', { count: 'exact', head: true })
+      .eq('publica', true),
+  ])
+
+  const summaryData = summaryRes.data || []
 
   const ids = summaryData.map((item) => item.male_profile_id)
 
-  // 2️⃣ buscar perfis com filtro
+  // PERFIS DETALHADOS
   let query = supabase
     .from('male_profiles')
     .select('id, display_name, city, is_active')
@@ -84,8 +106,7 @@ async function getHomePerfis(search?: string): Promise<Perfil[]> {
     (profilesData ?? []).map((p) => [p.id, p])
   )
 
-  // 3️⃣ merge
-  return summaryData
+  const perfis: Perfil[] = summaryData
     .map((summary: any) => {
       const profile = profileMap.get(summary.male_profile_id)
       if (!profile) return null
@@ -101,6 +122,20 @@ async function getHomePerfis(search?: string): Promise<Perfil[]> {
       }
     })
     .filter(Boolean) as Perfil[]
+
+  // 🔥 ALERTAS GLOBAIS (derivado)
+  const totalAlerts = summaryData.reduce(
+    (acc, item: any) => acc + safeNumber(item.alert_count),
+    0
+  )
+
+  const stats: Stats = {
+    total_profiles: statsProfilesRes.count || 0,
+    total_reviews: statsReviewsRes.count || 0,
+    total_alerts: totalAlerts,
+  }
+
+  return { perfis, stats }
 }
 
 export default async function HomePage({
@@ -109,12 +144,12 @@ export default async function HomePage({
   searchParams?: { search?: string }
 }) {
   const search = searchParams?.search || ''
-  const perfis = await getHomePerfis(search)
+  const { perfis, stats } = await getHomeData(search)
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
 
-      {/* Header */}
+      {/* HEADER */}
       <header className="bg-gradient-to-b from-black to-black/95 border-b border-[#D4AF37]/20 sticky top-0 z-40">
         <div className="max-w-md mx-auto px-4 py-6">
 
@@ -128,7 +163,7 @@ export default async function HomePage({
             </h1>
           </div>
 
-          {/* 🔍 BUSCA REAL */}
+          {/* BUSCA REAL */}
           <form>
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -144,9 +179,33 @@ export default async function HomePage({
         </div>
       </header>
 
-      {/* Conteúdo */}
+      {/* CONTEÚDO */}
       <div className="max-w-md mx-auto px-4 py-6">
 
+        {/* 🔥 STATS ENTERPRISE */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+
+          <div className="bg-gradient-to-br from-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-xl p-4 text-center">
+            <Shield className="w-6 h-6 text-[#D4AF37] mx-auto mb-2" />
+            <p className="text-2xl font-bold">{stats.total_profiles}</p>
+            <p className="text-xs text-gray-400">Perfis</p>
+          </div>
+
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+            <Star className="w-6 h-6 text-green-500 mx-auto mb-2" />
+            <p className="text-2xl font-bold">{stats.total_reviews}</p>
+            <p className="text-xs text-gray-400">Avaliações</p>
+          </div>
+
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
+            <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
+            <p className="text-2xl font-bold">{stats.total_alerts}</p>
+            <p className="text-xs text-gray-400">Alertas</p>
+          </div>
+
+        </div>
+
+        {/* LISTA */}
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-[#D4AF37] mb-4">
             {search ? `Resultados para "${search}"` : 'Perfis Recentes'}
