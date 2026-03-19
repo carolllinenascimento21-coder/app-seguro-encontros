@@ -39,6 +39,28 @@ const safeNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+/**
+ * 🔥 NOVO: cálculo de rating fallback (caso não exista no banco)
+ */
+const computeRating = (review: ReviewRow) => {
+  if (typeof review.rating === 'number') {
+    return Number(review.rating.toFixed(1))
+  }
+
+  const values = [
+    review.comportamento,
+    review.seguranca_emocional,
+    review.respeito,
+    review.carater,
+    review.confianca,
+  ].filter((v): v is number => typeof v === 'number')
+
+  if (values.length === 0) return 0
+
+  const avg = values.reduce((acc, v) => acc + v, 0) / values.length
+  return Number(avg.toFixed(1))
+}
+
 export async function getDetailedReputation(
   supabaseAdmin: any,
   maleProfileId: string
@@ -63,12 +85,16 @@ export async function getDetailedReputation(
     return { error: 'Erro ao carregar reputação', status: 500 as const }
   }
 
+  /**
+   * 🔥 CORREÇÃO: adicionamos rating no select
+   */
   const { data: reviews, error: reviewsError } = await supabaseAdmin
     .from('avaliacoes')
     .select(
       `
         id,
         created_at,
+        rating,
         relato,
         notas,
         flags_negative,
@@ -77,7 +103,7 @@ export async function getDetailedReputation(
         respeito,
         carater,
         confianca,
-        rating
+        is_anonymous
       `
     )
     .eq('male_profile_id', maleProfileId)
@@ -154,24 +180,34 @@ export async function getDetailedReputation(
       reputation,
       category_averages: categoryAverages,
       alertas,
+
+      /**
+       * 🔥 RELATOS CORRIGIDOS
+       */
       relatos: reviewRows
         .filter((review) => Boolean(toReviewText(review)))
         .map((review) => ({
           id: review.id,
-          rating: safeNumber(review.rating),
+          rating: computeRating(review),
           review_text: toReviewText(review),
           created_at: review.created_at,
-          flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
+          flags_negative: Array.isArray(review.flags_negative)
+            ? review.flags_negative
+            : [],
           is_anonymous: Boolean(review.is_anonymous),
         })),
+
       reviews: reviewRows.map((review) => ({
         id: review.id,
-        rating: safeNumber(review.rating),
+        rating: computeRating(review),
         review_text: toReviewText(review),
         created_at: review.created_at,
-        flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
+        flags_negative: Array.isArray(review.flags_negative)
+          ? review.flags_negative
+          : [],
         is_anonymous: Boolean(review.is_anonymous),
       })),
+
       average_rating: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
       media: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
       total_reviews: safeNumber(summaryRow?.total_reviews),
