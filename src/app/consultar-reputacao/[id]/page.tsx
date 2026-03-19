@@ -248,6 +248,10 @@ export default async function Page({
           })}
         </div>
 
+        <p className="text-xs text-gray-500 mb-3">
+         Conteúdos gerados por usuárias. Sujeitos à moderação e remoção conforme nossos termos.
+        </p>
+        
         {/* BOTÃO INTELIGENTE */}
         <Link
           href={jaAvaliei ? `/minhas-avaliacoes` : `/avaliar/${perfil.id ?? id}`}
