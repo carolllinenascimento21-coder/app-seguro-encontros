@@ -10,12 +10,13 @@ export const runtime = 'nodejs'
 type Classification = 'perigo' | 'atencao' | 'confiavel' | 'excelente'
 type FraudLevel = 'baixo' | 'medio' | 'alto'
 
-type SummaryRow = {
+type RankingRow = {
   male_profile_id: string
   average_rating: number | null
   total_reviews: number | null
   alert_count: number | null
-  classification: Classification | null
+  classification: string | null
+  weighted_score: number | null
 }
 
 type MaleProfileRow = {
@@ -54,6 +55,19 @@ type Stats = {
 const safeNumber = (value: unknown) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+const toClassification = (value: string | null | undefined): Classification => {
+  if (
+    value === 'perigo' ||
+    value === 'atencao' ||
+    value === 'confiavel' ||
+    value === 'excelente'
+  ) {
+    return value
+  }
+
+  return 'confiavel'
 }
 
 const normalizeText = (value: string | null | undefined) =>
@@ -157,75 +171,35 @@ function computeFraudSignals(reviews: ReviewSignalRow[]) {
   return {
     fraudScore,
     fraudLevel,
-    reviews24h,
-    reviews7d,
-    repeatedTextMax,
   }
 }
 
-function computeWeightedScore(params: {
-  averageRating: number
-  totalReviews: number
-  alertCount: number
-  fraudScore: number
-}) {
-  const baseRating = params.averageRating * 20
-  const reviewConfidenceBonus = Math.min(params.totalReviews, 20) * 0.5
-  const alertPenalty = Math.min(params.alertCount, 10) * 6
-  const fraudPenalty = params.fraudScore * 4
-
-  return Number(
-    (baseRating + reviewConfidenceBonus - alertPenalty - fraudPenalty).toFixed(2)
-  )
+function computeFinalWeightedScore(baseWeightedScore: number, fraudScore: number) {
+  return Number((baseWeightedScore - fraudScore * 4).toFixed(2))
 }
 
 async function getHomeData(search?: string) {
   const supabase = getSupabaseAdminClient()
   const normalizedSearch = search?.trim() ?? ''
 
-  const [
-    statsProfilesRes,
-    statsReviewsRes,
-    allAlertsRes,
-    profileSearchRes,
-    defaultSummaryRes,
-  ] = await Promise.all([
+  const [rankingRes, statsProfilesRes, statsReviewsRes, alertsRes] = await Promise.all([
+    supabase.rpc('get_home_ranking'),
     supabase
       .from('male_profiles')
       .select('id', { count: 'exact', head: true })
       .eq('is_active', true),
-
     supabase
       .from('avaliacoes')
       .select('id', { count: 'exact', head: true })
       .eq('publica', true),
-
     supabase
       .from('male_profile_reputation_summary')
       .select('alert_count'),
-
-    normalizedSearch
-      ? supabase
-          .from('male_profiles')
-          .select('id, display_name, city, is_active')
-          .eq('is_active', true)
-          .ilike('display_name', `%${normalizedSearch}%`)
-          .limit(50)
-      : Promise.resolve({ data: null, error: null } as const),
-
-    !normalizedSearch
-      ? supabase
-          .from('male_profile_reputation_summary')
-          .select(
-            'male_profile_id, average_rating, total_reviews, alert_count, classification'
-          )
-          .gt('total_reviews', 0)
-          .order('average_rating', { ascending: false })
-          .limit(60)
-      : Promise.resolve({ data: null, error: null } as const),
   ])
 
-  const totalAlerts = (allAlertsRes.data ?? []).reduce(
+  const rankingRows = (rankingRes.data ?? []) as RankingRow[]
+
+  const totalAlerts = (alertsRes.data ?? []).reduce(
     (acc, row: any) => acc + safeNumber(row.alert_count),
     0
   )
@@ -236,55 +210,35 @@ async function getHomeData(search?: string) {
     total_alerts: totalAlerts,
   }
 
-  let summaries: SummaryRow[] = []
-  let profiles: MaleProfileRow[] = []
-
-  if (normalizedSearch) {
-    profiles = ((profileSearchRes as any).data ?? []) as MaleProfileRow[]
-
-    if (!profiles.length) {
-      return { perfis: [] as Perfil[], stats }
-    }
-
-    const ids = profiles.map((profile) => profile.id)
-
-    const { data: summaryData } = await supabase
-      .from('male_profile_reputation_summary')
-      .select(
-        'male_profile_id, average_rating, total_reviews, alert_count, classification'
-      )
-      .in('male_profile_id', ids)
-      .gt('total_reviews', 0)
-
-    summaries = (summaryData ?? []) as SummaryRow[]
-  } else {
-    summaries = (defaultSummaryRes.data ?? []) as SummaryRow[]
-
-    if (!summaries.length) {
-      return { perfis: [] as Perfil[], stats }
-    }
-
-    const ids = summaries.map((item) => item.male_profile_id)
-
-    const { data: profilesData } = await supabase
-      .from('male_profiles')
-      .select('id, display_name, city, is_active')
-      .in('id', ids)
-      .eq('is_active', true)
-
-    profiles = (profilesData ?? []) as MaleProfileRow[]
-  }
-
-  if (!summaries.length || !profiles.length) {
+  if (!rankingRows.length) {
     return { perfis: [] as Perfil[], stats }
   }
 
-  const summaryIds = summaries.map((item) => item.male_profile_id)
+  const rankingIds = rankingRows.map((row) => row.male_profile_id)
+
+  let profilesQuery = supabase
+    .from('male_profiles')
+    .select('id, display_name, city, is_active')
+    .in('id', rankingIds)
+    .eq('is_active', true)
+
+  if (normalizedSearch) {
+    profilesQuery = profilesQuery.ilike('display_name', `%${normalizedSearch}%`)
+  }
+
+  const { data: profilesData } = await profilesQuery
+  const profiles = (profilesData ?? []) as MaleProfileRow[]
+
+  if (!profiles.length) {
+    return { perfis: [] as Perfil[], stats }
+  }
+
+  const filteredIds = profiles.map((profile) => profile.id)
 
   const { data: reviewSignalsData } = await supabase
     .from('avaliacoes')
     .select('male_profile_id, created_at, relato, notas')
-    .in('male_profile_id', summaryIds)
+    .in('male_profile_id', filteredIds)
     .eq('publica', true)
     .order('created_at', { ascending: false })
     .limit(500)
@@ -299,35 +253,30 @@ async function getHomeData(search?: string) {
   }
 
   const profileMap = new Map(profiles.map((profile) => [profile.id, profile]))
+  const rankingMap = new Map(rankingRows.map((row) => [row.male_profile_id, row]))
 
-  const perfis = summaries
-    .map((summary) => {
-      const profile = profileMap.get(summary.male_profile_id)
-      if (!profile || profile.is_active === false) return null
+  const perfis = filteredIds
+    .map((id) => {
+      const profile = profileMap.get(id)
+      const ranking = rankingMap.get(id)
 
-      const averageRating = Number(
-        safeNumber(summary.average_rating).toFixed(1)
+      if (!profile || !ranking || profile.is_active === false) return null
+
+      const fraud = computeFraudSignals(reviewMap.get(id) ?? [])
+      const finalWeightedScore = computeFinalWeightedScore(
+        safeNumber(ranking.weighted_score),
+        fraud.fraudScore
       )
-      const totalReviews = safeNumber(summary.total_reviews)
-      const alertCount = safeNumber(summary.alert_count)
-
-      const fraud = computeFraudSignals(reviewMap.get(summary.male_profile_id) ?? [])
-      const weightedScore = computeWeightedScore({
-        averageRating,
-        totalReviews,
-        alertCount,
-        fraudScore: fraud.fraudScore,
-      })
 
       return {
         id: profile.id,
         display_name: profile.display_name?.trim() || 'Perfil sem nome',
         city: profile.city?.trim() || 'Cidade não informada',
-        average_rating: averageRating,
-        total_reviews: totalReviews,
-        alert_count: alertCount,
-        classification: summary.classification ?? 'confiavel',
-        weighted_score: weightedScore,
+        average_rating: Number(safeNumber(ranking.average_rating).toFixed(1)),
+        total_reviews: safeNumber(ranking.total_reviews),
+        alert_count: safeNumber(ranking.alert_count),
+        classification: toClassification(ranking.classification),
+        weighted_score: finalWeightedScore,
         fraud_score: fraud.fraudScore,
         fraud_level: fraud.fraudLevel,
       } satisfies Perfil
@@ -357,7 +306,11 @@ export default async function HomePage({
   const resolvedSearchParams = await Promise.resolve(searchParams)
   const rawSearch = resolvedSearchParams?.search
   const search =
-    typeof rawSearch === 'string' ? rawSearch : Array.isArray(rawSearch) ? rawSearch[0] ?? '' : ''
+    typeof rawSearch === 'string'
+      ? rawSearch
+      : Array.isArray(rawSearch)
+        ? (rawSearch[0] ?? '')
+        : ''
 
   const { perfis, stats } = await getHomeData(search)
 
