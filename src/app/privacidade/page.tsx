@@ -128,8 +128,8 @@ export default function PrivacidadePage() {
               Esta política pode ser atualizada periodicamente. Em caso de alterações relevantes, os usuários
               poderão ser notificados pelos canais oficiais da plataforma.
             </p>
-            <p className="mt-2">Contato: privacidade@confiamais.com.br</p>
-            <p>Canal para revisão/remoção: suporte@confiamais.com.br</p>
+            <p className="mt-2">Contato: privacidade@confiamais.net</p>
+            <p>Canal para revisão/remoção: suporte@confiamais.net</p>
           </section>
 
         </div>
