@@ -100,8 +100,8 @@ export default function TermosPage() {
               Este termo pode ser atualizado periodicamente. Em caso de alterações relevantes, os usuários serão
               notificados pelos canais oficiais da plataforma.
             </p>
-            <p className="mt-2">Contato: contato@confiamais.com.br</p>
-            <p>Canal para solicitação de revisão/remoção: suporte@confiamais.com.br</p>
+            <p className="mt-2">Contato: contato@confiamais.net</p>
+            <p>Canal para solicitação de revisão/remoção: suporte@confiamais.net</p>
           </section>
 
           {/* 🔥 NOVA SEÇÃO CRÍTICA */}
