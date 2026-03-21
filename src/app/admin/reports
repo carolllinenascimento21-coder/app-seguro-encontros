@@ -1,3 +1,6 @@
+import { redirect } from 'next/navigation'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 export default async function AdminReportsPage() {
@@ -40,7 +43,9 @@ export default async function AdminReportsPage() {
             <p className="text-xs text-zinc-500 mt-2">
               {new Date(r.created_at).toLocaleString()}
             </p>
-
+            function isAdminEmail(email?: string | null) {
+            return email === 'contato@confiamais.net'
+            }
             <div className="flex gap-3 mt-4">
               <button className="bg-red-600 px-3 py-1 rounded">
                 Remover avaliação
