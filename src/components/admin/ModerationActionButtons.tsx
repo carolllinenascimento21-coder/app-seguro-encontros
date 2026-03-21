@@ -13,19 +13,19 @@ export default function ModerationActionButtons({
 
   async function handleApprove() {
     try {
-      // Atualiza status
+      // Marca denúncia como resolvida
       await supabase
         .from('reportes_ugc')
         .update({ status: 'resolvido' })
         .eq('id', reportId)
 
-      // Log
+      // Log da ação
       await supabase.from('moderation_actions').insert({
         report_id: reportId,
         action: 'approve',
       })
 
-      location.reload()
+      window.location.reload()
     } catch (err) {
       console.error(err)
       alert('Erro ao aprovar')
@@ -34,25 +34,25 @@ export default function ModerationActionButtons({
 
   async function handleRemove() {
     try {
-      // Remove avaliação
+      // 🔥 NÃO deletar — apenas esconder conteúdo
       await supabase
         .from('avaliacoes')
-        .delete()
+        .update({ relato: '[REMOVIDO PELA MODERAÇÃO]' })
         .eq('id', avaliacaoId)
 
-      // Atualiza denúncia
+      // Marca denúncia como resolvida
       await supabase
         .from('reportes_ugc')
         .update({ status: 'resolvido' })
         .eq('id', reportId)
 
-      // Log
+      // Log da ação
       await supabase.from('moderation_actions').insert({
         report_id: reportId,
         action: 'remove',
       })
 
-      location.reload()
+      window.location.reload()
     } catch (err) {
       console.error(err)
       alert('Erro ao remover')
