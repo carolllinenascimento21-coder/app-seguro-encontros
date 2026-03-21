@@ -1,56 +1,75 @@
 'use client'
 
-import { useState } from 'react'
-
-type Props = {
-  reportId: string
-  avaliacaoId: string
-}
+import { createSupabaseClient } from '@/lib/supabase/browser'
 
 export default function ModerationActionButtons({
   reportId,
   avaliacaoId,
-}: Props) {
-  const [loading, setLoading] = useState(false)
+}: {
+  reportId: string
+  avaliacaoId: string
+}) {
+  const supabase = createSupabaseClient()
 
-  async function handleAction(action: 'approve' | 'remove') {
-    setLoading(true)
-
+  async function handleApprove() {
     try {
-      const res = await fetch('/api/admin/moderation-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportId, avaliacaoId, action }),
+      // Atualiza status
+      await supabase
+        .from('reportes_ugc')
+        .update({ status: 'resolvido' })
+        .eq('id', reportId)
+
+      // Log
+      await supabase.from('moderation_actions').insert({
+        report_id: reportId,
+        action: 'approve',
       })
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        alert(data.message || 'Erro')
-      } else {
-        alert('Ação realizada com sucesso')
-        location.reload()
-      }
+      location.reload()
     } catch (err) {
-      alert('Erro inesperado')
+      console.error(err)
+      alert('Erro ao aprovar')
     }
+  }
 
-    setLoading(false)
+  async function handleRemove() {
+    try {
+      // Remove avaliação
+      await supabase
+        .from('avaliacoes')
+        .delete()
+        .eq('id', avaliacaoId)
+
+      // Atualiza denúncia
+      await supabase
+        .from('reportes_ugc')
+        .update({ status: 'resolvido' })
+        .eq('id', reportId)
+
+      // Log
+      await supabase.from('moderation_actions').insert({
+        report_id: reportId,
+        action: 'remove',
+      })
+
+      location.reload()
+    } catch (err) {
+      console.error(err)
+      alert('Erro ao remover')
+    }
   }
 
   return (
-    <div className="mt-4 flex gap-2">
+    <div className="flex gap-2 mt-3">
       <button
-        onClick={() => handleAction('approve')}
-        disabled={loading}
+        onClick={handleApprove}
         className="bg-green-600 px-3 py-1 rounded"
       >
         Aprovar
       </button>
 
       <button
-        onClick={() => handleAction('remove')}
-        disabled={loading}
+        onClick={handleRemove}
         className="bg-red-600 px-3 py-1 rounded"
       >
         Remover
