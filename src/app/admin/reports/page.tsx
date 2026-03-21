@@ -1,11 +1,30 @@
+import { redirect } from 'next/navigation'
+import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import ModerationActionButtons from '@/components/admin/ModerationActionButtons'
 
 export default async function AdminReportsPage() {
-  const supabase = getSupabaseAdminClient()
+  const supabase = await createServerClient()
 
-  const { data: reports, error } = await supabase
-    .from('reportes_ugc')
+  // 🔐 pega usuário logado
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return redirect('/login')
+  }
+
+  // 🔐 proteção admin REAL
+  if (user.email !== 'privacidade@confiamais.net') {
+    return redirect('/')
+  }
+
+  // 🔥 usa admin client (bypass RLS)
+  const admin = getSupabaseAdminClient()
+
+  const { data: reports, error } = await admin
+    .from('reports_ugc')
     .select(`
       id,
       motivo,
@@ -21,7 +40,11 @@ export default async function AdminReportsPage() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    return <div>Erro: {error.message}</div>
+    return (
+      <div className="p-6 text-red-500">
+        Erro ao carregar denúncias: {error.message}
+      </div>
+    )
   }
 
   return (
