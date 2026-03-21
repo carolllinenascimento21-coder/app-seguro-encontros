@@ -7,13 +7,18 @@ type Props = {
   avaliacaoId: string
 }
 
-export default function ModerationActionButtons({ reportId, avaliacaoId }: Props) {
+export default function ModerationActionButtons({
+  reportId,
+  avaliacaoId,
+}: Props) {
   const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
 
   async function handleAction(action: 'approve' | 'remove') {
-    setLoading(true)
-
     try {
+      setLoading(true)
+      setMessage('')
+
       const res = await fetch('/api/admin/moderation-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -23,35 +28,42 @@ export default function ModerationActionButtons({ reportId, avaliacaoId }: Props
       const data = await res.json()
 
       if (!res.ok) {
-        alert(data.message || 'Erro')
-      } else {
-        alert('Ação realizada com sucesso')
-        location.reload()
+        setMessage(data?.message || 'Erro ao executar ação.')
+        return
       }
+
+      setMessage(data?.message || 'Ação realizada com sucesso.')
+      window.location.reload()
     } catch {
-      alert('Erro inesperado')
+      setMessage('Erro inesperado.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex gap-2 mt-3">
+    <div className="mt-4 flex flex-wrap items-center gap-2">
       <button
-        onClick={() => handleAction('approve')}
+        type="button"
         disabled={loading}
-        className="px-3 py-1 text-xs rounded bg-green-600 hover:bg-green-700"
+        onClick={() => handleAction('approve')}
+        className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-60"
       >
-        Aprovar
+        Aprovar denúncia
       </button>
 
       <button
-        onClick={() => handleAction('remove')}
+        type="button"
         disabled={loading}
-        className="px-3 py-1 text-xs rounded bg-red-600 hover:bg-red-700"
+        onClick={() => handleAction('remove')}
+        className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60"
       >
-        Remover Avaliação
+        Remover avaliação
       </button>
+
+      {message ? (
+        <span className="text-xs text-zinc-400">{message}</span>
+      ) : null}
     </div>
   )
 }
