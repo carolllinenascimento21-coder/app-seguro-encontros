@@ -1,68 +1,60 @@
-import { NextResponse } from 'next/server'
-import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+'use client'
 
-export async function POST(req: Request) {
-  try {
-    const supabase = getSupabaseAdminClient()
-    const body = await req.json()
+import { useState } from 'react'
 
-    const { reportId, avaliacaoId, action } = body
+type Props = {
+  reportId: string
+  avaliacaoId: string
+}
 
-    if (!reportId || !action) {
-      return NextResponse.json(
-        { success: false, message: 'Dados inválidos' },
-        { status: 400 }
-      )
-    }
+export default function ModerationActionButtons({
+  reportId,
+  avaliacaoId,
+}: Props) {
+  const [loading, setLoading] = useState(false)
 
-    // 🔵 APROVAR (só marca como resolvido)
-    if (action === 'approve') {
-      await supabase
-        .from('reportes_ugc')
-        .update({
-          status: 'resolvido',
-          resolved_at: new Date().toISOString()
-        })
-        .eq('id', reportId)
+  async function handleAction(action: 'approve' | 'remove') {
+    setLoading(true)
 
-      return NextResponse.json({ success: true })
-    }
+    try {
+      const res = await fetch('/api/admin/moderation-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportId, avaliacaoId, action }),
+      })
 
-    // 🔴 REMOVER AVALIAÇÃO
-    if (action === 'remove') {
-      if (!avaliacaoId) {
-        return NextResponse.json(
-          { success: false, message: 'Avaliação inválida' },
-          { status: 400 }
-        )
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.message || 'Erro')
+      } else {
+        alert('Ação realizada com sucesso')
+        location.reload()
       }
-
-      // deleta avaliação
-      await supabase
-        .from('avaliacoes')
-        .delete()
-        .eq('id', avaliacaoId)
-
-      // marca denúncia como resolvida
-      await supabase
-        .from('reportes_ugc')
-        .update({
-          status: 'resolvido',
-          resolved_at: new Date().toISOString()
-        })
-        .eq('id', reportId)
-
-      return NextResponse.json({ success: true })
+    } catch (err) {
+      alert('Erro inesperado')
     }
 
-    return NextResponse.json(
-      { success: false, message: 'Ação inválida' },
-      { status: 400 }
-    )
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, message: error.message },
-      { status: 500 }
-    )
+    setLoading(false)
   }
+
+  return (
+    <div className="mt-4 flex gap-2">
+      <button
+        onClick={() => handleAction('approve')}
+        disabled={loading}
+        className="bg-green-600 px-3 py-1 rounded"
+      >
+        Aprovar
+      </button>
+
+      <button
+        onClick={() => handleAction('remove')}
+        disabled={loading}
+        className="bg-red-600 px-3 py-1 rounded"
+      >
+        Remover
+      </button>
+    </div>
+  )
 }
