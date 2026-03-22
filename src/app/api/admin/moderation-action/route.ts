@@ -1,32 +1,33 @@
 import { createServerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 const moderatorIds = (process.env.MODERATOR_IDS || '').split(',')
 
 export async function POST(req: Request) {
-  const supabase = createServerClient({ cookies })
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // 🚫 BLOQUEIO TOTAL se não logado
-  if (!user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
-  }
-
-  // 🚫 BLOQUEIO se não for moderador
-  if (!moderatorIds.includes(user.id)) {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
-  }
-  import { NextResponse } from 'next/server'
-  import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
-
-export async function POST(req: Request) {
   try {
-    const supabase = getSupabaseAdminClient()
-    const body = await req.json()
+    // 🔐 autenticação do usuário
+    const supabaseAuth = createServerClient({ cookies })
 
+    const {
+      data: { user },
+    } = await supabaseAuth.auth.getUser()
+
+    // 🚫 não logado
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // 🚫 não é moderador
+    if (!moderatorIds.includes(user.id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // 🔥 client admin (apenas depois da validação)
+    const supabase = getSupabaseAdminClient()
+
+    const body = await req.json()
     const { reportId, avaliacaoId, action } = body
 
     if (!reportId || !action) {
@@ -36,20 +37,20 @@ export async function POST(req: Request) {
       )
     }
 
-    // 🔵 APROVAR (só marca como resolvido)
+    // ✅ APROVAR
     if (action === 'approve') {
       await supabase
         .from('reportes_ugc')
         .update({
           status: 'resolvido',
-          resolved_at: new Date().toISOString()
+          resolved_at: new Date().toISOString(),
         })
         .eq('id', reportId)
 
       return NextResponse.json({ success: true })
     }
 
-    // 🔴 REMOVER AVALIAÇÃO
+    // 🗑️ REMOVER
     if (action === 'remove') {
       if (!avaliacaoId) {
         return NextResponse.json(
@@ -58,18 +59,13 @@ export async function POST(req: Request) {
         )
       }
 
-      // deleta avaliação
-      await supabase
-        .from('avaliacoes')
-        .delete()
-        .eq('id', avaliacaoId)
+      await supabase.from('avaliacoes').delete().eq('id', avaliacaoId)
 
-      // marca denúncia como resolvida
       await supabase
         .from('reportes_ugc')
         .update({
           status: 'resolvido',
-          resolved_at: new Date().toISOString()
+          resolved_at: new Date().toISOString(),
         })
         .eq('id', reportId)
 
@@ -86,5 +82,4 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
-}
 }
