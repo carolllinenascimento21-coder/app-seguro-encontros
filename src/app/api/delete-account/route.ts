@@ -166,7 +166,7 @@ export async function POST() {
     updateError = retryError ?? null
   }
 
-  
+console.log('USER ID DELETE:', userId)  
  
 const { error: deleteAuthError } =
   await supabaseAdmin.auth.admin.deleteUser(userId)
