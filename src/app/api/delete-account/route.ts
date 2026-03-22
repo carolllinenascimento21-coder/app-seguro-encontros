@@ -167,7 +167,12 @@ export async function POST() {
   }
 
 console.log('USER ID DELETE:', userId)  
- 
+
+const { data: userCheck } =
+  await supabaseAdmin.auth.admin.getUserById(userId)
+
+console.log('USER EXISTS:', userCheck)
+  
 const { error: deleteAuthError } =
   await supabaseAdmin.auth.admin.deleteUser(userId)
 
