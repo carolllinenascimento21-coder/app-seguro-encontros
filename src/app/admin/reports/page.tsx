@@ -6,141 +6,111 @@ import { createSupabaseClient } from '@/lib/supabase/browser'
 type Report = {
   id: string
   reason: string
-  status: string
   content: string
   created_at: string
-  male_profiles: {
-    nome: string | null
-    city: string | null
-  } | null
+  male_profile_id: string
+}
+
+type MaleProfile = {
+  id: string
+  nome: string | null
+  city: string | null
 }
 
 export default function ReportsPage() {
   const supabase = createSupabaseClient()
 
-  const [reports, setReports] = useState<Report[]>([])
+  const [reports, setReports] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-
-  async function fetchReports() {
-    setLoading(true)
-
-    const { data, error } = await supabase
-      .from('reports')
-      .select(`
-        id,
-        reason,
-        status,
-        content,
-        created_at,
-        male_profiles (
-          nome,
-          city
-        )
-      `)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Erro ao buscar denúncias:', error)
-    } else {
-      setReports(data || [])
-    }
-
-    setLoading(false)
-  }
 
   useEffect(() => {
     fetchReports()
   }, [])
 
-  async function handleAction(reportId: string, action: 'approve' | 'remove') {
-    try {
-      // 1️⃣ registra ação
-      await supabase.from('moderation_actions').insert({
-        report_id: reportId,
-        action,
-        created_at: new Date().toISOString(),
-      })
+  async function fetchReports() {
+    setLoading(true)
 
-      // 2️⃣ atualiza status
-      await supabase
-        .from('reports')
-        .update({ status: action === 'approve' ? 'aprovado' : 'removido' })
-        .eq('id', reportId)
+    // 🔹 1. Buscar denúncias
+    const { data: reportsData, error } = await supabase
+      .from('reports')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-      // 3️⃣ NÃO remove da tela — só recarrega
-      fetchReports()
-    } catch (err) {
-      console.error('Erro na ação:', err)
+    if (error) {
+      console.error('Erro ao buscar denúncias:', error)
+      setLoading(false)
+      return
     }
+
+    if (!reportsData || reportsData.length === 0) {
+      setReports([])
+      setLoading(false)
+      return
+    }
+
+    // 🔹 2. Buscar perfis relacionados
+    const ids = reportsData.map(r => r.male_profile_id)
+
+    const { data: profiles } = await supabase
+      .from('male_profiles')
+      .select('id, nome, city')
+      .in('id', ids)
+
+    // 🔹 3. Mapear perfis por ID
+    const profilesMap: Record<string, MaleProfile> = {}
+
+    profiles?.forEach(p => {
+      profilesMap[p.id] = p
+    })
+
+    // 🔹 4. Combinar dados
+    const combined = reportsData.map(r => ({
+      ...r,
+      profile: profilesMap[r.male_profile_id] || null
+    }))
+
+    setReports(combined)
+    setLoading(false)
   }
 
-  if (loading) {
-    return <p style={{ color: 'white' }}>Carregando...</p>
+  async function handleAction(reportId: string, action: 'approve' | 'remove') {
+    await supabase.from('moderation_actions').insert({
+      report_id: reportId,
+      action,
+      created_at: new Date().toISOString()
+    })
+
+    fetchReports()
+  }
+
+  if (loading) return <p>Carregando...</p>
+
+  if (reports.length === 0) {
+    return <p>Nenhuma denúncia encontrada</p>
   }
 
   return (
-    <div style={{ padding: 20, background: '#000', minHeight: '100vh' }}>
-      <h1 style={{ color: 'yellow' }}>Painel de Denúncias</h1>
+    <div>
+      <h1>Painel de Denúncias</h1>
 
-      {reports.length === 0 && (
-        <p style={{ color: 'white' }}>Nenhuma denúncia encontrada</p>
-      )}
-
-      {reports.map((report) => (
-        <div
-          key={report.id}
-          style={{
-            background: '#111',
-            borderRadius: 10,
-            padding: 20,
-            marginTop: 20,
-            color: 'white',
-          }}
-        >
-          {/* 👇 NOME + CIDADE CORRETOS */}
+      {reports.map(report => (
+        <div key={report.id} style={{ border: '1px solid #333', padding: 16, marginBottom: 16 }}>
+          
           <h3>
-            {report.male_profiles?.nome || 'Sem nome'} -{' '}
-            {report.male_profiles?.city || 'Sem cidade'}
+            {report.profile?.nome || 'Sem nome'} — {report.profile?.city || 'Sem cidade'}
           </h3>
 
-          <p>
-            <strong>Motivo:</strong> {report.reason}
-          </p>
-
-          <p>
-            <strong>Status:</strong> {report.status}
-          </p>
-
+          <p><strong>Motivo:</strong> {report.reason}</p>
           <p>{report.content}</p>
 
-          <div style={{ marginTop: 10 }}>
-            <button
-              onClick={() => handleAction(report.id, 'approve')}
-              style={{
-                background: 'green',
-                color: 'white',
-                padding: '8px 12px',
-                marginRight: 10,
-                border: 'none',
-                borderRadius: 5,
-              }}
-            >
-              Aprovar
-            </button>
+          <button onClick={() => handleAction(report.id, 'approve')}>
+            Aprovar
+          </button>
 
-            <button
-              onClick={() => handleAction(report.id, 'remove')}
-              style={{
-                background: 'red',
-                color: 'white',
-                padding: '8px 12px',
-                border: 'none',
-                borderRadius: 5,
-              }}
-            >
-              Remover
-            </button>
-          </div>
+          <button onClick={() => handleAction(report.id, 'remove')}>
+            Remover
+          </button>
+
         </div>
       ))}
     </div>
