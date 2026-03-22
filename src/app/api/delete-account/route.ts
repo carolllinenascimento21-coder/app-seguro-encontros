@@ -113,12 +113,18 @@ export async function POST() {
       }
     }
 
-    await Promise.all([
-      safeDeleteByUserId(supabaseAdmin, 'emergency_contacts', userId),
-      safeDeleteByUserId(supabaseAdmin, 'contatos_emergencia', userId),
-      safeDeleteByUserId(supabaseAdmin, 'avaliacoes', userId),
-      safeDeleteByUserId(supabaseAdmin, 'reportes_ugc', userId),
-    ])
+    // 🔴 DELETE RELACIONAMENTOS (CORRIGIDO)
+  await Promise.all([
+  safeDeleteByUserId(supabaseAdmin, 'emergency_contacts', userId),
+  safeDeleteByUserId(supabaseAdmin, 'contatos_emergencia', userId),
+
+  // 🔴 IMPORTANTE: tenta múltiplos campos possíveis (não quebra se não existir)
+  supabaseAdmin.from('avaliacoes').delete().eq('user_id', userId),
+  supabaseAdmin.from('avaliacoes').delete().eq('author_id', userId),
+  supabaseAdmin.from('avaliacoes').delete().eq('user_id_autora', userId),
+
+  safeDeleteByUserId(supabaseAdmin, 'reportes_ugc', userId),
+  ])
 
     // 1) Tenta deletar o profile de verdade
     const { error: deleteProfileError } = await supabaseAdmin
