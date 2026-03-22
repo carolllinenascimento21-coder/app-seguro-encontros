@@ -1,5 +1,26 @@
-import { NextResponse } from 'next/server'
-import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import { createServerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+
+const moderatorIds = (process.env.MODERATOR_IDS || '').split(',')
+
+export async function POST(req: Request) {
+  const supabase = createServerClient({ cookies })
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  // 🚫 BLOQUEIO TOTAL se não logado
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+  }
+
+  // 🚫 BLOQUEIO se não for moderador
+  if (!moderatorIds.includes(user.id)) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
+  }
+  import { NextResponse } from 'next/server'
+  import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
 export async function POST(req: Request) {
   try {
@@ -65,4 +86,5 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
+}
 }
