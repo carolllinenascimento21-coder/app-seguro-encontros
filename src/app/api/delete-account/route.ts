@@ -5,22 +5,23 @@ import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { isMissingColumnError } from '@/lib/profile-utils'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
+// 🔴 DELETE genérico por user_id (não quebra se tabela não tiver coluna)
 const safeDeleteByUserId = async (
   supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
   tableName: string,
   userId: string
 ) => {
-  if (!supabaseAdmin) {
-    throw new Error('Supabase admin não configurado')
-  }
+  try {
+    const { error } = await supabaseAdmin
+      .from(tableName)
+      .delete()
+      .eq('user_id', userId)
 
-  const { error } = await supabaseAdmin
-    .from(tableName)
-    .delete()
-    .eq('user_id', userId)
-
-  if (error) {
-    console.warn(`Delete warning on ${tableName}:`, error.message)
+    if (error) {
+      console.warn(`Delete warning on ${tableName}:`, error.message)
+    }
+  } catch (err) {
+    console.warn(`Delete crash on ${tableName}:`, err)
   }
 }
 
@@ -50,14 +51,8 @@ export async function POST() {
       throw error
     }
 
-    if (!supabaseAdmin) {
-      return NextResponse.json(
-        { error: 'Supabase admin não configurado' },
-        { status: 503 }
-      )
-    }
-
     const cookieStore = await cookies()
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -89,6 +84,7 @@ export async function POST() {
     const userId = session.user.id
     console.log('DELETE ACCOUNT USER ID:', userId)
 
+    // 🔴 Buscar profile
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('selfie_url')
@@ -103,43 +99,44 @@ export async function POST() {
       )
     }
 
+    // 🔴 Remover imagem
     if (profile?.selfie_url) {
       try {
         await supabaseAdmin.storage
           .from('selfie-verifications')
           .remove([profile.selfie_url])
-      } catch (storageError) {
-        console.warn('STORAGE DELETE WARNING:', storageError)
+      } catch (err) {
+        console.warn('STORAGE DELETE WARNING:', err)
       }
     }
 
-    // 🔴 DELETE RELACIONAMENTOS 
-  await Promise.all([
-  safeDeleteByUserId(supabaseAdmin, 'emergency_contacts', userId),
-  safeDeleteByUserId(supabaseAdmin, 'contatos_emergencia', userId),
+    // 🔴 DELETE RELACIONAMENTOS (robusto)
+    await Promise.all([
+      safeDeleteByUserId(supabaseAdmin, 'emergency_contacts', userId),
+      safeDeleteByUserId(supabaseAdmin, 'contatos_emergencia', userId),
+      safeDeleteByUserId(supabaseAdmin, 'reportes_ugc', userId),
 
-  // 🔴 IMPORTANTE: tenta múltiplos campos possíveis (não quebra se não existir)
-  supabaseAdmin.from('avaliacoes').delete().eq('user_id', userId),
-  supabaseAdmin.from('avaliacoes').delete().eq('author_id', userId),
-  supabaseAdmin.from('avaliacoes').delete().eq('user_id_autora', userId),
+      // 🔴 Avaliações (múltiplos formatos possíveis)
+      supabaseAdmin.from('avaliacoes').delete().eq('user_id', userId),
+      supabaseAdmin.from('avaliacoes').delete().eq('author_id', userId),
+      supabaseAdmin.from('avaliacoes').delete().eq('user_id_autora', userId),
+    ])
 
-  safeDeleteByUserId(supabaseAdmin, 'reportes_ugc', userId),
-  ])
+    // 🔴 TENTATIVA DE DELETE DO PROFILE
+    console.log('DELETANDO PROFILE ID:', userId)
 
-    // 1) Tenta deletar o profile de verdade
     const { error: deleteProfileError } = await supabaseAdmin
       .from('profiles')
       .delete()
       .eq('id', userId)
 
-    // 2) Se não conseguir, faz fallback para anonimização
     if (deleteProfileError) {
-      console.warn('PROFILE DELETE WARNING:', deleteProfileError.message)
+      console.warn('PROFILE DELETE FAILED → fallback para anonimização')
 
+      // 🔴 FALLBACK SE DER ERRO (foreign key etc)
       const basePayload = {
         nome: null,
         email: null,
-        gender: 'female',
         selfie_url: null,
         deleted_at: new Date().toISOString(),
         selfie_verified: false,
@@ -147,6 +144,7 @@ export async function POST() {
       }
 
       const optionalFields = new Set(['telefone', 'is_active'])
+
       const buildPayload = () => ({
         ...basePayload,
         ...(optionalFields.has('telefone') ? { telefone: null } : {}),
@@ -179,32 +177,23 @@ export async function POST() {
         console.error('PROFILE UPDATE ERROR:', updateError)
         return NextResponse.json(
           {
-            error: 'Falha ao remover/anonymizar perfil',
+            error: 'Falha ao remover perfil',
             details: updateError.message,
           },
           { status: 500 }
         )
       }
-    }
-
-    // 3) Por último, apaga o usuário do Auth
-    const { data: userCheck, error: userCheckError } =
-      await supabaseAdmin.auth.admin.getUserById(userId)
-
-    if (userCheckError) {
-      console.error('USER CHECK ERROR:', userCheckError)
     } else {
-      console.log('USER EXISTS BEFORE DELETE:', !!userCheck?.user)
+      console.log('PROFILE DELETE OK')
     }
-    
-    console.log('DELETANDO PROFILE ID:', userId)
-    console.log('PROFILE DELETE OK')
-    
+
+    // 🔴 DELETE AUTH (FINAL)
     const { error: deleteAuthError } =
       await supabaseAdmin.auth.admin.deleteUser(userId)
 
     if (deleteAuthError) {
       console.error('DELETE USER ERROR:', deleteAuthError)
+
       return NextResponse.json(
         {
           error: 'Falha ao excluir conta completamente',
