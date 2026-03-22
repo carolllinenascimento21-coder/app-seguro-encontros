@@ -166,12 +166,7 @@ export async function POST() {
     updateError = retryError ?? null
   }
 
-  if (updateError) {
-    return NextResponse.json(
-      { error: 'Failed to anonymize profile.' },
-      { status: 500 }
-    )
-  }
+  
  
 const { error: deleteAuthError } =
   await supabaseAdmin.auth.admin.deleteUser(userId)
@@ -188,6 +183,11 @@ if (deleteAuthError) {
   )
 }
 
-
+if (updateError) {
+    return NextResponse.json(
+      { error: 'Failed to anonymize profile.' },
+      { status: 500 }
+    )
+  }
   return NextResponse.json({ success: true })
 }
