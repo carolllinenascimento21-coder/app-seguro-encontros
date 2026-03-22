@@ -175,6 +175,14 @@ export async function POST() {
   // 🔴 EXCLUSÃO REAL DO USUÁRIO (OBRIGATÓRIO PLAY STORE)
 const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
+  // 🔴 GARANTIA DE DELETE AUTH
+const { error: deleteAuthError } =
+  await supabaseAdmin.auth.admin.deleteUser(userId)
+
+if (deleteAuthError) {
+  console.error('DELETE USER ERROR:', deleteAuthError)
+}
+  
 if (deleteAuthError) {
   console.error('Erro ao deletar auth user:', deleteAuthError)
   return NextResponse.json(
