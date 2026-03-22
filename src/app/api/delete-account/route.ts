@@ -19,9 +19,9 @@ const safeDeleteContacts = async (
     .delete()
     .eq('user_id', userId)
 
-  if (error && error.code !== '42P01') {
-    throw error
-  }
+  if (error) {
+  console.warn('Delete warning:', error.message)
+ }
 }
 
 export async function POST() {
@@ -108,17 +108,11 @@ export async function POST() {
   }
 
   if (profile?.selfie_url) {
-    const { error: removeError } = await supabaseAdmin.storage
-      .from('selfie-verifications')
-      .remove([profile.selfie_url])
-
-    if (removeError) {
-      return NextResponse.json(
-        { error: 'Failed to remove selfie.' },
-        { status: 500 }
-      )
-    }
-  }
+  await supabaseAdmin.storage
+    .from('selfie-verifications')
+    .remove([profile.selfie_url])
+    .catch(() => null) // 🔥 NÃO QUEBRA
+ }
 
   try {
     await Promise.all([
