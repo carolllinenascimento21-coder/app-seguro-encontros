@@ -113,7 +113,7 @@ export async function POST() {
       }
     }
 
-    // 🔴 DELETE RELACIONAMENTOS (CORRIGIDO)
+    // 🔴 DELETE RELACIONAMENTOS 
   await Promise.all([
   safeDeleteByUserId(supabaseAdmin, 'emergency_contacts', userId),
   safeDeleteByUserId(supabaseAdmin, 'contatos_emergencia', userId),
@@ -196,7 +196,10 @@ export async function POST() {
     } else {
       console.log('USER EXISTS BEFORE DELETE:', !!userCheck?.user)
     }
-
+    
+    console.log('DELETANDO PROFILE ID:', userId)
+    console.log('PROFILE DELETE OK')
+    
     const { error: deleteAuthError } =
       await supabaseAdmin.auth.admin.deleteUser(userId)
 
