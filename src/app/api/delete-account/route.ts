@@ -181,3 +181,13 @@ export async function POST() {
 
   return NextResponse.json({ success: true })
 }
+// 🔴 EXCLUSÃO REAL DO USUÁRIO (OBRIGATÓRIO PLAY STORE)
+const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+
+if (deleteAuthError) {
+  console.error('Erro ao deletar auth user:', deleteAuthError)
+  return NextResponse.json(
+    { error: 'Falha ao excluir conta completamente' },
+    { status: 500 }
+  )
+}
