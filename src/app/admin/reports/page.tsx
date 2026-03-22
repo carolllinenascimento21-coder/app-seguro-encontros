@@ -176,7 +176,7 @@ export default async function AdminReportsPage() {
     if (maleProfileIds.length > 0) {
       const { data: profilesData, error: profilesError } = await supabaseAdmin
         .from('male_profiles')
-        .select('id, name, city, display_name')
+        .select('id, nome, city, display_name')
         .in('id', maleProfileIds)
 
       if (profilesError) {
