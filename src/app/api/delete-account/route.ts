@@ -28,14 +28,14 @@ export async function POST() {
   let supabaseEnv
   try {
     supabaseEnv = getSupabasePublicEnv('api/delete-account')
-  } catch (error) {
-    const envError = getMissingSupabaseEnvDetails(error)
-    if (envError) {
-      console.error(envError.message)
-      return NextResponse.json({ error: envError.message }, { status: envError.status })
-    }
-    throw error
-  }
+  } catch (error: any) {
+  console.error('DELETE ACCOUNT ERROR FULL:', error)
+
+  return NextResponse.json(
+    { success: false, message: error.message, full: error },
+    { status: 500 }
+  )
+}
 
   if (!supabaseEnv) {
     return NextResponse.json(
