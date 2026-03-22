@@ -1,67 +1,86 @@
-import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
-import ModerationActionButtons from '@/components/admin/ModerationActionButtons'
+'use client'
 
-export default async function AdminReportsPage() {
-  const supabase = getSupabaseAdminClient()
+import { useEffect, useState } from 'react'
+import { createSupabaseClient } from '@/lib/supabase/browser'
 
-  const { data: reports, error } = await supabase
-    .from('reportes_ugc')
-    .select(`
-      id,
-      motivo,
-      status,
-      created_at,
-      avaliacao_id,
-      avaliacoes (
+export default function ReportsPage() {
+  const supabase = createSupabaseClient()
+  const [reports, setReports] = useState<any[]>([])
+
+  async function loadReports() {
+    const { data, error } = await supabase
+      .from('reports')
+      .select(`
         id,
-        relato
-      )
-    `)
-    .order('created_at', { ascending: false })
+        reason,
+        status,
+        created_at,
+        content,
+        male_profile_id,
+        male_profile_aliases (
+          handle,
+          platform
+        )
+      `)
+      .order('created_at', { ascending: false })
 
-  if (error) {
-    return (
-      <div className="text-red-500 p-4">
-        Erro ao carregar denúncias: {error.message}
-      </div>
-    )
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setReports(data || [])
+  }
+
+  useEffect(() => {
+    loadReports()
+  }, [])
+
+  async function handleAction(id: string, action: 'approve' | 'remove') {
+    await supabase.from('moderation_actions').insert({
+      report_id: id,
+      action,
+      created_at: new Date().toISOString(),
+    })
+
+    await supabase
+      .from('reports')
+      .update({ status: action === 'approve' ? 'approved' : 'removed' })
+      .eq('id', id)
+
+    loadReports()
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-6">
-      <h1 className="text-2xl font-bold mb-6 text-[#D4AF37]">
-        Painel de Denúncias
-      </h1>
+    <div style={{ padding: 20 }}>
+      <h1>Painel de Denúncias</h1>
 
-      <div className="space-y-4">
-        {reports?.map((report: any) => (
-          <div
-            key={report.id}
-            className="bg-zinc-900 p-4 rounded-xl border border-zinc-800"
-          >
-            <p className="text-red-400 font-semibold">
-              Motivo: {report.motivo}
-            </p>
+      {reports.map((report) => (
+        <div key={report.id} style={{
+          border: '1px solid #333',
+          borderRadius: 10,
+          padding: 15,
+          marginBottom: 15
+        }}>
+          <h3>
+            {report.male_profile_aliases?.handle || 'Sem nome'}
+          </h3>
 
-            <p className="text-xs text-zinc-400">
-              Status: {report.status || 'pendente'}
-            </p>
+          <p><b>Plataforma:</b> {report.male_profile_aliases?.platform || '-'}</p>
 
-            <p className="text-xs text-zinc-500">
-              {new Date(report.created_at).toLocaleString()}
-            </p>
+          <p><b>Motivo:</b> {report.reason}</p>
+          <p><b>Status:</b> {report.status}</p>
+          <p>{report.content}</p>
 
-            <div className="mt-3 text-sm italic text-zinc-300">
-              {report.avaliacoes?.relato || 'Avaliação removida'}
-            </div>
+          <button onClick={() => handleAction(report.id, 'approve')}>
+            Aprovar
+          </button>
 
-            <ModerationActionButtons
-              reportId={report.id}
-              avaliacaoId={report.avaliacao_id}
-            />
-          </div>
-        ))}
-      </div>
-    </main>
+          <button onClick={() => handleAction(report.id, 'remove')}>
+            Remover
+          </button>
+        </div>
+      ))}
+    </div>
   )
 }
