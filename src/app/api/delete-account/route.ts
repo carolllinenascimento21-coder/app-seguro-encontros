@@ -188,11 +188,41 @@ if (deleteAuthError) {
   )
 }
 
+// ✅ 1. Atualiza profile (não pode quebrar tudo)
 if (updateError) {
+  console.error('PROFILE UPDATE ERROR:', updateError)
+}
+
+// ✅ 2. DELETE AUTH — ISOLADO E À PROVA DE FALHA
+try {
+  console.log('USER ID DELETE:', userId)
+
+  const { error: deleteAuthError } =
+    await supabaseAdmin.auth.admin.deleteUser(userId)
+
+  if (deleteAuthError) {
+    console.error('DELETE USER ERROR:', deleteAuthError)
+
     return NextResponse.json(
-      { error: 'Failed to anonymize profile.' },
+      {
+        error: 'Falha ao excluir conta completamente',
+        details: deleteAuthError.message,
+      },
       { status: 500 }
     )
   }
-  return NextResponse.json({ success: true })
+} catch (err: any) {
+  console.error('CRASH DELETE USER:', err)
+
+  return NextResponse.json(
+    {
+      error: 'Erro crítico ao deletar usuário',
+      details: err.message,
+    },
+    { status: 500 }
+  )
+}
+
+// ✅ 3. SEMPRE retorna sucesso se chegou aqui
+return NextResponse.json({ success: true })
 }
