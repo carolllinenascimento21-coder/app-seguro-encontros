@@ -165,12 +165,24 @@ export default function PerfilPage() {
     router.replace('/login')
   }
 
-  const deleteAccount = async () => {
-    if (!confirm('Tem certeza que deseja apagar sua conta?')) return
+  async function handleDeleteAccount() {
+    const confirmDelete = confirm(
+      'Tem certeza que deseja desativar sua conta?\n\nAo solicitar a exclusão, sua conta será desativada e analisada pela nossa equipe.'
+    )
+
+    if (!confirmDelete) return
+
     setDeleting(true)
-    await fetch('/api/delete-account', { method: 'POST' })
-    await supabase.auth.signOut()
-    router.replace('/login')
+    try {
+      await fetch('/api/delete-account', {
+        method: 'POST',
+      })
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.error(err)
+    }
+
+    window.location.href = '/login'
   }
 
   const saveEdit = async () => {
@@ -308,12 +320,16 @@ export default function PerfilPage() {
           <LogOut size={16} /> Sair
         </button>
 
+        <p className="text-sm text-gray-400">
+          Ao solicitar a exclusão, sua conta será desativada e analisada pela nossa equipe.
+        </p>
+
         <button
-          onClick={deleteAccount}
+          onClick={handleDeleteAccount}
           disabled={deleting}
           className="w-full border border-yellow-500 py-2 rounded-lg"
         >
-          {deleting ? 'Apagando...' : 'Apagar conta'}
+          Excluir conta
         </button>
 
         {isEditOpen && (
