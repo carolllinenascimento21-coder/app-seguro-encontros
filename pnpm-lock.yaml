@@ -167,6 +167,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.0.1(react@19.0.1))(react@19.0.1)
+      nodemailer:
+        specifier: ^8.0.3
+        version: 8.0.3
       openai:
         specifier: ^4.72.1
         version: 4.104.0(ws@8.19.0)(zod@3.25.76)
@@ -2738,6 +2741,10 @@ packages:
 
   node-releases@2.0.36:
     resolution: {integrity: sha512-TdC8FSgHz8Mwtw9g5L4gR/Sh9XhSP/0DEkQxfEFXOpiul5IiHgHan2VhYYb6agDSfp4KuvltmGApc8HMgUrIkA==}
+
+  nodemailer@8.0.3:
+    resolution: {integrity: sha512-JQNBqvK+bj3NMhUFR3wmCl3SYcOeMotDiwDBvIoCuQdF0PvlIY0BH+FJ2CG7u4cXKPChplE78oowlH/Otsc4ZQ==}
+    engines: {node: '>=6.0.0'}
 
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
@@ -5878,6 +5885,8 @@ snapshots:
       whatwg-url: 5.0.0
 
   node-releases@2.0.36: {}
+
+  nodemailer@8.0.3: {}
 
   object-assign@4.1.1: {}
 
