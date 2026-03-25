@@ -1,10 +1,14 @@
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-const getSupabaseServerEnv = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ??
+    process.env.SUPABASE_URL ??
+    process.env.SUPABASE_PROJECT_URL
 
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.SUPABASE_ANON_KEY
 
   if (!url || !anonKey) {
     throw new Error(
