@@ -27,13 +27,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const {
     data: { session },
   } = await supabase.auth.getSession()
+  const accessToken = session?.access_token
+
+  if (!accessToken) {
+    throw new ApiError('Sessão inválida ou expirada. Faça login novamente.', 401)
+  }
 
   const headers = new Headers(init?.headers)
   headers.set('Content-Type', 'application/json')
-
-  if (session?.access_token) {
-    headers.set('Authorization', `Bearer ${session.access_token}`)
-  }
+  headers.set('Authorization', `Bearer ${accessToken}`)
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
