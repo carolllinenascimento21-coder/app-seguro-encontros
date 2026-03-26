@@ -1,5 +1,5 @@
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 
 const getSupabaseServerEnv = () => {
   const url =
@@ -22,8 +22,31 @@ const getSupabaseServerEnv = () => {
 
 export async function createServerClient() {
   const cookieStore = await cookies()
+  const headerStore = headers()
   const { url, anonKey } = getSupabaseServerEnv()
 
+  const authHeader = headerStore.get('authorization')
+
+  // 🔴 MOBILE (Bearer token)
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '')
+
+    return createSupabaseServerClient(url, anonKey, {
+      cookies: {
+        getAll() {
+          return []
+        },
+        setAll() {},
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    })
+  }
+
+  // 🟢 WEB (cookies - mantém tudo igual)
   return createSupabaseServerClient(url, anonKey, {
     cookies: {
       getAll() {
