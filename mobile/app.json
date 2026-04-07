@@ -13,7 +13,7 @@
       "bundleIdentifier": "com.confiamais.app"
     },
     "android": {
-      "package": "net.confiamais.plus"
+      "package": "net.confiamais.mobile"
     },
     "web": {
       "bundler": "metro"
