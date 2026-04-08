@@ -127,6 +127,33 @@ export default function FunilPage() {
             Informação não tira sua liberdade — devolve o controle.
           </p>
         </div>
+
+        <div className="mt-10 text-center text-xs text-gray-500 space-x-4 opacity-70">
+          <a
+            href="https://www.confiamais.net/termos?next=%2Fsignup"
+            className="hover:text-gray-300 transition"
+          >
+            Termos
+          </a>
+
+          <span>•</span>
+
+          <a
+            href="https://www.confiamais.net/privacidade?next=%2Fsignup"
+            className="hover:text-gray-300 transition"
+          >
+            Privacidade
+          </a>
+
+          <span>•</span>
+
+          <a
+            href="https://www.confiamais.net/suporte"
+            className="hover:text-gray-300 transition"
+          >
+            Suporte
+          </a>
+        </div>
       </div>
     </div>
   )
