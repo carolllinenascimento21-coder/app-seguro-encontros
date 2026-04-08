@@ -17,6 +17,7 @@
     },
     "web": {
       "bundler": "metro"
-    }
+    },
+    "scheme": "confiaplus"
   }
 }

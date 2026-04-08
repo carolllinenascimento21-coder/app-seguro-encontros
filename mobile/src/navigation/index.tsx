@@ -15,6 +15,8 @@ import { ReputacaoScreen } from '../screens/ReputacaoScreen'
 type AuthContextValue = {
   user: User | null
   signIn: (credentials: { email: string; password: string }) => Promise<void>
+  signInWithGoogle: () => Promise<{ cancelled: boolean }>
+  signInWithApple: () => Promise<{ cancelled: boolean }>
   signOut: () => Promise<void>
 }
 
@@ -45,7 +47,7 @@ function MainTabs() {
 }
 
 export function RootNavigation() {
-  const { isAuthenticated, loading, signIn, signOut, user } = useAuth()
+  const { isAuthenticated, loading, signIn, signInWithApple, signInWithGoogle, signOut, user } = useAuth()
 
   if (loading) {
     return (
@@ -56,7 +58,7 @@ export function RootNavigation() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, signIn, signInWithApple, signInWithGoogle, signOut }}>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {isAuthenticated ? (
