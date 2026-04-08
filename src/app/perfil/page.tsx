@@ -366,6 +366,26 @@ export default function PerfilPage() {
           </div>
         )}
 
+        <div className="mt-8 text-center space-y-2 text-sm text-gray-400">
+          <div>
+            <a href="https://www.confiamais.net/termos?next=%2Fsignup" className="hover:underline">
+              Termos de Uso
+            </a>
+          </div>
+
+          <div>
+            <a href="https://www.confiamais.net/privacidade?next=%2Fsignup" className="hover:underline">
+              Política de Privacidade
+            </a>
+          </div>
+
+          <div>
+            <a href="/suporte" className="hover:underline text-yellow-400">
+              Suporte
+            </a>
+          </div>
+        </div>
+
       </div>
     </div>
   )
