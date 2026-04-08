@@ -380,7 +380,7 @@ export default function PerfilPage() {
           </div>
 
           <div>
-            <a href="/suporte" className="hover:underline text-gray-400">
+            <a href="/suporte" className="hover:underline text-yellow-400">
               Suporte
             </a>
           </div>
