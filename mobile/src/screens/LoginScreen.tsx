@@ -79,7 +79,7 @@ export function LoginScreen() {
 
         <View style={styles.socialButtons}>
           <Button
-            title="Entrar com Google"
+            title="Continuar com Google"
             onPress={() => handleSocialLogin('google')}
             loading={isGoogleLoading}
             variant="secondary"
@@ -87,7 +87,7 @@ export function LoginScreen() {
           />
           {Platform.OS === 'ios' ? (
             <Button
-              title="Entrar com Apple"
+              title="Continuar com Apple"
               onPress={() => handleSocialLogin('apple')}
               loading={isAppleLoading}
               variant="secondary"
