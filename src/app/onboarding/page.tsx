@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Crown } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase'
+import { getRedirectUrl } from '@/lib/auth/getRedirectUrl'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -26,8 +27,7 @@ export default function OnboardingPage() {
     return true
   }
 
-  // ✅ GOOGLE OAUTH CORRIGIDO
-  const handleGoogleLogin = async () => {
+  const signInWithGoogle = async () => {
     if (!validatePreconditions()) return
 
     const supabase = createSupabaseClient()
@@ -41,9 +41,34 @@ export default function OnboardingPage() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: getRedirectUrl(),
       },
     })
+  }
+
+  const signInWithApple = async () => {
+    if (!validatePreconditions()) return
+
+    const supabase = createSupabaseClient()
+
+    if (!supabase) {
+      console.error('Supabase client não inicializado no onboarding.')
+      alert('Serviço indisponível no momento. Tente novamente mais tarde.')
+      return
+    }
+
+    const redirectTo = getRedirectUrl()
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo,
+      },
+    })
+
+    if (error) {
+      console.error('Apple login error', error)
+    }
   }
 
   const handleSignup = () => {
@@ -121,15 +146,23 @@ export default function OnboardingPage() {
         </div>
 
         {/* Google */}
-        <Button
-          onClick={handleGoogleLogin}
+        <button
+          onClick={signInWithGoogle}
           disabled={!agreed || !gender}
-          className="w-full bg-[#D4AF37] text-black py-6 rounded-2xl"
+          className="btn-google w-full bg-[#D4AF37] text-black py-6 rounded-2xl font-medium disabled:opacity-50"
         >
           Continuar com Google
-        </Button>
+        </button>
 
-        <div className="text-center text-sm text-gray-400">ou</div>
+        <button
+          onClick={signInWithApple}
+          disabled={!agreed || !gender}
+          className="btn-apple w-full rounded-2xl border border-[#D4AF37] py-6 font-medium text-[#EFD9A7] disabled:opacity-50"
+        >
+          Continuar com Apple
+        </button>
+
+        <div className="divider text-center text-sm text-gray-400">ou</div>
 
         {/* Email */}
         <Button

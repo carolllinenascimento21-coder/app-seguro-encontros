@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Linking } from 'react-native'
+import { Linking, Platform } from 'react-native'
 import Constants from 'expo-constants'
 import { Session, User } from '@supabase/supabase-js'
 
@@ -14,13 +14,12 @@ type OAuthProvider = 'google' | 'apple'
 
 const OAUTH_TIMEOUT_MS = 90_000
 
-function getRedirectTo() {
-  const scheme = Constants.expoConfig?.scheme
-
-  if (!scheme) {
-    throw new Error('Scheme do app não configurado para login social.')
+function getRedirectUrl() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.origin}/auth/callback`
   }
 
+  const scheme = Constants.expoConfig?.scheme || 'confiaplus'
   return `${scheme}://auth/callback`
 }
 
@@ -75,7 +74,7 @@ export function useAuth() {
   }, [])
 
   const signInWithOAuth = useCallback(async (provider: OAuthProvider) => {
-    const redirectTo = getRedirectTo()
+    const redirectTo = getRedirectUrl()
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
