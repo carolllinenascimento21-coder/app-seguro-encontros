@@ -268,6 +268,13 @@ export async function POST(req: Request) {
     const enviados = valores.filter((result) => result.ok)
     const falhas = valores.filter((result) => !result.ok)
 
+  console.log('[alerta-emergencia] RESUMO ENVIO', {
+    requestId,
+    enviados: enviados.length,
+    falhas: falhas.length,
+    detalhesFalhas: falhas,
+  })
+
     if (enviados.length === 0) {
       return NextResponse.json(
         {
