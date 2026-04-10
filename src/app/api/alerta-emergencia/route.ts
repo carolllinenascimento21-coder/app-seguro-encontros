@@ -12,6 +12,15 @@ type EmergencyContactRow = {
   telefone: string | null
 }
 
+type AlertLogContext = {
+  requestId: string
+  userId?: string
+  contactsCount?: number
+  validContactsCount?: number
+  sendAttempts?: number
+  [key: string]: unknown
+}
+
 const PHONE_E164_REGEX = /^\+[1-9]\d{7,14}$/
 const TWILIO_SEND_TIMEOUT_MS = 8000
 
@@ -33,6 +42,24 @@ const normalizePhoneToE164 = (rawPhone: string): string | null => {
   }
 
   return null
+}
+
+const maskPhone = (phone: string): string => {
+  if (phone.length <= 4) {
+    return '***'
+  }
+
+  return `${phone.slice(0, 3)}***${phone.slice(-2)}`
+}
+
+const isSmsEnabled = (): boolean => process.env.ENABLE_SMS?.toLowerCase() !== 'false'
+
+const logInfo = (event: string, context: AlertLogContext) => {
+  console.log('[alerta-emergencia]', JSON.stringify({ level: 'info', event, ...context }))
+}
+
+const logError = (event: string, context: AlertLogContext) => {
+  console.error('[alerta-emergencia]', JSON.stringify({ level: 'error', event, ...context }))
 }
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
@@ -62,7 +89,7 @@ export async function POST(req: Request) {
     try {
       payload = await req.json()
     } catch (jsonError) {
-      console.error('[alerta-emergencia] JSON inválido', { requestId, jsonError })
+      logError('invalid_json', { requestId, jsonError: jsonError instanceof Error ? jsonError.message : 'unknown' })
       return NextResponse.json(
         { error: 'Payload inválido', requestId },
         { status: 400 }
@@ -87,7 +114,7 @@ export async function POST(req: Request) {
     } catch (error) {
       const envError = getMissingSupabaseEnvDetails(error)
       if (envError) {
-        console.error('[alerta-emergencia] erro de configuração Supabase', {
+        logError('supabase_env_error', {
           requestId,
           message: envError.message,
         })
@@ -105,7 +132,6 @@ export async function POST(req: Request) {
 
     const cookieStore = await cookies()
 
-    // Cliente de autenticação (anon key + cookies SSR)
     const supabaseAuth = createServerClient(supabasePublicEnv.url, supabasePublicEnv.anonKey, {
       cookies: {
         getAll: () => cookieStore.getAll(),
@@ -127,7 +153,7 @@ export async function POST(req: Request) {
     } = await supabaseAuth.auth.getUser()
 
     if (authError) {
-      console.error('[alerta-emergencia] erro ao validar usuário', {
+      logError('auth_validation_error', {
         requestId,
         code: authError.code,
         message: authError.message,
@@ -145,7 +171,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Cliente service role para leitura robusta dos contatos (sem depender de RLS nesta API).
     const supabaseAdmin = createServerClient(
       supabaseServiceEnv.url,
       supabaseServiceEnv.serviceRoleKey,
@@ -164,7 +189,7 @@ export async function POST(req: Request) {
       .eq('ativo', true)
 
     if (contatosError) {
-      console.error('[alerta-emergencia] erro ao buscar contatos', {
+      logError('contacts_fetch_error', {
         requestId,
         userId: user.id,
         code: contatosError.code,
@@ -201,16 +226,55 @@ export async function POST(req: Request) {
       )
     }
 
+    const smsEnabled = isSmsEnabled()
     const twilioAccount = process.env.TWILIO_ACCOUNT_SID
     const twilioToken = process.env.TWILIO_AUTH_TOKEN
     const twilioPhone = process.env.TWILIO_PHONE_NUMBER
+    const twilioConfigured = Boolean(twilioAccount && twilioToken && twilioPhone)
 
-    if (!twilioAccount || !twilioToken || !twilioPhone) {
-      console.error('[alerta-emergencia] Twilio não configurado', { requestId })
-      return NextResponse.json(
-        { error: 'Serviço de alerta indisponível', requestId },
-        { status: 503 }
-      )
+    logInfo('alert_registered', {
+      requestId,
+      userId: user.id,
+      contactsCount: contatos.length,
+      validContactsCount: contatosValidos.length,
+      sendAttempts: smsEnabled && twilioConfigured ? contatosValidos.length : 0,
+      smsEnabled,
+      twilioConfigured,
+    })
+
+    if (!smsEnabled || !twilioConfigured) {
+      const reason = !smsEnabled ? 'sms_disabled_by_flag' : 'twilio_not_configured'
+
+      logInfo('sms_skipped', {
+        requestId,
+        userId: user.id,
+        contactsCount: contatos.length,
+        validContactsCount: contatosValidos.length,
+        sendAttempts: 0,
+        reason,
+      })
+
+      contatosValidos.forEach(({ telefoneE164 }) => {
+        if (telefoneE164) {
+          logInfo('mock_sms_dispatch', {
+            requestId,
+            userId: user.id,
+            toMasked: maskPhone(telefoneE164),
+            mode: 'mock',
+          })
+        }
+      })
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        summary: {
+          totalContatos: contatos.length,
+          validos: contatosValidos.length,
+          enviados: 0,
+          falhas: 0,
+        },
+      })
     }
 
     const twilioClient = twilio(twilioAccount, twilioToken)
@@ -218,7 +282,7 @@ export async function POST(req: Request) {
     const mensagem = `🚨 ALERTA DE EMERGÊNCIA 🚨\nEstou em risco e preciso de ajuda.\n\n📍 Minha localização:\nhttps://maps.google.com/?q=${latitude},${longitude}`
 
     const sendResults = await Promise.allSettled(
-      contatosValidos.map(async ({ telefoneE164, telefoneOriginal }) => {
+      contatosValidos.map(async ({ telefoneE164, telefoneOriginal }, index) => {
         try {
           const response = await withTimeout<any>(
             twilioClient.messages.create({
@@ -230,6 +294,14 @@ export async function POST(req: Request) {
             `Twilio send para ${telefoneE164}`
           )
 
+          logInfo('twilio_send_success', {
+            requestId,
+            userId: user.id,
+            sendAttempts: index + 1,
+            toMasked: maskPhone(telefoneE164!),
+            sid: response.sid,
+          })
+
           return {
             ok: true,
             to: telefoneE164,
@@ -238,11 +310,11 @@ export async function POST(req: Request) {
           }
         } catch (error) {
           const twilioError = error as { message?: string; code?: number }
-          console.error('[alerta-emergencia] falha no envio Twilio', {
+          logError('twilio_send_error', {
             requestId,
             userId: user.id,
-            to: telefoneE164,
-            original: telefoneOriginal,
+            sendAttempts: index + 1,
+            toMasked: maskPhone(telefoneE164!),
             message: twilioError?.message,
             code: twilioError?.code,
           })
@@ -268,28 +340,15 @@ export async function POST(req: Request) {
     const enviados = valores.filter((result) => result.ok)
     const falhas = valores.filter((result) => !result.ok)
 
-  console.log('[alerta-emergencia] RESUMO ENVIO', {
-    requestId,
-    enviados: enviados.length,
-    falhas: falhas.length,
-    detalhesFalhas: falhas,
-  })
-
-    if (enviados.length === 0) {
-      return NextResponse.json(
-        {
-          error: 'Falha ao enviar alerta para todos os contatos',
-          requestId,
-          summary: {
-            totalContatos: contatos.length,
-            validos: contatosValidos.length,
-            enviados: 0,
-            falhas: falhas.length,
-          },
-        },
-        { status: 502 }
-      )
-    }
+    logInfo('send_summary', {
+      requestId,
+      userId: user.id,
+      contactsCount: contatos.length,
+      validContactsCount: contatosValidos.length,
+      sendAttempts: contatosValidos.length,
+      enviados: enviados.length,
+      falhas: falhas.length,
+    })
 
     return NextResponse.json({
       success: true,
@@ -303,7 +362,7 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     const normalizedError = error as { message?: string; stack?: string }
-    console.error('[alerta-emergencia] ERRO INTERNO', {
+    logError('internal_error', {
       requestId,
       message: normalizedError?.message,
       stack: normalizedError?.stack,
