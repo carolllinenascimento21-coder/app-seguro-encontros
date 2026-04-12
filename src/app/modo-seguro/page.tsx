@@ -11,8 +11,8 @@ export default function ModoSeguroPage() {
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [sendingAlert, setSendingAlert] = useState(false)
   const [alertError, setAlertError] = useState<string | null>(null)
+  const [alertSuccess, setAlertSuccess] = useState<string | null>(null)
 
-  // 📍 Captura localização
   useEffect(() => {
     if (!navigator.geolocation) {
       setAlertError('Geolocalização não suportada neste dispositivo.')
@@ -20,10 +20,10 @@ export default function ModoSeguroPage() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      pos => {
+      (pos) => {
         setCoords({
           lat: pos.coords.latitude,
-          lng: pos.coords.longitude
+          lng: pos.coords.longitude,
         })
       },
       () => {
@@ -32,55 +32,75 @@ export default function ModoSeguroPage() {
     )
   }, [])
 
-  // 🚨 ENVIO DO ALERTA (VERSÃO CORRETA)
+  const openEmergencyModal = () => {
+    if (sendingAlert) {
+      return
+    }
+
+    setAlertError(null)
+    setAlertSuccess(null)
+    setShowEmergencyModal(true)
+  }
+
+  const closeEmergencyModal = () => {
+    if (sendingAlert) {
+      return
+    }
+
+    setShowEmergencyModal(false)
+  }
+
   const sendEmergencyAlert = async () => {
+    if (sendingAlert) {
+      return
+    }
+
     try {
       setSendingAlert(true)
       setAlertError(null)
+      setAlertSuccess(null)
 
       if (!supabase) {
-        console.error('Supabase client não inicializado no modo seguro.')
-        setAlertError('Serviço indisponível no momento.')
+        setAlertError('Serviço indisponível no momento. Tente novamente em instantes.')
         return
       }
 
       if (!coords) {
-        setAlertError('Localização indisponível.')
+        setAlertError('Localização indisponível. Ative o GPS e tente novamente.')
         return
       }
 
-      // ✅ Verifica sessão (via cookie)
       const {
-        data: { session }
+        data: { session },
       } = await supabase.auth.getSession()
 
       if (!session?.user) {
-        setAlertError('Usuária não autenticada. Faça login novamente.')
+        setAlertError('Usuária não autenticada. Faça login novamente para reenviar o alerta.')
         return
       }
 
       const res = await fetch('/api/alerta-emergencia', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           latitude: coords.lat,
-          longitude: coords.lng
-        })
+          longitude: coords.lng,
+        }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        setAlertError(data.error || 'Erro ao enviar alerta.')
+        setAlertError(data.error || 'Erro ao enviar alerta. Toque em “Tentar novamente”.')
         return
       }
 
-      alert('🚨 Alerta enviado com sucesso!')
+      setAlertSuccess('Alerta enviado com sucesso')
       setShowEmergencyModal(false)
-    } catch (err) {
-      setAlertError('Erro inesperado ao enviar alerta.')
+    } catch {
+      setAlertError('Erro inesperado ao enviar alerta. Verifique sua conexão e tente novamente.')
     } finally {
       setSendingAlert(false)
     }
@@ -89,12 +109,8 @@ export default function ModoSeguroPage() {
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-4 text-white">
       <div className="max-w-md w-full space-y-4">
-
-        {/* STATUS */}
         <div className="border border-green-600 rounded-xl p-4 text-center">
-          <h1 className="text-green-500 font-bold text-lg">
-            Modo Encontro Seguro
-          </h1>
+          <h1 className="text-green-500 font-bold text-lg">Modo Encontro Seguro</h1>
           <p className="text-sm text-gray-400 mt-1">
             Sua localização será enviada aos contatos se você estiver em risco.
           </p>
@@ -106,27 +122,38 @@ export default function ModoSeguroPage() {
           )}
         </div>
 
-        {/* BOTÃO RISCO */}
+        {alertSuccess && (
+          <div className="bg-green-900/40 text-green-300 text-sm p-3 rounded-lg">{alertSuccess}</div>
+        )}
+
+        {alertError && !showEmergencyModal && (
+          <div className="bg-red-900/40 text-red-300 text-sm p-3 rounded-lg">
+            {alertError} Toque em “🚨 ESTOU EM RISCO” para tentar novamente.
+          </div>
+        )}
+
         <button
-          onClick={() => setShowEmergencyModal(true)}
-          className="w-full bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold"
+          disabled={sendingAlert}
+          onClick={openEmergencyModal}
+          className="w-full bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          🚨 ESTOU EM RISCO
+          {sendingAlert ? 'Enviando alerta...' : '🚨 ESTOU EM RISCO'}
         </button>
 
-        {/* MODAL */}
         {showEmergencyModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
             <div className="bg-[#0b1220] border border-red-600 rounded-2xl p-6 w-full max-w-sm space-y-4">
-              
               <div className="flex items-center gap-2 text-red-500 font-bold">
                 <AlertTriangle />
                 Emergência
               </div>
 
+              <p className="text-sm text-gray-200">Isso vai alertar seus contatos. Confirmar?</p>
+
               {alertError && (
                 <div className="bg-red-900/40 text-red-300 text-sm p-2 rounded">
                   {alertError}
+                  <div className="mt-1">Toque em “Tentar novamente”.</div>
                 </div>
               )}
 
@@ -141,19 +168,19 @@ export default function ModoSeguroPage() {
               <button
                 disabled={sendingAlert}
                 onClick={sendEmergencyAlert}
-                className="w-full bg-yellow-400 text-black py-3 rounded-lg font-bold disabled:opacity-50"
+                className="w-full bg-yellow-400 text-black py-3 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {sendingAlert ? 'Enviando...' : 'Enviar alerta para contatos'}
+                {sendingAlert ? 'Enviando alerta...' : 'Tentar novamente'}
               </button>
 
               <button
-                onClick={() => setShowEmergencyModal(false)}
-                className="w-full border border-gray-600 py-2 rounded-lg flex items-center justify-center gap-2"
+                disabled={sendingAlert}
+                onClick={closeEmergencyModal}
+                className="w-full border border-gray-600 py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <X size={16} />
                 Cancelar
               </button>
-
             </div>
           </div>
         )}
