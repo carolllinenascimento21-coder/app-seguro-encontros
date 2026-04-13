@@ -31,21 +31,41 @@ function auditLog(event: string, payload: Record<string, unknown>) {
   console.log(`[AUDIT] ${event}`, payload)
 }
 
-async function resolveUserIdFromCustomer({
+async function resolveUserByStripeCustomer({
   supabaseAdmin,
   customerId,
+  email,
 }: {
   supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>
   customerId: string
+  email?: string | null
 }) {
-  const { data, error } = await supabaseAdmin
+  const { data: byCustomer, error: customerError } = await supabaseAdmin
     .from('profiles')
-    .select('id')
+    .select('*')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
-  if (error) return null
-  return data?.id ?? null
+  if (!customerError && byCustomer) return byCustomer
+
+  if (email) {
+    const { data: byEmail, error: emailError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('email', email)
+      .maybeSingle()
+
+    if (!emailError && byEmail) {
+      await supabaseAdmin
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', byEmail.id)
+
+      return byEmail
+    }
+  }
+
+  return null
 }
 
 async function resolvePlanFromSubscription(subscription: Stripe.Subscription) {
@@ -190,13 +210,26 @@ export async function POST(req: Request) {
       // 1) user_id do metadata (ideal)
       let userId = session.metadata?.user_id ?? null
 
-      // 2) fallback por stripe_customer_id
+      // 2) fallback por stripe_customer_id (+ email para autocorreção)
+      const obj = event.data.object as any
       const customerId = session.customer?.toString() ?? null
+      const email =
+        obj.customer_email ||
+        obj.receipt_email ||
+        obj.customer_details?.email ||
+        obj.billing_details?.email ||
+        null
       if (!userId && customerId) {
-        userId = await resolveUserIdFromCustomer({ supabaseAdmin, customerId })
+        const profile = await resolveUserByStripeCustomer({
+          supabaseAdmin,
+          customerId,
+          email,
+        })
+        userId = profile?.id ?? null
       }
 
       if (!userId) {
+        console.error('❌ Usuário não encontrado para customer:', customerId, email)
         await markStripeEvent(supabaseAdmin, event.id, {
           status: 'skipped',
           error: 'Sem user_id e sem match por customer.',
@@ -353,13 +386,23 @@ export async function POST(req: Request) {
       // 1) user_id por metadata (se você configurar subscription_data.metadata no checkout)
       let userId = subscription.metadata?.user_id ?? null
 
-      // 2) fallback por stripe_customer_id
+      // 2) fallback por stripe_customer_id (+ email para autocorreção)
       const customerId = subscription.customer?.toString() ?? null
+      const email =
+        (subscription as any).customer_email ||
+        (subscription as any).customer_details?.email ||
+        null
       if (!userId && customerId) {
-        userId = await resolveUserIdFromCustomer({ supabaseAdmin, customerId })
+        const profile = await resolveUserByStripeCustomer({
+          supabaseAdmin,
+          customerId,
+          email,
+        })
+        userId = profile?.id ?? null
       }
 
       if (!userId) {
+        console.error('❌ Usuário não encontrado para customer:', customerId, email)
         await markStripeEvent(supabaseAdmin, event.id, {
           status: 'skipped',
           error: 'Sem user_id e sem match por customer.',
@@ -411,6 +454,12 @@ export async function POST(req: Request) {
     if (event.type === 'invoice.paid') {
       const invoice = event.data.object as Stripe.Invoice
       const customerId = invoice.customer?.toString() ?? null
+      const email =
+        invoice.customer_email ||
+        (invoice as any).receipt_email ||
+        (invoice as any).customer_details?.email ||
+        (invoice as any).billing_details?.email ||
+        null
 
       auditLog('invoice.paid.received', {
         eventId: event.id,
@@ -421,10 +470,16 @@ export async function POST(req: Request) {
 
       let userId: string | null = null
       if (customerId) {
-        userId = await resolveUserIdFromCustomer({ supabaseAdmin, customerId })
+        const profile = await resolveUserByStripeCustomer({
+          supabaseAdmin,
+          customerId,
+          email,
+        })
+        userId = profile?.id ?? null
       }
 
       if (!userId) {
+        console.error('❌ Usuário não encontrado para customer:', customerId, email)
         await markStripeEvent(supabaseAdmin, event.id, {
           status: 'skipped',
           error: 'invoice.paid sem match de user.',
