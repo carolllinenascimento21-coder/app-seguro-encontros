@@ -3,61 +3,61 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-type PlanId = 'premium_monthly' | 'premium_yearly' | 'premium_plus'
+type FreePlanId = 'free'
+type SubscriptionPlanId = 'premium_monthly' | 'premium_yearly'
+type PlanId = FreePlanId | SubscriptionPlanId
 
 type Plan = {
   id: PlanId
   title: string
   price: string
   period: string
-  subtitle: string
   features: string[]
+  canCheckout?: boolean
   highlight?: boolean
   badge?: string
 }
 
 const plans: Plan[] = [
   {
+    id: 'free',
+    title: 'Plano Free',
+    price: 'R$ 0,00',
+    period: '',
+    features: [
+      'Acesso limitado às consultas',
+      'Visualização básica de avaliações',
+      'Sem prioridade',
+    ],
+    canCheckout: false,
+  },
+  {
     id: 'premium_monthly',
     title: 'Premium Mensal',
-    price: 'R$ 9,90',
+    price: 'R$ 19,90',
     period: '/mês',
-    subtitle: 'Ideal para quem quer clareza imediata.',
     features: [
       'Consultas ilimitadas',
-      'Acesso às avaliações completas',
-      'Histórico comportamental',
-      'Alertas relevantes',
+      'Acesso completo às avaliações',
+      'Prioridade no sistema',
+      'Recursos de segurança completos',
     ],
+    canCheckout: true,
   },
   {
     id: 'premium_yearly',
     title: 'Premium Anual',
-    price: 'R$ 79,90',
+    price: 'R$ 99,90',
     period: '/ano',
-    subtitle: 'Proteção total com melhor custo-benefício.',
     features: [
-      'Tudo do Premium Mensal',
-      'Economia anual significativa',
-      'Acesso prioritário a novos alertas',
-      'Histórico completo e aprofundado',
+      'Consultas ilimitadas',
+      'Acesso completo às avaliações',
+      'Prioridade no sistema',
+      'Recursos de segurança completos',
     ],
     highlight: true,
     badge: 'Mais escolhido',
-  },
-  {
-    id: 'premium_plus',
-    title: 'Premium Plus',
-    price: 'R$ 19,90',
-    period: '/mês',
-    subtitle: 'Para quem exige o nível máximo de proteção.',
-    features: [
-      'Tudo do Premium Anual',
-      'Alertas em tempo real',
-      'Análise de padrões emocionais',
-      'Detecção de comportamentos reincidentes',
-      'Desbloqueio automático de alertas críticos',
-    ],
+    canCheckout: true,
   },
 ]
 
@@ -65,7 +65,7 @@ export default function PlanosPage() {
   const router = useRouter()
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null)
 
-  const handleCheckout = async (planId: PlanId) => {
+  const handleCheckout = async (planId: SubscriptionPlanId) => {
     try {
       setLoadingPlan(planId)
 
@@ -145,11 +145,9 @@ export default function PlanosPage() {
               )}
 
               <h3 className="text-2xl font-bold text-[#D4AF37]">{plan.title}</h3>
-              <p className="mt-2 text-gray-300">{plan.subtitle}</p>
-
               <div className="mt-5">
                 <span className="text-4xl font-bold">{plan.price}</span>
-                <span className="ml-1 text-gray-400">{plan.period}</span>
+                {plan.period ? <span className="ml-1 text-gray-400">{plan.period}</span> : null}
               </div>
 
               <ul className="mt-6 space-y-3 text-sm text-gray-200">
@@ -161,42 +159,46 @@ export default function PlanosPage() {
                 ))}
               </ul>
 
-              <button
-                onClick={() => handleCheckout(plan.id)}
-                disabled={loadingPlan === plan.id}
-                className="mt-8 w-full rounded-xl bg-[#D4AF37] py-3 font-bold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loadingPlan === plan.id ? 'Redirecionando...' : 'Assinar Plano'}
-              </button>
+              {plan.canCheckout ? (
+                <button
+                  onClick={() => handleCheckout(plan.id as SubscriptionPlanId)}
+                  disabled={loadingPlan === plan.id}
+                  className="mt-8 w-full rounded-xl bg-[#D4AF37] py-3 font-bold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingPlan === plan.id ? 'Redirecionando...' : 'Assinar Plano'}
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="mt-8 w-full rounded-xl bg-[#D4AF37] py-3 font-bold text-black opacity-70 cursor-not-allowed"
+                >
+                  Plano Atual
+                </button>
+              )}
             </div>
           ))}
         </div>
 
         <div className="mt-14 overflow-hidden rounded-2xl border border-[#D4AF37]/30">
-          <div className="grid grid-cols-4 bg-[#151515] text-sm font-bold text-white">
+          <div className="grid grid-cols-3 bg-[#151515] text-sm font-bold text-white">
             <div className="p-4">Recursos</div>
-            <div className="p-4 text-center">Gratuito</div>
+            <div className="p-4 text-center">Free</div>
             <div className="p-4 text-center">Premium</div>
-            <div className="p-4 text-center">Premium Plus</div>
           </div>
 
           {[
-            ['Consultas', 'Limitadas', 'Ilimitadas', 'Ilimitadas'],
-            ['Avaliações completas', '❌', '✔', '✔'],
-            ['Histórico comportamental', '❌', '✔', '✔'],
-            ['Alertas relevantes', '❌', '✔', '✔'],
-            ['Alertas em tempo real', '❌', '❌', '✔'],
-            ['Análise de padrões', '❌', '❌', '✔'],
-            ['Comportamentos reincidentes', '❌', '❌', '✔'],
+            ['Consultas', 'Limitado', 'Ilimitado'],
+            ['Ver avaliações completas', '❌', '✅'],
+            ['Prioridade', '❌', '✅'],
+            ['Segurança avançada', '❌', '✅'],
           ].map((row) => (
             <div
               key={row[0]}
-              className="grid grid-cols-4 border-t border-[#D4AF37]/20 bg-black text-sm text-gray-200"
+              className="grid grid-cols-3 border-t border-[#D4AF37]/20 bg-black text-sm text-gray-200"
             >
               <div className="p-4 font-medium text-white">{row[0]}</div>
               <div className="p-4 text-center">{row[1]}</div>
               <div className="p-4 text-center">{row[2]}</div>
-              <div className="p-4 text-center">{row[3]}</div>
             </div>
           ))}
         </div>
