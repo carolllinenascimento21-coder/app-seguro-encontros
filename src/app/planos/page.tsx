@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { isMobileAppRuntime } from '@/lib/mobile-billing'
+import { purchasePlan, restoreMobilePurchases } from '@/lib/purchase-plan'
+
 type FreePlanId = 'free'
 type SubscriptionPlanId = 'premium_monthly' | 'premium_yearly'
 type PlanId = FreePlanId | SubscriptionPlanId
@@ -64,40 +67,58 @@ const plans: Plan[] = [
 export default function PlanosPage() {
   const router = useRouter()
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null)
+  const [restoring, setRestoring] = useState(false)
+  const isMobileApp = isMobileAppRuntime()
+
+  const startStripeCheckout = async (planId: SubscriptionPlanId) => {
+    const res = await fetch('/api/stripe/checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ planId }),
+    })
+
+    if (res.status === 401) {
+      router.push('/login')
+      return
+    }
+
+    const data = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      throw new Error(data?.error || data?.message || 'Erro ao iniciar checkout')
+    }
+
+    if (!data?.url) {
+      throw new Error('URL do Stripe não retornada')
+    }
+
+    window.location.href = data.url
+  }
 
   const handleCheckout = async (planId: SubscriptionPlanId) => {
     try {
       setLoadingPlan(planId)
-
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ planId }),
-      })
-
-      if (res.status === 401) {
-        router.push('/login')
-        return
-      }
-
-      const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || data?.message || 'Erro ao iniciar checkout')
-      }
-
-      if (!data?.url) {
-        throw new Error('URL do Stripe não retornada')
-      }
-
-      window.location.href = data.url
+      await purchasePlan(planId, startStripeCheckout)
     } catch (error: any) {
       console.error('Erro ao iniciar checkout:', error)
       alert(error?.message || 'Erro ao iniciar pagamento')
     } finally {
       setLoadingPlan(null)
+    }
+  }
+
+  const handleRestorePurchases = async () => {
+    try {
+      setRestoring(true)
+      await restoreMobilePurchases()
+      alert('Compras restauradas com sucesso.')
+    } catch (error: any) {
+      console.error('Erro ao restaurar compras:', error)
+      alert(error?.message || 'Erro ao restaurar compras')
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -165,7 +186,11 @@ export default function PlanosPage() {
                   disabled={loadingPlan === plan.id}
                   className="mt-8 w-full rounded-xl bg-[#D4AF37] py-3 font-bold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loadingPlan === plan.id ? 'Redirecionando...' : 'Assinar Plano'}
+                  {loadingPlan === plan.id
+                    ? isMobileApp
+                      ? 'Processando compra...'
+                      : 'Redirecionando...'
+                    : 'Assinar Plano'}
                 </button>
               ) : (
                 <button
@@ -202,6 +227,18 @@ export default function PlanosPage() {
             </div>
           ))}
         </div>
+
+        {isMobileApp ? (
+          <div className="mt-10 text-center">
+            <button
+              onClick={handleRestorePurchases}
+              disabled={restoring}
+              className="rounded-xl border border-[#D4AF37] px-6 py-3 font-bold text-[#D4AF37] transition hover:bg-[#D4AF37]/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {restoring ? 'Restaurando compras...' : 'Restaurar compras'}
+            </button>
+          </div>
+        ) : null}
 
         <div className="mt-14 rounded-2xl border border-[#D4AF37]/30 bg-[#111] p-6">
           <h2 className="mb-4 text-2xl font-bold text-[#D4AF37]">Por que confiar no Confia+?</h2>
