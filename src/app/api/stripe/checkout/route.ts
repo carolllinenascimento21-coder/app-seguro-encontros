@@ -50,6 +50,40 @@ export async function POST(req: Request) {
       )
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, stripe_customer_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError || !profile) {
+      console.error('[stripe-checkout] profile_not_found', {
+        userId: user.id,
+        profileError: profileError?.message,
+      })
+
+      return NextResponse.json(
+        { error: 'Perfil não encontrado' },
+        { status: 404 }
+      )
+    }
+
+    let customerId = profile.stripe_customer_id
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: profile.email ?? user.email ?? undefined,
+        metadata: { user_id: profile.id },
+      })
+
+      customerId = customer.id
+
+      await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', profile.id)
+    }
+
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? new URL(req.url).origin
 
     const session = await stripe.checkout.sessions.create(
@@ -65,7 +99,7 @@ export async function POST(req: Request) {
           },
         ],
 
-        customer_email: user.email ?? undefined,
+        customer: customerId,
 
         metadata: {
           user_id: user.id,
