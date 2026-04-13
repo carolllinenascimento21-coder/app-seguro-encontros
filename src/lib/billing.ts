@@ -3,6 +3,16 @@ export const FREE_PLAN = 'free'
 export type SubscriptionPlanId = 'premium_mensal' | 'premium_anual'
 export type CreditPackId = 'credits_3' | 'credits_10' | 'credits_25'
 
+const DEFAULT_SUBSCRIPTION_PRICE_IDS = {
+  premium_monthly: 'price_1TLnik7IHHkQsIacwjylAQQ6',
+  premium_yearly: 'price_1TLnuq7IHHkQsIacJkeB4at5',
+} as const
+
+const LEGACY_SUBSCRIPTION_PRICE_IDS: Record<'premium_monthly' | 'premium_yearly', readonly string[]> = {
+  premium_monthly: ['price_1Ssre07IHHkQsIacWeLkInUG'],
+  premium_yearly: ['price_1St4jv7IHHkQsIac8a8yKmJb'],
+}
+
 export const subscriptionPriceEnvCandidates = {
   premium_monthly: [
     'STRIPE_PRICE_MONTHLY',
@@ -20,6 +30,9 @@ export type SubscriptionCheckoutPlanId = keyof typeof subscriptionPriceEnvCandid
 export type ProfilePlanId = 'free' | SubscriptionPlanId
 
 export function resolveSubscriptionPriceId(planId: SubscriptionCheckoutPlanId) {
+  const defaultPriceId = DEFAULT_SUBSCRIPTION_PRICE_IDS[planId]
+  if (defaultPriceId) return defaultPriceId
+
   const candidates = subscriptionPriceEnvCandidates[planId]
   for (const envName of candidates) {
     const value = process.env[envName]
@@ -29,6 +42,12 @@ export function resolveSubscriptionPriceId(planId: SubscriptionCheckoutPlanId) {
 }
 
 export function resolveSubscriptionPlanFromPriceId(priceId: string) {
+  for (const planId of Object.keys(LEGACY_SUBSCRIPTION_PRICE_IDS) as SubscriptionCheckoutPlanId[]) {
+    if (LEGACY_SUBSCRIPTION_PRICE_IDS[planId].includes(priceId)) {
+      return planId
+    }
+  }
+
   for (const planId of Object.keys(subscriptionPriceEnvCandidates) as SubscriptionCheckoutPlanId[]) {
     if (resolveSubscriptionPriceId(planId) === priceId) {
       return planId
