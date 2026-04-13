@@ -31,15 +31,11 @@ function auditLog(event: string, payload: Record<string, unknown>) {
   console.log(`[AUDIT] ${event}`, payload)
 }
 
-async function resolveUserByStripeCustomer({
-  supabaseAdmin,
-  customerId,
-  email,
-}: {
-  supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>
-  customerId: string
+async function resolveUserByStripeCustomer(
+  supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>,
+  customerId: string,
   email?: string | null
-}) {
+) {
   const { data: byCustomer, error: customerError } = await supabaseAdmin
     .from('profiles')
     .select('*')
@@ -84,6 +80,13 @@ async function resolvePlanFromCheckoutSession(stripe: Stripe, sessionId: string)
   const price = session.line_items?.data?.[0]?.price
   const priceId = typeof price === 'object' ? price?.id : null
 
+  if (!priceId) return null
+  return resolveSubscriptionPlanFromPriceId(priceId)
+}
+
+function resolvePlanFromInvoice(invoice: Stripe.Invoice) {
+  const price = invoice.lines.data?.[0]?.pricing?.price_details?.price
+  const priceId = typeof price === 'string' ? price : price?.id
   if (!priceId) return null
   return resolveSubscriptionPlanFromPriceId(priceId)
 }
@@ -212,7 +215,7 @@ export async function POST(req: Request) {
 
       // 2) fallback por stripe_customer_id (+ email para autocorreção)
       const obj = event.data.object as any
-      const customerId = session.customer?.toString() ?? null
+      const customerId = obj.customer?.toString() ?? null
       const email =
         obj.customer_email ||
         obj.receipt_email ||
@@ -220,11 +223,7 @@ export async function POST(req: Request) {
         obj.billing_details?.email ||
         null
       if (!userId && customerId) {
-        const profile = await resolveUserByStripeCustomer({
-          supabaseAdmin,
-          customerId,
-          email,
-        })
+        const profile = await resolveUserByStripeCustomer(supabaseAdmin, customerId, email)
         userId = profile?.id ?? null
       }
 
@@ -393,11 +392,7 @@ export async function POST(req: Request) {
         (subscription as any).customer_details?.email ||
         null
       if (!userId && customerId) {
-        const profile = await resolveUserByStripeCustomer({
-          supabaseAdmin,
-          customerId,
-          email,
-        })
+        const profile = await resolveUserByStripeCustomer(supabaseAdmin, customerId, email)
         userId = profile?.id ?? null
       }
 
@@ -470,11 +465,7 @@ export async function POST(req: Request) {
 
       let userId: string | null = null
       if (customerId) {
-        const profile = await resolveUserByStripeCustomer({
-          supabaseAdmin,
-          customerId,
-          email,
-        })
+        const profile = await resolveUserByStripeCustomer(supabaseAdmin, customerId, email)
         userId = profile?.id ?? null
       }
 
@@ -490,6 +481,11 @@ export async function POST(req: Request) {
       const updatePayload: Record<string, unknown> = {
         subscription_status: 'active',
         has_active_plan: true,
+      }
+
+      const plan = resolvePlanFromInvoice(invoice)
+      if (plan) {
+        updatePayload.current_plan_id = toProfilePlanId(plan)
       }
 
       if (customerId) updatePayload.stripe_customer_id = customerId

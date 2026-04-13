@@ -78,10 +78,18 @@ export async function POST(req: Request) {
 
       customerId = customer.id
 
-      await supabase
+      const { error: linkError } = await supabase
         .from('profiles')
         .update({ stripe_customer_id: customerId })
         .eq('id', profile.id)
+
+      if (linkError) {
+        console.error('[stripe-checkout] customer_link_failed', {
+          userId: profile.id,
+          customerId,
+          linkError: linkError.message,
+        })
+      }
     }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? new URL(req.url).origin
