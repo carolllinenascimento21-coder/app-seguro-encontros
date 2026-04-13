@@ -11,7 +11,6 @@ type CheckoutState = {
 const SUBSCRIPTION_PLAN_IDS = new Set([
   'premium_monthly',
   'premium_yearly',
-  'premium_plus',
 ])
 
 const CREDIT_PACK_IDS = new Set(['credits_3', 'credits_10', 'credits_25'])

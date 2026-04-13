@@ -20,7 +20,8 @@ function PlanLabel(plan?: string | null) {
   if (!plan) return 'Plano Free'
   if (plan === 'premium_monthly') return 'Premium Mensal'
   if (plan === 'premium_yearly') return 'Premium Anual'
-  if (plan === 'premium_plus') return 'Premium Plus'
+  if (plan === 'premium_mensal') return 'Premium Mensal'
+  if (plan === 'premium_anual') return 'Premium Anual'
   if (plan === 'free') return 'Plano Free'
   return plan
 }

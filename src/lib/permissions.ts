@@ -2,7 +2,8 @@ export type PlanId =
   | 'free'
   | 'premium_monthly'
   | 'premium_yearly'
-  | 'premium_plus'
+  | 'premium_mensal'
+  | 'premium_anual'
   | string // fallback defensivo
 
 export type Feature =
@@ -67,7 +68,9 @@ export function canAccessFeature(
    * ------------------------- */
   const isPremium =
     plan === 'premium_monthly' ||
-    plan === 'premium_yearly'
+    plan === 'premium_yearly' ||
+    plan === 'premium_mensal' ||
+    plan === 'premium_anual'
 
   if (isPremium) {
     switch (feature) {
@@ -83,13 +86,6 @@ export function canAccessFeature(
       default:
         return true
     }
-  }
-
-  /* -------------------------
-   * PREMIUM PLUS
-   * ------------------------- */
-  if (plan === 'premium_plus') {
-    return true
   }
 
   return false

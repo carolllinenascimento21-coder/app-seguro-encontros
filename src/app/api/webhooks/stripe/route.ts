@@ -3,7 +3,7 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
-import { resolveSubscriptionPlanFromPriceId } from '@/lib/billing'
+import { resolveSubscriptionPlanFromPriceId, toProfilePlanId } from '@/lib/billing'
 import { stripe } from '@/lib/stripe/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
@@ -221,7 +221,7 @@ export async function POST(req: Request) {
         const subscriptionId = session.subscription?.toString() ?? null
 
         const updatePayload: Record<string, unknown> = {
-          current_plan_id: plan,
+          current_plan_id: toProfilePlanId(plan),
           subscription_status: 'active',
           has_active_plan: true,
         }
@@ -379,7 +379,7 @@ export async function POST(req: Request) {
       if (!isActive) {
         updatePayload.current_plan_id = 'free'
       } else if (plan) {
-        updatePayload.current_plan_id = plan
+        updatePayload.current_plan_id = toProfilePlanId(plan)
       }
 
       if (customerId) updatePayload.stripe_customer_id = customerId
