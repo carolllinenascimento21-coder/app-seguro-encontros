@@ -17,6 +17,7 @@ const HANDLED_EVENTS = new Set([
   'customer.subscription.updated',
   'customer.subscription.deleted',
   'invoice.paid',
+  'invoice.payment_failed',
 ])
 
 function jsonOk(data: any = { received: true }) {
@@ -64,33 +65,6 @@ async function resolveUserByStripeCustomer(
   return null
 }
 
-async function resolvePlanFromSubscription(subscription: Stripe.Subscription) {
-  const priceId = subscription.items?.data?.[0]?.price?.id
-  if (!priceId) return null
-  return resolveSubscriptionPlanFromPriceId(priceId)
-}
-
-async function resolvePlanFromCheckoutSession(stripe: Stripe, sessionId: string) {
-  // O objeto do evento normalmente NÃO vem com line_items.
-  // Então buscamos a sessão expandindo line_items.price.
-  const session = await stripe.checkout.sessions.retrieve(sessionId, {
-    expand: ['line_items.data.price'],
-  })
-
-  const price = session.line_items?.data?.[0]?.price
-  const priceId = typeof price === 'object' ? price?.id : null
-
-  if (!priceId) return null
-  return resolveSubscriptionPlanFromPriceId(priceId)
-}
-
-function resolvePlanFromInvoice(invoice: Stripe.Invoice) {
-  const price = invoice.lines.data?.[0]?.pricing?.price_details?.price
-  const priceId = typeof price === 'string' ? price : price?.id
-  if (!priceId) return null
-  return resolveSubscriptionPlanFromPriceId(priceId)
-}
-
 async function markStripeEvent(
   supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>,
   eventId: string,
@@ -109,6 +83,260 @@ async function markStripeEvent(
   if (error) {
     console.error('[stripe-webhook] Falha ao atualizar stripe_events:', error)
   }
+}
+
+type WebhookContext = {
+  supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>
+  eventId: string
+}
+
+async function handleCheckoutCompleted(
+  session: Stripe.Checkout.Session,
+  { supabaseAdmin, eventId }: WebhookContext
+) {
+  auditLog('checkout.session.completed.received', {
+    eventId,
+    sessionId: session.id,
+    mode: session.mode,
+    payment_status: session.payment_status,
+    metadata: session.metadata ?? null,
+    payment_intent: session.payment_intent?.toString() ?? null,
+  })
+
+  let userId = session.metadata?.user_id ?? null
+  const customerId = session.customer?.toString() ?? null
+  const email =
+    session.customer_email ||
+    (session as any).receipt_email ||
+    (session as any).customer_details?.email ||
+    (session as any).billing_details?.email ||
+    null
+
+  if (!userId && customerId) {
+    const profile = await resolveUserByStripeCustomer(supabaseAdmin, customerId, email)
+    userId = profile?.id ?? null
+  }
+
+  if (!userId) {
+    console.error('❌ Usuário não encontrado para customer:', customerId, email)
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'skipped',
+      error: 'Sem user_id e sem match por customer.',
+    })
+    return jsonOk({ received: true, warning: 'Sem user_id e sem match por customer.' })
+  }
+
+  if (session.mode === 'subscription') {
+    const subscriptionId = session.subscription?.toString() ?? null
+    const updatePayload: Record<string, unknown> = {
+      subscription_status: 'incomplete',
+      has_active_plan: false,
+    }
+
+    if (customerId) updatePayload.stripe_customer_id = customerId
+    if (subscriptionId) updatePayload.stripe_subscription_id = subscriptionId
+
+    const { error: updErr } = await supabaseAdmin.from('profiles').update(updatePayload).eq('id', userId)
+    if (updErr) {
+      await markStripeEvent(supabaseAdmin, eventId, {
+        status: 'failed',
+        error: `Falha update profiles subscription checkout: ${String((updErr as any).message || updErr)}`,
+      })
+      return jsonErr('Falha ao atualizar assinatura no checkout', 500)
+    }
+
+    await markStripeEvent(supabaseAdmin, eventId, { status: 'processed' })
+    return jsonOk()
+  }
+
+  if (session.mode === 'payment') {
+    if (session.payment_status !== 'paid') {
+      await markStripeEvent(supabaseAdmin, eventId, {
+        status: 'skipped',
+        error: `payment_status=${session.payment_status ?? 'unknown'}`,
+      })
+      return jsonOk({ skipped: 'payment not paid yet' })
+    }
+
+    const credits = Number(session.metadata?.credits ?? 0)
+    const externalRef = session.payment_intent?.toString() ?? session.id
+    if (!Number.isFinite(credits) || credits <= 0) {
+      await markStripeEvent(supabaseAdmin, eventId, {
+        status: 'skipped',
+        error: `credits_invalid=${session.metadata?.credits ?? 'missing'}`,
+      })
+      return jsonOk({ skipped: 'credits metadata missing/invalid' })
+    }
+
+    const { error: rpcErr } = await supabaseAdmin.rpc('add_profile_credits_with_transaction', {
+      user_uuid: userId,
+      credit_delta: credits,
+      external_ref: externalRef,
+      transaction_type: 'purchase',
+    })
+
+    if (rpcErr) {
+      await markStripeEvent(supabaseAdmin, eventId, {
+        status: 'failed',
+        error: `Falha RPC credit: ${String((rpcErr as any).message || rpcErr)}`,
+      })
+      return jsonErr('Erro ao aplicar créditos', 500)
+    }
+
+    await markStripeEvent(supabaseAdmin, eventId, { status: 'processed' })
+    return jsonOk()
+  }
+
+  await markStripeEvent(supabaseAdmin, eventId, { status: 'processed' })
+  return jsonOk()
+}
+
+async function handleInvoicePaid(invoice: Stripe.Invoice, { supabaseAdmin, eventId }: WebhookContext) {
+  const customerId = invoice.customer?.toString() ?? null
+  const subscriptionId =
+    (invoice as any).subscription?.toString?.() ?? (invoice as any).subscription ?? null
+
+  console.log('Customer:', customerId)
+
+  if (!customerId || !subscriptionId) {
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'skipped',
+      error: 'invoice.paid sem customer ou subscription',
+    })
+    return jsonOk({ received: true, warning: 'invoice.paid sem customer/subscription.' })
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const priceId = subscription.items.data[0]?.price?.id ?? null
+  const plan = priceId ? resolveSubscriptionPlanFromPriceId(priceId) : null
+  const planId = plan ? toProfilePlanId(plan) : null
+  console.log('Plan:', planId)
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('*')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle()
+
+  if (!profile) {
+    console.error('User not found for customer:', customerId)
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'skipped',
+      error: 'invoice.paid sem match de profile',
+    })
+    return jsonOk({ received: true, warning: 'invoice.paid sem match de profile.' })
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    subscription_status: 'active',
+    has_active_plan: true,
+    stripe_subscription_id: subscriptionId,
+    stripe_customer_id: customerId,
+  }
+  if (planId) {
+    updatePayload.current_plan_id = planId
+  }
+
+  const { error: updateError } = await supabaseAdmin.from('profiles').update(updatePayload).eq('id', profile.id)
+  if (updateError) {
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'failed',
+      error: `Falha update invoice.paid: ${String((updateError as any).message || updateError)}`,
+    })
+    return jsonErr('Falha ao atualizar fatura paga no perfil', 500)
+  }
+
+  console.log('✅ Plano ativado para usuário:', profile.email)
+  await markStripeEvent(supabaseAdmin, eventId, { status: 'processed' })
+  return jsonOk()
+}
+
+async function handleSubscriptionUpdated(
+  subscription: Stripe.Subscription,
+  { supabaseAdmin, eventId }: WebhookContext
+) {
+  const customerId = subscription.customer?.toString() ?? null
+  if (!customerId) {
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'skipped',
+      error: 'subscription.updated sem customer',
+    })
+    return jsonOk({ received: true, warning: 'subscription.updated sem customer.' })
+  }
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('*')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle()
+
+  if (!profile) {
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'skipped',
+      error: 'subscription.updated sem profile',
+    })
+    return jsonOk({ received: true, warning: 'subscription.updated sem profile.' })
+  }
+
+  const isCanceledStatus = ['canceled', 'incomplete_expired', 'unpaid', 'past_due'].includes(subscription.status)
+  if (!isCanceledStatus) {
+    await markStripeEvent(supabaseAdmin, eventId, { status: 'processed' })
+    return jsonOk()
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from('profiles')
+    .update({
+      subscription_status: subscription.status,
+      has_active_plan: false,
+      current_plan_id: 'free',
+      stripe_subscription_id: subscription.id,
+      stripe_customer_id: customerId,
+    })
+    .eq('id', profile.id)
+
+  if (updateError) {
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'failed',
+      error: `Falha update subscription.updated: ${String((updateError as any).message || updateError)}`,
+    })
+    return jsonErr('Falha ao atualizar assinatura', 500)
+  }
+
+  await markStripeEvent(supabaseAdmin, eventId, { status: 'processed' })
+  return jsonOk()
+}
+
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice, { supabaseAdmin, eventId }: WebhookContext) {
+  const customerId = invoice.customer?.toString() ?? null
+  if (!customerId) {
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'skipped',
+      error: 'invoice.payment_failed sem customer',
+    })
+    return jsonOk({ received: true, warning: 'invoice.payment_failed sem customer.' })
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from('profiles')
+    .update({
+      subscription_status: 'canceled',
+      has_active_plan: false,
+      current_plan_id: 'free',
+      stripe_customer_id: customerId,
+    })
+    .eq('stripe_customer_id', customerId)
+
+  if (updateError) {
+    await markStripeEvent(supabaseAdmin, eventId, {
+      status: 'failed',
+      error: `Falha update invoice.payment_failed: ${String((updateError as any).message || updateError)}`,
+    })
+    return jsonErr('Falha ao atualizar cobrança com falha', 500)
+  }
+
+  await markStripeEvent(supabaseAdmin, eventId, { status: 'processed' })
+  return jsonOk()
 }
 
 export async function POST(req: Request) {
@@ -193,326 +421,24 @@ export async function POST(req: Request) {
   }
 
   try {
-    /**
-     * =====================================================
-     * CHECKOUT FINALIZADO
-     * =====================================================
-     */
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session
+    console.log('Stripe event:', event.type)
+    const ctx: WebhookContext = { supabaseAdmin, eventId: event.id }
 
-      auditLog('checkout.session.completed.received', {
-        eventId: event.id,
-        sessionId: session.id,
-        mode: session.mode,
-        payment_status: session.payment_status,
-        metadata: session.metadata ?? null,
-        payment_intent: session.payment_intent?.toString() ?? null,
-      })
-
-      // 1) user_id do metadata (ideal)
-      let userId = session.metadata?.user_id ?? null
-
-      // 2) fallback por stripe_customer_id (+ email para autocorreção)
-      const obj = event.data.object as any
-      const customerId = obj.customer?.toString() ?? null
-      const email =
-        obj.customer_email ||
-        obj.receipt_email ||
-        obj.customer_details?.email ||
-        obj.billing_details?.email ||
-        null
-      if (!userId && customerId) {
-        const profile = await resolveUserByStripeCustomer(supabaseAdmin, customerId, email)
-        userId = profile?.id ?? null
-      }
-
-      if (!userId) {
-        console.error('❌ Usuário não encontrado para customer:', customerId, email)
-        await markStripeEvent(supabaseAdmin, event.id, {
-          status: 'skipped',
-          error: 'Sem user_id e sem match por customer.',
-        })
-        return jsonOk({ received: true, warning: 'Sem user_id e sem match por customer.' })
-      }
-
-      // ===== ASSINATURAS =====
-      if (session.mode === 'subscription') {
-        const plan = await resolvePlanFromCheckoutSession(stripe, session.id)
-        if (!plan) {
-          await markStripeEvent(supabaseAdmin, event.id, {
-            status: 'skipped',
-            error: 'Não conseguiu resolver plano via price.id (env de planos).',
-          })
-          return jsonOk({
-            received: true,
-            warning: 'Não consegui resolver o plano via price.id. Verifique envs STRIPE_PRICE_* do plano.',
-          })
-        }
-
-        const subscriptionId = session.subscription?.toString() ?? null
-
-        const updatePayload: Record<string, unknown> = {
-          current_plan_id: toProfilePlanId(plan),
-          subscription_status: 'active',
-          has_active_plan: true,
-        }
-
-        if (customerId) updatePayload.stripe_customer_id = customerId
-        if (subscriptionId) updatePayload.stripe_subscription_id = subscriptionId
-
-        const { error: updErr } = await supabaseAdmin
-          .from('profiles')
-          .update(updatePayload)
-          .eq('id', userId)
-
-        if (updErr) {
-          console.error('[stripe-webhook] Falha ao atualizar profile (subscription):', updErr)
-          await markStripeEvent(supabaseAdmin, event.id, {
-            status: 'failed',
-            error: `Falha update profiles subscription: ${String((updErr as any).message || updErr)}`,
-          })
-          return jsonErr('Falha ao atualizar assinatura no perfil', 500)
-        }
-
+    switch (event.type) {
+      case 'checkout.session.completed':
+        return handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, ctx)
+      case 'invoice.paid':
+        return handleInvoicePaid(event.data.object as Stripe.Invoice, ctx)
+      case 'invoice.payment_failed':
+        return handleInvoicePaymentFailed(event.data.object as Stripe.Invoice, ctx)
+      case 'customer.subscription.updated':
+      case 'customer.subscription.created':
+      case 'customer.subscription.deleted':
+        return handleSubscriptionUpdated(event.data.object as Stripe.Subscription, ctx)
+      default:
         await markStripeEvent(supabaseAdmin, event.id, { status: 'processed' })
         return jsonOk()
-      }
-
-      // ===== CRÉDITOS =====
-      if (session.mode === 'payment') {
-        // ✅ Evita conceder crédito sem pagamento confirmado
-        if (session.payment_status !== 'paid') {
-          auditLog('checkout.session.completed.payment.skipped_unpaid', {
-            eventId: event.id,
-            sessionId: session.id,
-            payment_status: session.payment_status ?? 'unknown',
-          })
-
-          await markStripeEvent(supabaseAdmin, event.id, {
-            status: 'skipped',
-            error: `payment_status=${session.payment_status ?? 'unknown'}`,
-          })
-          return jsonOk({ skipped: 'payment not paid yet' })
-        }
-
-        const credits = Number(session.metadata?.credits ?? 0)
-        const externalRef = session.payment_intent?.toString() ?? session.id
-
-        auditLog('checkout.session.completed.payment.parsed', {
-          eventId: event.id,
-          sessionId: session.id,
-          credits,
-          external_reference: externalRef,
-          metadata_credits: session.metadata?.credits ?? null,
-        })
-
-        if (!Number.isFinite(credits) || credits <= 0) {
-          await markStripeEvent(supabaseAdmin, event.id, {
-            status: 'skipped',
-            error: `credits_invalid=${session.metadata?.credits ?? 'missing'}`,
-          })
-
-          auditLog('checkout.session.completed.payment.skipped_invalid_credits', {
-            eventId: event.id,
-            sessionId: session.id,
-            metadata: session.metadata ?? null,
-          })
-
-          return jsonOk({ skipped: 'credits metadata missing/invalid' })
-        }
-
-        if (credits > 0) {
-          auditLog('checkout.session.completed.payment.rpc_call', {
-            eventId: event.id,
-            sessionId: session.id,
-            userId,
-            credits,
-            external_reference: externalRef,
-          })
-
-          const { error: rpcErr } = await supabaseAdmin.rpc('add_profile_credits_with_transaction', {
-            user_uuid: userId,
-            credit_delta: credits,
-            external_ref: externalRef,
-            transaction_type: 'purchase',
-          })
-
-          if (rpcErr) {
-            console.error('[stripe-webhook] Erro ao creditar:', rpcErr)
-            auditLog('checkout.session.completed.payment.rpc_error', {
-              eventId: event.id,
-              sessionId: session.id,
-              error: String((rpcErr as any).message || rpcErr),
-            })
-
-            await markStripeEvent(supabaseAdmin, event.id, {
-              status: 'failed',
-              error: `Falha RPC credit: ${String((rpcErr as any).message || rpcErr)}`,
-            })
-            return jsonErr('Erro ao aplicar créditos', 500)
-          }
-
-          auditLog('checkout.session.completed.payment.rpc_success', {
-            eventId: event.id,
-            sessionId: session.id,
-            userId,
-            credits,
-            external_reference: externalRef,
-          })
-        }
-
-        await markStripeEvent(supabaseAdmin, event.id, { status: 'processed' })
-        return jsonOk()
-      }
-
-      await markStripeEvent(supabaseAdmin, event.id, { status: 'processed' })
-      return jsonOk()
     }
-
-    /**
-     * =====================================================
-     * UPDATE / CANCELAMENTO DE ASSINATURA
-     * =====================================================
-     */
-    if (
-      event.type === 'customer.subscription.created' ||
-      event.type === 'customer.subscription.updated' ||
-      event.type === 'customer.subscription.deleted'
-    ) {
-      const subscription = event.data.object as Stripe.Subscription
-
-      // 1) user_id por metadata (se você configurar subscription_data.metadata no checkout)
-      let userId = subscription.metadata?.user_id ?? null
-
-      // 2) fallback por stripe_customer_id (+ email para autocorreção)
-      const customerId = subscription.customer?.toString() ?? null
-      const email =
-        (subscription as any).customer_email ||
-        (subscription as any).customer_details?.email ||
-        null
-      if (!userId && customerId) {
-        const profile = await resolveUserByStripeCustomer(supabaseAdmin, customerId, email)
-        userId = profile?.id ?? null
-      }
-
-      if (!userId) {
-        console.error('❌ Usuário não encontrado para customer:', customerId, email)
-        await markStripeEvent(supabaseAdmin, event.id, {
-          status: 'skipped',
-          error: 'Sem user_id e sem match por customer.',
-        })
-        return jsonOk({ received: true, warning: 'Sem user_id e sem match por customer.' })
-      }
-
-      const isActive = subscription.status === 'active' || subscription.status === 'trialing'
-      const plan = await resolvePlanFromSubscription(subscription)
-
-      const updatePayload: Record<string, unknown> = {
-        subscription_status: subscription.status,
-        has_active_plan: isActive,
-      }
-
-      // Se não ativo → free. Se ativo e tem plan → atualiza. Se ativo e não achou plan → não derruba.
-      if (!isActive) {
-        updatePayload.current_plan_id = 'free'
-      } else if (plan) {
-        updatePayload.current_plan_id = toProfilePlanId(plan)
-      }
-
-      if (customerId) updatePayload.stripe_customer_id = customerId
-      if (subscription.id) updatePayload.stripe_subscription_id = subscription.id
-
-      const { error: updErr } = await supabaseAdmin
-        .from('profiles')
-        .update(updatePayload)
-        .eq('id', userId)
-
-      if (updErr) {
-        console.error('[stripe-webhook] Falha ao atualizar profile (sub event):', updErr)
-        await markStripeEvent(supabaseAdmin, event.id, {
-          status: 'failed',
-          error: `Falha update profiles sub event: ${String((updErr as any).message || updErr)}`,
-        })
-        return jsonErr('Falha ao atualizar assinatura no perfil', 500)
-      }
-
-      await markStripeEvent(supabaseAdmin, event.id, { status: 'processed' })
-      return jsonOk()
-    }
-
-    /**
-     * =====================================================
-     * FATURA PAGA
-     * =====================================================
-     */
-    if (event.type === 'invoice.paid') {
-      const invoice = event.data.object as Stripe.Invoice
-      const customerId = invoice.customer?.toString() ?? null
-      const email =
-        invoice.customer_email ||
-        (invoice as any).receipt_email ||
-        (invoice as any).customer_details?.email ||
-        (invoice as any).billing_details?.email ||
-        null
-
-      auditLog('invoice.paid.received', {
-        eventId: event.id,
-        invoiceId: invoice.id,
-        customerId,
-        subscriptionId: (invoice as any).subscription?.toString?.() ?? (invoice as any).subscription ?? null,
-      })
-
-      let userId: string | null = null
-      if (customerId) {
-        const profile = await resolveUserByStripeCustomer(supabaseAdmin, customerId, email)
-        userId = profile?.id ?? null
-      }
-
-      if (!userId) {
-        console.error('❌ Usuário não encontrado para customer:', customerId, email)
-        await markStripeEvent(supabaseAdmin, event.id, {
-          status: 'skipped',
-          error: 'invoice.paid sem match de user.',
-        })
-        return jsonOk({ received: true, warning: 'invoice.paid sem match de user.' })
-      }
-
-      const updatePayload: Record<string, unknown> = {
-        subscription_status: 'active',
-        has_active_plan: true,
-      }
-
-      const plan = resolvePlanFromInvoice(invoice)
-      if (plan) {
-        updatePayload.current_plan_id = toProfilePlanId(plan)
-      }
-
-      if (customerId) updatePayload.stripe_customer_id = customerId
-
-      const subscriptionId = (invoice as any).subscription?.toString?.() ?? (invoice as any).subscription ?? null
-      if (subscriptionId) updatePayload.stripe_subscription_id = subscriptionId
-
-      const { error: updErr } = await supabaseAdmin
-        .from('profiles')
-        .update(updatePayload)
-        .eq('id', userId)
-
-      if (updErr) {
-        console.error('[stripe-webhook] Falha ao atualizar profile (invoice.paid):', updErr)
-        await markStripeEvent(supabaseAdmin, event.id, {
-          status: 'failed',
-          error: `Falha update profiles invoice.paid: ${String((updErr as any).message || updErr)}`,
-        })
-        return jsonErr('Falha ao atualizar fatura paga no perfil', 500)
-      }
-
-      await markStripeEvent(supabaseAdmin, event.id, { status: 'processed' })
-      return jsonOk()
-    }
-
-    await markStripeEvent(supabaseAdmin, event.id, { status: 'processed' })
-    return jsonOk()
   } catch (err: any) {
     console.error('[stripe-webhook] Erro inesperado:', err)
     await markStripeEvent(supabaseAdmin, event.id, {
