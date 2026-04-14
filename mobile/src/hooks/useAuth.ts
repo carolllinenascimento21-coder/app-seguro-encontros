@@ -31,9 +31,7 @@ function waitForAuthRedirect(redirectTo: string) {
     }, OAUTH_TIMEOUT_MS)
 
     const subscription = Linking.addEventListener('url', ({ url }) => {
-      if (!url.startsWith(redirectTo)) {
-        return
-      }
+      if (!url.startsWith(redirectTo)) return
 
       clearTimeout(timeoutId)
       subscription.remove()
@@ -88,11 +86,14 @@ export function useAuth() {
       throw new Error(error.message)
     }
 
-    if (!data.url) {
+    if (!data?.url) {
       throw new Error('Não foi possível iniciar autenticação social.')
     }
 
+    // Aguarda o retorno do deep link (mobile)
     const pendingRedirect = waitForAuthRedirect(redirectTo)
+
+    // Abre o provedor (Apple / Google)
     await Linking.openURL(data.url)
 
     const callbackUrl = await pendingRedirect
@@ -101,28 +102,21 @@ export function useAuth() {
       return { cancelled: true }
     }
 
-    const pendingRedirect = waitForAuthRedirect(redirectTo)
-    await Linking.openURL(data.url)
-
-    const callbackUrl = await pendingRedirect
-
-    if (!callbackUrl) {
-    return { cancelled: true }
-  }
-
-// ❌ NÃO FAZ EXCHANGE AQUI
-
-return { cancelled: false }
-    if (exchangeError) {
-      throw new Error(exchangeError.message)
-    }
+    // 🚨 NÃO FAZER exchange aqui
+    // O backend (/auth/callback) já faz isso
 
     return { cancelled: false }
   }, [])
 
-  const signInWithGoogle = useCallback(async () => signInWithOAuth('google'), [signInWithOAuth])
+  const signInWithGoogle = useCallback(
+    async () => signInWithOAuth('google'),
+    [signInWithOAuth]
+  )
 
-  const signInWithApple = useCallback(async () => signInWithOAuth('apple'), [signInWithOAuth])
+  const signInWithApple = useCallback(
+    async () => signInWithOAuth('apple'),
+    [signInWithOAuth]
+  )
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
