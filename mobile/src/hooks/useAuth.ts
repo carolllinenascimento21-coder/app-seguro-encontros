@@ -101,8 +101,18 @@ export function useAuth() {
       return { cancelled: true }
     }
 
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(callbackUrl)
+    const pendingRedirect = waitForAuthRedirect(redirectTo)
+    await Linking.openURL(data.url)
 
+    const callbackUrl = await pendingRedirect
+
+    if (!callbackUrl) {
+    return { cancelled: true }
+  }
+
+// ❌ NÃO FAZ EXCHANGE AQUI
+
+return { cancelled: false }
     if (exchangeError) {
       throw new Error(exchangeError.message)
     }
