@@ -100,7 +100,11 @@ export default function PlanosPage() {
   const handleCheckout = async (planId: SubscriptionPlanId) => {
     try {
       setLoadingPlan(planId)
-      await purchasePlan(planId, startStripeCheckout)
+      const result = await purchasePlan(planId, startStripeCheckout)
+      if (result?.ok) {
+        router.refresh()
+        alert('Assinatura ativada com sucesso. Seu plano premium já está ativo.')
+      }
     } catch (error: any) {
       console.error('Erro ao iniciar checkout:', error)
       alert(error?.message || 'Erro ao iniciar pagamento')
@@ -112,7 +116,10 @@ export default function PlanosPage() {
   const handleRestorePurchases = async () => {
     try {
       setRestoring(true)
-      await restoreMobilePurchases()
+      const result = await restoreMobilePurchases()
+      if (result?.ok) {
+        router.refresh()
+      }
       alert('Compras restauradas com sucesso.')
     } catch (error: any) {
       console.error('Erro ao restaurar compras:', error)
