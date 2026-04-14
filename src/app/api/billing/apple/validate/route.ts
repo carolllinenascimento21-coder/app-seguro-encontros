@@ -8,11 +8,10 @@ export const runtime = 'nodejs'
 
 const bodySchema = z.object({
   userId: z.string().uuid().optional(),
-  platform: z.literal('apple'),
   productId: z.string().min(3),
   transactionId: z.string().optional(),
   originalTransactionId: z.string().optional(),
-  appAccountToken: z.string().optional(),
+  appAccountToken: z.string().uuid().optional(),
   signedTransactionInfo: z.string().optional(),
 })
 

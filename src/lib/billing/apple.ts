@@ -1,7 +1,6 @@
-import { createPublicKey, createVerify, X509Certificate } from 'crypto'
+import { createPublicKey, createSign, createVerify, X509Certificate } from 'crypto'
 
 import { assertAllowedProduct, planFromProduct } from '@/lib/billing/catalog'
-import { mapAppleStatus } from '@/lib/billing/mapper'
 import type { SubscriptionUpsert } from '@/lib/billing/types'
 
 type AppleValidateInput = {
@@ -27,6 +26,23 @@ type AppleTransactionJWTPayload = {
   offerType?: number
 }
 
+type AppleRenewalJWTPayload = {
+  autoRenewStatus?: number
+  expirationIntent?: number
+  gracePeriodExpiresDate?: number
+  isInBillingRetryPeriod?: boolean
+}
+
+type AppleSubscriptionStatusResponse = {
+  data?: Array<{
+    lastTransactions?: Array<{
+      signedTransactionInfo?: string
+      signedRenewalInfo?: string
+      status?: number
+    }>
+  }>
+}
+
 function requireEnv(name: string) {
   const value = process.env[name]
   if (!value) throw new Error(`missing_env:${name}`)
@@ -42,6 +58,14 @@ function parseJWTPayload<T>(token: string): T {
   const parts = token.split('.')
   if (parts.length !== 3) throw new Error('invalid_jwt')
   return JSON.parse(base64UrlDecode(parts[1]).toString('utf8')) as T
+}
+
+function parseJwtPayloadUnsafe<T>(token: string): T | null {
+  try {
+    return parseJWTPayload<T>(token)
+  } catch {
+    return null
+  }
 }
 
 function verifyJwsWithX5C(jws: string): Record<string, unknown> {
@@ -84,16 +108,22 @@ async function getAppleApiToken() {
     JSON.stringify({ iss: issuerId, iat: now, exp: now + 300, aud: 'appstoreconnect-v1', bid: bundleId })
   ).toString('base64url')
 
-  const signer = createVerify('sha256')
-  signer.end()
-  // Node runtime has no direct ES256 sign without createSign in strict lint setup here.
-  const { createSign } = await import('crypto')
   const sign = createSign('sha256')
   sign.update(`${header}.${payload}`)
   sign.end()
   const signature = sign.sign({ key: privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url')
 
   return `${header}.${payload}.${signature}`
+}
+
+type AppleApiEnvironment = 'production' | 'sandbox'
+
+function requireAllowedEnvironment(apiEnv: AppleApiEnvironment) {
+  const configured = (process.env.APPLE_ALLOWED_ENV ?? 'both').toLowerCase()
+  if (configured === 'both') return
+  if (configured !== apiEnv) {
+    throw new Error(`apple_environment_not_allowed:${apiEnv}`)
+  }
 }
 
 async function fetchTransaction(transactionId: string) {
@@ -115,41 +145,95 @@ async function fetchTransaction(transactionId: string) {
   throw new Error('apple_transaction_not_found')
 }
 
+async function fetchSubscriptionStatus(originalTransactionId: string, environment: AppleApiEnvironment) {
+  const token = await getAppleApiToken()
+  const endpoint =
+    environment === 'production'
+      ? `https://api.storekit.itunes.apple.com/inApps/v1/subscriptions/${originalTransactionId}`
+      : `https://api.storekit-sandbox.itunes.apple.com/inApps/v1/subscriptions/${originalTransactionId}`
+
+  const res = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return null
+
+  const response = (await res.json()) as AppleSubscriptionStatusResponse
+  const last = response.data?.[0]?.lastTransactions?.[0]
+  if (!last?.signedTransactionInfo) return null
+
+  const tx = parseJWTPayload<AppleTransactionJWTPayload>(last.signedTransactionInfo)
+  const renewal = last.signedRenewalInfo ? parseJWTPayload<AppleRenewalJWTPayload>(last.signedRenewalInfo) : undefined
+
+  return {
+    tx,
+    renewal,
+    statusCode: last.status,
+  }
+}
+
+function deriveAppleStatus(args: {
+  transaction: AppleTransactionJWTPayload
+  renewal?: AppleRenewalJWTPayload
+  statusCode?: number
+}) {
+  const tx = args.transaction
+  if (tx.revocationDate) return 'revoked' as const
+
+  if (args.statusCode === 5) return 'revoked' as const
+  if (args.statusCode === 4) return 'grace_period' as const
+  if (args.statusCode === 3) return 'billing_retry' as const
+  if (args.statusCode === 2) return 'expired' as const
+
+  const now = Date.now()
+  const grace = args.renewal?.gracePeriodExpiresDate
+  if (grace && grace > now) return 'grace_period' as const
+  if (args.renewal?.isInBillingRetryPeriod) return 'billing_retry' as const
+  if (tx.expiresDate && tx.expiresDate <= now) return 'expired' as const
+  if (tx.offerType === 1) return 'trial' as const
+  if (args.renewal?.autoRenewStatus === 0 && tx.expiresDate && tx.expiresDate > now) return 'canceled' as const
+
+  return 'active' as const
+}
+
 export async function validateApplePurchaseServerSide(input: AppleValidateInput): Promise<SubscriptionUpsert> {
   assertAllowedProduct(input.productId)
 
-  const trusted = input.signedTransactionInfo
-    ? (verifyJwsWithX5C(input.signedTransactionInfo) as AppleTransactionJWTPayload)
-    : null
+  const trusted = input.signedTransactionInfo ? parseJwtPayloadUnsafe<AppleTransactionJWTPayload>(input.signedTransactionInfo) : null
 
   const txId = input.transactionId ?? trusted?.transactionId ?? input.originalTransactionId
   if (!txId) throw new Error('missing_apple_transaction_id')
 
   const transaction = await fetchTransaction(txId)
   const payload = parseJWTPayload<AppleTransactionJWTPayload>(transaction.signedTransactionInfo)
+  requireAllowedEnvironment(transaction.environment)
 
   const expectedBundle = requireEnv('APPLE_BUNDLE_ID')
   if (payload.bundleId !== expectedBundle) throw new Error('apple_bundle_id_mismatch')
   if (payload.productId !== input.productId) throw new Error('apple_product_mismatch')
+  assertAllowedProduct(payload.productId ?? '')
 
   if (input.appAccountToken && payload.appAccountToken && input.appAccountToken !== payload.appAccountToken) {
     throw new Error('apple_app_account_token_mismatch')
   }
 
-  const status = mapAppleStatus({
-    expiresDateMs: payload.expiresDate,
-    revocationDateMs: payload.revocationDate,
-    offerType: payload.offerType,
-  })
-
   const externalSubscriptionId = payload.originalTransactionId ?? payload.transactionId ?? txId
   const externalTransactionId = payload.transactionId ?? txId
+  if (!payload.originalTransactionId) throw new Error('apple_missing_original_transaction_id')
+  if (input.originalTransactionId && input.originalTransactionId !== payload.originalTransactionId) {
+    throw new Error('apple_original_transaction_mismatch')
+  }
+
+  const statusPayload = await fetchSubscriptionStatus(externalSubscriptionId, transaction.environment)
+  const finalTx = statusPayload?.tx ?? payload
+  const status = deriveAppleStatus({
+    transaction: finalTx,
+    renewal: statusPayload?.renewal,
+    statusCode: statusPayload?.statusCode,
+  })
 
   return {
     userId: input.userId,
     platform: 'apple',
-    productId: payload.productId!,
-    planId: planFromProduct(payload.productId!),
+    productId: finalTx.productId!,
+    planId: planFromProduct(finalTx.productId!),
     status,
     externalSubscriptionId,
     externalTransactionId,
@@ -157,12 +241,17 @@ export async function validateApplePurchaseServerSide(input: AppleValidateInput)
     purchaseToken: null,
     environment: transaction.environment,
     isActive: ['active', 'trial', 'grace_period'].includes(status),
-    startedAt: payload.purchaseDate ? new Date(payload.purchaseDate).toISOString() : null,
-    expiresAt: payload.expiresDate ? new Date(payload.expiresDate).toISOString() : null,
+    startedAt: finalTx.purchaseDate ? new Date(finalTx.purchaseDate).toISOString() : null,
+    expiresAt: finalTx.expiresDate ? new Date(finalTx.expiresDate).toISOString() : null,
     canceledAt: null,
-    revokedAt: payload.revocationDate ? new Date(payload.revocationDate).toISOString() : null,
-    eventTimestampMs: payload.expiresDate ?? payload.purchaseDate ?? Date.now(),
-    rawSource: { api: payload, signedTransactionInfo: transaction.signedTransactionInfo },
+    revokedAt: finalTx.revocationDate ? new Date(finalTx.revocationDate).toISOString() : null,
+    eventTimestampMs: finalTx.expiresDate ?? finalTx.purchaseDate ?? Date.now(),
+    rawSource: {
+      apiTransaction: finalTx,
+      apiRenewal: statusPayload?.renewal ?? null,
+      statusCode: statusPayload?.statusCode ?? null,
+      signedTransactionInfo: transaction.signedTransactionInfo,
+    },
   }
 }
 
