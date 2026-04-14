@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import {
   buildEmergencyLog,
   dispatchEmergencyAlert,
+  type EmergencyContact,
   isWithinCooldown,
   maskPhone,
   sanitizeContactsForAlert,
 } from '@/lib/emergency-alert'
+import { createServerClient } from '@/lib/supabase/server'
 import {
   getMissingSupabaseEnvDetails,
   getSupabasePublicEnv,
@@ -19,11 +20,6 @@ type AlertRequestBody = {
   longitude?: number
   confirmation?: boolean
 }
-
-// FEATURE FLAGS SAFE
-const ENABLE_PUSH = process.env.ENABLE_PUSH === 'true'
-const ENABLE_WHATSAPP = process.env.ENABLE_WHATSAPP === 'true'
-const ENABLE_SMS = process.env.ENABLE_SMS === 'true'
 
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID()
@@ -54,19 +50,11 @@ export async function POST(request: Request) {
     // =========================
     // CLIENTS
     // =========================
-    const cookieStore = await cookies()
-
-    const supabase = createServerClient(supabasePublicEnv.url, supabasePublicEnv.anonKey, {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: () => {},
-      },
-    })
-
-    const supabaseAdmin = createServerClient(supabaseServiceEnv.url, supabaseServiceEnv.serviceRoleKey, {
-      cookies: {
-        getAll: () => [],
-        setAll: () => {},
+    const supabase = await createServerClient()
+    const supabaseAdmin = createClient(supabaseServiceEnv.url, supabaseServiceEnv.serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
     })
 
@@ -144,16 +132,40 @@ export async function POST(request: Request) {
     // =========================
     // CONTACTS
     // =========================
-    const { data: contacts, error: contactsError } = await supabaseAdmin
+    let contacts: EmergencyContact[] | null = null
+    let contactsError: { message: string } | null = null
+
+    // 1) Primary fetch with user context (RLS)
+    const primaryContactsResult = await supabase
       .from('emergency_contacts')
       .select('id,nome,telefone,push_token,push_platform')
       .eq('user_id', user.id)
       .eq('ativo', true)
       .limit(3)
 
+    contacts = primaryContactsResult.data
+    contactsError = primaryContactsResult.error
+
+    // 2) Fallback with service-role context (safe server-side only)
+    if (contactsError || !contacts || contacts.length === 0) {
+      const fallbackContactsResult = await supabaseAdmin
+        .from('emergency_contacts')
+        .select('id,nome,telefone,push_token,push_platform')
+        .eq('user_id', user.id)
+        .eq('ativo', true)
+        .limit(3)
+
+      contacts = fallbackContactsResult.data
+      contactsError = fallbackContactsResult.error
+    }
+
     if (contactsError) {
       console.error('CONTACT ERROR:', contactsError)
       return NextResponse.json({ error: 'Erro ao buscar contatos', requestId }, { status: 500 })
+    }
+
+    if (!contacts || contacts.length === 0) {
+      return NextResponse.json({ error: 'Nenhum contato cadastrado', requestId }, { status: 400 })
     }
 
     const sanitizedContacts = sanitizeContactsForAlert(contacts ?? [])
@@ -168,11 +180,7 @@ export async function POST(request: Request) {
     // =========================
     // DISPATCH (SAFE FLAGS)
     // =========================
-    const dispatchResult = await dispatchEmergencyAlert(sanitizedContacts, {
-      enablePush: ENABLE_PUSH,
-      enableWhatsApp: ENABLE_WHATSAPP,
-      enableSMS: ENABLE_SMS,
-    })
+    const dispatchResult = await dispatchEmergencyAlert(sanitizedContacts)
 
     console.log('[EMERGENCY_ALERT]', {
       user_id: user.id,
@@ -242,11 +250,12 @@ export async function POST(request: Request) {
       const supabaseServiceEnv = getSupabaseServiceEnv('api/alerta-emergencia')
 
       if (supabaseServiceEnv) {
-        const supabaseAdmin = createServerClient(
-          supabaseServiceEnv.url,
-          supabaseServiceEnv.serviceRoleKey,
-          { cookies: { getAll: () => [], setAll: () => {} } }
-        )
+        const supabaseAdmin = createClient(supabaseServiceEnv.url, supabaseServiceEnv.serviceRoleKey, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        })
 
         await supabaseAdmin.from('emergency_logs').insert({
           user_id: userId,
