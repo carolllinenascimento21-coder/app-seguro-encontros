@@ -77,7 +77,7 @@ export async function upsertSubscriptionState(change: SubscriptionUpsert) {
 
   const profilePatch = {
     has_active_plan: isActiveStatus(change.status),
-    current_plan_id: change.planId,
+    current_plan_id: isActiveStatus(change.status) ? change.planId : null,
     subscription_status: change.status,
   }
 
@@ -93,12 +93,53 @@ export async function upsertSubscriptionState(change: SubscriptionUpsert) {
   return true
 }
 
+export async function bindApplePurchaseToUser(input: {
+  userId: string
+  originalTransactionId: string
+  transactionId: string
+  appAccountToken?: string
+}) {
+  const supabase = adminClient()
+  const { data: existing, error: existingError } = await supabase
+    .from('mobile_purchase_links')
+    .select('id, first_user_id')
+    .eq('platform', 'apple')
+    .eq('original_transaction_id', input.originalTransactionId)
+    .maybeSingle()
+
+  if (existingError) {
+    throw new Error(`mobile_purchase_link_lookup_failed:${existingError.message}`)
+  }
+
+  if (existing?.first_user_id && existing.first_user_id !== input.userId) {
+    throw new Error('apple_transaction_already_bound_to_another_user')
+  }
+
+  const upsertPayload = {
+    platform: 'apple',
+    original_transaction_id: input.originalTransactionId,
+    latest_transaction_id: input.transactionId,
+    app_account_token: input.appAccountToken ?? null,
+    first_user_id: existing?.first_user_id ?? input.userId,
+    last_user_id: input.userId,
+  }
+
+  const { error: upsertError } = await supabase
+    .from('mobile_purchase_links')
+    .upsert(upsertPayload, { onConflict: 'platform,original_transaction_id' })
+
+  if (upsertError) {
+    throw new Error(`mobile_purchase_link_upsert_failed:${upsertError.message}`)
+  }
+}
+
 export function toValidationResponse(change: SubscriptionUpsert): BillingValidationResponse {
   return {
     ok: true,
     platform: change.platform,
     plan: change.planId,
     status: change.status,
+    hasActivePlan: isActiveStatus(change.status),
     expiresAt: change.expiresAt,
     source: 'validated_server_side',
     externalTransactionId: change.externalTransactionId,

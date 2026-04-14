@@ -49,6 +49,7 @@ export type BillingValidationResponse = {
   platform: BillingPlatform
   plan: InternalPlanId
   status: InternalSubscriptionStatus
+  hasActivePlan: boolean
   expiresAt: string | null
   source: 'validated_server_side'
   externalTransactionId: string

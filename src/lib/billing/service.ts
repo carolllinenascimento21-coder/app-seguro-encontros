@@ -1,7 +1,7 @@
 import { buildIdempotencyKey, stableEventKey } from '@/lib/billing/idempotency'
 import { parseAppleNotificationPayload, validateApplePurchaseServerSide } from '@/lib/billing/apple'
 import { parseGoogleRtdn, validateGooglePurchaseServerSide } from '@/lib/billing/google'
-import { insertBillingEvent, toValidationResponse, upsertSubscriptionState } from '@/lib/billing/supabase'
+import { bindApplePurchaseToUser, insertBillingEvent, toValidationResponse, upsertSubscriptionState } from '@/lib/billing/supabase'
 import type { BillingValidationResponse } from '@/lib/billing/types'
 
 function logBilling(event: string, payload: Record<string, unknown>) {
@@ -16,7 +16,18 @@ export async function validateApplePurchaseAndPersist(input: {
   appAccountToken?: string
   signedTransactionInfo?: string
 }): Promise<BillingValidationResponse> {
+  if (input.appAccountToken && input.appAccountToken !== input.userId) {
+    throw new Error('apple_app_account_token_user_mismatch')
+  }
+
   const normalized = await validateApplePurchaseServerSide(input)
+
+  await bindApplePurchaseToUser({
+    userId: normalized.userId,
+    originalTransactionId: normalized.originalTransactionId,
+    transactionId: normalized.externalTransactionId,
+    appAccountToken: input.appAccountToken,
+  })
 
   const idempotencyKey = buildIdempotencyKey([
     'apple_validate',
