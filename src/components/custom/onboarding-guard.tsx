@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { createSupabaseClient } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase/browser'
 import { ensureProfileForUser, type ProfileErrorType } from '@/lib/profile-utils'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
 
@@ -212,6 +212,20 @@ export default function OnboardingGuard({
 
     return () => {
       isMounted = false
+    }
+  }, [checkProfile])
+
+  useEffect(() => {
+    if (!supabase) return
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event) => {
+      void checkProfile()
+    })
+
+    return () => {
+      subscription.unsubscribe()
     }
   }, [checkProfile])
 

@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_REDIRECT_PATH = '/home'
+const LOGIN_PATH = '/login'
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_REDIRECT_PATH
@@ -33,6 +34,10 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = getSafeRedirectPath(searchParams.get('next'))
+
+  if (next === LOGIN_PATH || next.startsWith('/auth/callback')) {
+    return NextResponse.redirect(`${origin}${DEFAULT_REDIRECT_PATH}`)
+  }
 
   if (!code) {
     return NextResponse.redirect(`${origin}${next}`)
@@ -66,6 +71,23 @@ export async function GET(request: NextRequest) {
 
     const loginUrl = new URL('/login', origin)
     loginUrl.searchParams.set('error', 'auth_callback_failed')
+    loginUrl.searchParams.set('next', next)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession()
+
+  if (sessionError || !session) {
+    console.error('auth callback session validation error', {
+      sessionError,
+      hasSession: Boolean(session),
+    })
+
+    const loginUrl = new URL(LOGIN_PATH, origin)
+    loginUrl.searchParams.set('error', 'auth_session_not_persisted')
     loginUrl.searchParams.set('next', next)
     return NextResponse.redirect(loginUrl)
   }
