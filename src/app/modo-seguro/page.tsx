@@ -87,6 +87,7 @@ export default function ModoSeguroPage() {
         body: JSON.stringify({
           latitude: coords.lat,
           longitude: coords.lng,
+          confirmation: true,
         }),
       })
 
@@ -97,7 +98,17 @@ export default function ModoSeguroPage() {
         return
       }
 
-      setAlertSuccess('Alerta enviado com sucesso')
+      if (data?.status === 'error') {
+        setAlertError(data.error || 'Não foi possível enviar o alerta. Tente novamente.')
+        return
+      }
+
+      if (data?.status === 'partial_success') {
+        setAlertSuccess('Alerta enviado parcialmente. Pelo menos um canal foi acionado.')
+      } else {
+        setAlertSuccess('Alerta enviado com sucesso')
+      }
+
       setShowEmergencyModal(false)
     } catch {
       setAlertError('Erro inesperado ao enviar alerta. Verifique sua conexão e tente novamente.')
