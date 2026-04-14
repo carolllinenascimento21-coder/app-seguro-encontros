@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Crown } from 'lucide-react'
-import { createSupabaseClient } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase/browser'
 import { getRedirectUrl } from '@/lib/auth/getRedirectUrl'
 
 export default function OnboardingPage() {
@@ -41,7 +41,7 @@ export default function OnboardingPage() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: getRedirectUrl(),
+        redirectTo: getRedirectUrl('/onboarding/selfie'),
       },
     })
   }
@@ -57,7 +57,7 @@ export default function OnboardingPage() {
       return
     }
 
-    const redirectTo = getRedirectUrl()
+    const redirectTo = getRedirectUrl('/onboarding/selfie')
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'apple',
