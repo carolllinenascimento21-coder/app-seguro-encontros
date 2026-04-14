@@ -1,17 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-const PUBLIC_PATHS = [
-  '/',
-  '/login',
-  '/signup',
-  '/cadastro',
-  '/planos',
-  '/auth/callback',
-  '/reset-password',
-  '/update-password',
-]
-
 const PROTECTED_PATHS = [
   '/home',
   '/perfil',
@@ -29,6 +18,20 @@ function pathMatches(pathname: string, base: string) {
 }
 
 export async function middleware(req: NextRequest) {
+  const pathname = req.nextUrl.pathname
+
+  if (pathMatches(pathname, '/auth/callback')) {
+    return NextResponse.next()
+  }
+
+  const isProtected = PROTECTED_PATHS.some((p) =>
+    pathMatches(pathname, p)
+  )
+
+  if (!isProtected) {
+    return NextResponse.next()
+  }
+
   let res = NextResponse.next({
     request: {
       headers: req.headers,
@@ -57,11 +60,6 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getSession()
 
   const user = session?.user ?? null
-  const pathname = req.nextUrl.pathname
-
-  const isProtected = PROTECTED_PATHS.some((p) =>
-    pathMatches(pathname, p)
-  )
 
   if (isProtected && !user) {
     const redirectUrl = new URL('/login', req.url)

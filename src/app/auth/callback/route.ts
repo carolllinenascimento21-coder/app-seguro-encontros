@@ -14,6 +14,13 @@ function getSafeRedirectPath(next: string | null) {
   return next
 }
 
+function buildLoginRedirect(origin: string, next: string, error: string) {
+  const loginUrl = new URL(LOGIN_PATH, origin)
+  loginUrl.searchParams.set('error', error)
+  loginUrl.searchParams.set('next', next)
+  return NextResponse.redirect(loginUrl)
+}
+
 export async function GET(request: NextRequest) {
   let supabaseEnv
   try {
@@ -34,9 +41,14 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = getSafeRedirectPath(searchParams.get('next'))
+  const providerError = searchParams.get('error')
 
   if (next === LOGIN_PATH || next.startsWith('/auth/callback')) {
     return NextResponse.redirect(`${origin}${DEFAULT_REDIRECT_PATH}`)
+  }
+
+  if (providerError) {
+    return buildLoginRedirect(origin, next, providerError)
   }
 
   if (!code) {
@@ -63,16 +75,21 @@ export async function GET(request: NextRequest) {
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
+    const {
+      data: { session: existingSession },
+    } = await supabase.auth.getSession()
+
+    if (existingSession) {
+      return NextResponse.redirect(`${origin}${next}`)
+    }
+
     console.error('auth callback exchange error', {
       message: exchangeError.message,
       status: exchangeError.status,
       code: exchangeError.code,
     })
 
-    const loginUrl = new URL('/login', origin)
-    loginUrl.searchParams.set('error', 'auth_callback_failed')
-    loginUrl.searchParams.set('next', next)
-    return NextResponse.redirect(loginUrl)
+    return buildLoginRedirect(origin, next, 'auth_callback_failed')
   }
 
   const {
@@ -86,10 +103,7 @@ export async function GET(request: NextRequest) {
       hasSession: Boolean(session),
     })
 
-    const loginUrl = new URL(LOGIN_PATH, origin)
-    loginUrl.searchParams.set('error', 'auth_session_not_persisted')
-    loginUrl.searchParams.set('next', next)
-    return NextResponse.redirect(loginUrl)
+    return buildLoginRedirect(origin, next, 'auth_session_not_persisted')
   }
 
   return NextResponse.redirect(`${origin}${next}`)

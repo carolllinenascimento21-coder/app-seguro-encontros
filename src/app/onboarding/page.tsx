@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -12,6 +12,8 @@ export default function OnboardingPage() {
   const router = useRouter()
   const [agreed, setAgreed] = useState(false)
   const [gender, setGender] = useState('')
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
+  const oauthInFlightRef = useRef(false)
 
   const validatePreconditions = () => {
     if (!agreed) {
@@ -27,8 +29,9 @@ export default function OnboardingPage() {
     return true
   }
 
-  const signInWithGoogle = async () => {
+  const startOAuth = async (provider: 'google' | 'apple') => {
     if (!validatePreconditions()) return
+    if (oauthInFlightRef.current) return
 
     const supabase = createSupabaseClient()
 
@@ -38,38 +41,47 @@ export default function OnboardingPage() {
       return
     }
 
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: getRedirectUrl('/onboarding/selfie'),
-      },
-    })
+    oauthInFlightRef.current = true
+    setOauthLoading(provider)
+
+    try {
+      const redirectTo = getRedirectUrl('/onboarding/selfie')
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      })
+
+      if (error) {
+        console.error(`${provider} login error`, error)
+        alert('Não foi possível iniciar o login social. Tente novamente.')
+        oauthInFlightRef.current = false
+        setOauthLoading(null)
+        return
+      }
+
+      if (!data?.url) {
+        console.error(`${provider} login did not return redirect URL`)
+        alert('Não foi possível iniciar o login social. Tente novamente.')
+        oauthInFlightRef.current = false
+        setOauthLoading(null)
+        return
+      }
+
+      window.location.assign(data.url)
+    } catch (error) {
+      console.error(`${provider} login unexpected error`, error)
+      alert('Erro inesperado ao iniciar o login social.')
+      oauthInFlightRef.current = false
+      setOauthLoading(null)
+    }
   }
 
-  const signInWithApple = async () => {
-    if (!validatePreconditions()) return
+  const signInWithGoogle = async () => startOAuth('google')
 
-    const supabase = createSupabaseClient()
-
-    if (!supabase) {
-      console.error('Supabase client não inicializado no onboarding.')
-      alert('Serviço indisponível no momento. Tente novamente mais tarde.')
-      return
-    }
-
-    const redirectTo = getRedirectUrl('/onboarding/selfie')
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: {
-        redirectTo,
-      },
-    })
-
-    if (error) {
-      console.error('Apple login error', error)
-    }
-  }
+  const signInWithApple = async () => startOAuth('apple')
 
   const handleSignup = () => {
     if (!validatePreconditions()) return
@@ -148,18 +160,18 @@ export default function OnboardingPage() {
         {/* Google */}
         <button
           onClick={signInWithGoogle}
-          disabled={!agreed || !gender}
+          disabled={!agreed || !gender || oauthLoading !== null}
           className="btn-google w-full bg-[#D4AF37] text-black py-6 rounded-2xl font-medium disabled:opacity-50"
         >
-          Continuar com Google
+          {oauthLoading === 'google' ? 'Conectando com Google...' : 'Continuar com Google'}
         </button>
 
         <button
           onClick={signInWithApple}
-          disabled={!agreed || !gender}
+          disabled={!agreed || !gender || oauthLoading !== null}
           className="btn-apple w-full rounded-2xl border border-[#D4AF37] py-6 font-medium text-[#EFD9A7] disabled:opacity-50"
         >
-          Continuar com Apple
+          {oauthLoading === 'apple' ? 'Conectando com Apple...' : 'Continuar com Apple'}
         </button>
 
         <div className="divider text-center text-sm text-gray-400">ou</div>
