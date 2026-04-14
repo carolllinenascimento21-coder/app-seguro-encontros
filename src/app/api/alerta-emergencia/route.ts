@@ -2,17 +2,27 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import {
+  buildEmergencyLog,
+  dispatchEmergencyAlert,
+  isWithinCooldown,
+  maskPhone,
+  sanitizeContactsForAlert,
+} from '@/lib/emergency-alert'
+import {
   getMissingSupabaseEnvDetails,
   getSupabasePublicEnv,
   getSupabaseServiceEnv,
 } from '@/lib/env'
 
-const ALERT_COOLDOWN_MS = 120000
+type AlertRequestBody = {
+  latitude?: number
+  longitude?: number
+  confirmation?: boolean
+}
 
-export async function POST() {
+export async function POST(request: Request) {
   const requestId = crypto.randomUUID()
-  let user: { id: string } | null = null
-  let supabaseAdmin: ReturnType<typeof createServerClient> | null = null
+  let userId: string | null = null
 
   try {
     let supabasePublicEnv
@@ -50,84 +60,155 @@ export async function POST() {
       },
     })
 
-    supabaseAdmin = createServerClient(supabaseServiceEnv.url, supabaseServiceEnv.serviceRoleKey, {
+    const supabaseAdmin = createServerClient(supabaseServiceEnv.url, supabaseServiceEnv.serviceRoleKey, {
       cookies: {
         getAll: () => [],
         setAll: () => {},
       },
     })
 
+    let requestBody: AlertRequestBody = {}
+    try {
+      requestBody = (await request.json()) as AlertRequestBody
+    } catch {
+      return NextResponse.json({ error: 'Payload inválido', requestId }, { status: 400 })
+    }
+
+    if (requestBody.confirmation !== true) {
+      return NextResponse.json({ error: 'Confirmação obrigatória', requestId }, { status: 400 })
+    }
+
     const {
-      data: { user: authUser },
+      data: { user },
       error: authError,
     } = await supabase.auth.getUser()
 
-    if (authError || !authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized', requestId }, { status: 401 })
     }
 
-    user = { id: authUser.id }
+    userId = user.id
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('last_alert_at')
+      .select('id,last_alert_at')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
-      return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+      return NextResponse.json({ error: 'Erro interno', requestId }, { status: 500 })
     }
 
-    if (
-      profile?.last_alert_at &&
-      Date.now() - new Date(profile.last_alert_at).getTime() < ALERT_COOLDOWN_MS
-    ) {
-      return NextResponse.json({ error: 'Cooldown ativo' }, { status: 429 })
+    if (!profile) {
+      return NextResponse.json({ error: 'Perfil não encontrado', requestId }, { status: 404 })
+    }
+
+    if (isWithinCooldown(profile.last_alert_at)) {
+      return NextResponse.json(
+        { error: 'Cooldown ativo. Tente novamente em até 2 minutos.', status: 'cooldown', requestId },
+        { status: 429 }
+      )
     }
 
     const { data: contacts, error: contactsError } = await supabaseAdmin
       .from('emergency_contacts')
-      .select('*')
+      .select('id,nome,telefone,push_token,push_platform')
       .eq('user_id', user.id)
       .eq('ativo', true)
       .limit(3)
 
     if (contactsError) {
-      return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+      return NextResponse.json({ error: 'Erro interno', requestId }, { status: 500 })
     }
 
-    if (!contacts || contacts.length === 0) {
-      console.info('[alerta-emergencia] no active emergency contacts', { requestId, userId: user.id })
+    const sanitizedContacts = sanitizeContactsForAlert(contacts ?? [])
+
+    if (sanitizedContacts.length === 0) {
+      return NextResponse.json(
+        { error: 'Nenhum contato válido configurado para alerta.', requestId },
+        { status: 400 }
+      )
     }
 
-    await supabaseAdmin.from('emergency_logs').insert({
+    const dispatchResult = await dispatchEmergencyAlert(sanitizedContacts)
+
+    console.log('[EMERGENCY_ALERT]', {
       user_id: user.id,
-      contatos_enviados: contacts ?? [],
-      canais_utilizados: ['push'],
-      status: 'success',
+      push: dispatchResult.push,
+      whatsapp: dispatchResult.whatsapp,
+      sms: dispatchResult.sms,
     })
 
-    await supabaseAdmin
-      .from('profiles')
-      .update({ last_alert_at: new Date().toISOString() })
-      .eq('id', user.id)
+    const contatosMascarados = sanitizedContacts.map((contact) => maskPhone(contact.telefoneOriginal))
 
-    return NextResponse.json({ success: true, requestId })
-  } catch (err) {
-    if (supabaseAdmin) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido'
+    await supabaseAdmin.from('emergency_logs').insert(
+      buildEmergencyLog({
+        userId: user.id,
+        contactsSent: contatosMascarados,
+        channelsUsed: dispatchResult.channels_used,
+        status: dispatchResult.overall_status,
+        error: dispatchResult.error,
+      })
+    )
 
-      try {
-        await supabaseAdmin.from('emergency_logs').insert({
-          user_id: user?.id,
-          status: 'error',
-          erro: errorMessage,
-        })
-      } catch {
-        // noop
-      }
+    if (dispatchResult.overall_status !== 'failed') {
+      await supabaseAdmin
+        .from('profiles')
+        .update({ last_alert_at: new Date().toISOString() })
+        .eq('id', user.id)
     }
 
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+    if (dispatchResult.overall_status === 'failed') {
+      return NextResponse.json(
+        {
+          error: 'Não foi possível enviar o alerta em nenhum canal.',
+          status: 'error',
+          result: dispatchResult,
+          requestId,
+        },
+        { status: 200 }
+      )
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        status: dispatchResult.overall_status,
+        result: dispatchResult,
+        requestId,
+      },
+      { status: 200 }
+    )
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+
+    try {
+      const supabaseServiceEnv = getSupabaseServiceEnv('api/alerta-emergencia')
+
+      if (supabaseServiceEnv) {
+        const supabaseAdmin = createServerClient(
+          supabaseServiceEnv.url,
+          supabaseServiceEnv.serviceRoleKey,
+          {
+            cookies: {
+              getAll: () => [],
+              setAll: () => {},
+            },
+          }
+        )
+
+        await supabaseAdmin.from('emergency_logs').insert({
+          user_id: userId,
+          status: 'failed',
+          erro: errorMessage,
+          canais_utilizados: [],
+          contatos_enviados: [],
+        })
+      }
+    } catch {
+      // noop
+    }
+
+    return NextResponse.json({ error: 'Erro interno', requestId }, { status: 500 })
   }
 }
