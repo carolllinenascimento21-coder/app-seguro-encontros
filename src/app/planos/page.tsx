@@ -151,6 +151,8 @@ export default function PlanosPage() {
     try {
       setLoadingPlan(planId)
       const result = await purchasePlan(planId, startStripeCheckout)
+      if (isMobileAppRuntime() || result?.ok) 
+        redirectToProfile()
       if (result?.ok) {
         redirectToProfile()
         alert('Assinatura ativada com sucesso. Redirecionando para seu perfil...')
