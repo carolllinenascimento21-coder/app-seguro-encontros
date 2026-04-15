@@ -140,8 +140,8 @@ export default function PlanosPage() {
       setLoadingPlan(planId)
       const result = await purchasePlan(planId, startStripeCheckout)
       if (result?.ok) {
-        router.refresh()
-        alert('Assinatura ativada com sucesso. Seu plano premium já está ativo.')
+        alert('Assinatura ativada com sucesso. Redirecionando para seu perfil...')
+        router.push('/perfil')
       }
     } catch (error: any) {
       console.error('Erro ao iniciar checkout:', error)
@@ -156,9 +156,10 @@ export default function PlanosPage() {
       setRestoring(true)
       const result = await restoreMobilePurchases()
       if (result?.ok) {
-        router.refresh()
+        alert('Compras restauradas com sucesso. Redirecionando para seu perfil...')
+        router.push('/perfil')
+        return
       }
-      alert('Compras restauradas com sucesso.')
     } catch (error: any) {
       console.error('Erro ao restaurar compras:', error)
       alert(error?.message || 'Erro ao restaurar compras')
