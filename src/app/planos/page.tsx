@@ -177,6 +177,8 @@ export default function PlanosPage() {
       const result = await restoreMobilePurchases()
       if (result?.ok) {
         redirectToProfile()
+        alert('Compras restauradas com sucesso. Redirecionando para seu perfil...')
+        router.push('/perfil')
         return
       }
     } catch (error: any) {
