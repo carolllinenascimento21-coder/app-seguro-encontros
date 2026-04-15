@@ -21,10 +21,13 @@ declare global {
 
   interface Window {
     confiaStoreKit?: {
+      getProducts?: () => Promise<unknown>
       purchase: (productId: string) => Promise<ConfiaStoreKitPurchase>
       restorePurchases?: () => Promise<unknown>
       restore?: () => Promise<unknown>
       getEntitlements?: () => Promise<unknown>
     }
+    __confiaStoreKitState?: unknown
+    __confiaSyncAppleEntitlements?: () => Promise<unknown>
   }
 }

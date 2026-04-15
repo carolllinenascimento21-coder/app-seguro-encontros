@@ -1,10 +1,14 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { isMobileAppRuntime } from '@/lib/mobile-billing'
-import { purchasePlan, restoreMobilePurchases } from '@/lib/purchase-plan'
+import {
+  purchasePlan,
+  restoreMobilePurchases,
+  syncAppleEntitlementsWithBackend,
+} from '@/lib/purchase-plan'
 
 type FreePlanId = 'free'
 type SubscriptionPlanId = 'premium_monthly' | 'premium_yearly'
@@ -69,6 +73,33 @@ export default function PlanosPage() {
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null)
   const [restoring, setRestoring] = useState(false)
   const isMobileApp = isMobileAppRuntime()
+
+  useEffect(() => {
+    if (!isMobileApp) return
+
+    let active = true
+    const runEntitlementSync = async (force = false) => {
+      try {
+        await syncAppleEntitlementsWithBackend({ force })
+      } catch (error) {
+        console.error('Falha ao sincronizar entitlements Apple:', error)
+      }
+    }
+
+    runEntitlementSync(false)
+    const intervalId = window.setInterval(() => {
+      if (!active) return
+      void runEntitlementSync(false)
+    }, 15000)
+
+    window.__confiaSyncAppleEntitlements = async () => runEntitlementSync(true)
+
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+      delete window.__confiaSyncAppleEntitlements
+    }
+  }, [isMobileApp])
 
   const startStripeCheckout = async (planId: SubscriptionPlanId) => {
     const res = await fetch('/api/stripe/checkout', {

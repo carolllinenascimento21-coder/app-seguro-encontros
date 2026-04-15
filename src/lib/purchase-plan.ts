@@ -18,6 +18,17 @@ type PurchasePlanResult = {
   subscription: Record<string, unknown> | null
 }
 
+const sentTransactions = new Set<string>()
+
+function debugStoreKit(step: string, payload?: unknown, options?: { alertMessage?: string }) {
+  const timestamp = new Date().toISOString()
+  console.log(`[Confia+ Apple][${timestamp}] ${step}`, payload ?? null)
+
+  if (options?.alertMessage && typeof window !== 'undefined') {
+    window.alert(options.alertMessage)
+  }
+}
+
 function toIsoDate(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const parsed = new Date(value)
@@ -69,6 +80,12 @@ function normalizeApplePayload(raw: unknown, fallbackProductId: string): AppleAc
 }
 
 async function activateAppleSubscription(payload: AppleActivationPayload) {
+  const transactionKey = `${payload.transactionId}:${payload.originalTransactionId}`
+  if (sentTransactions.has(transactionKey)) {
+    debugStoreKit('Compra já sincronizada, ignorando duplicidade', { transactionKey })
+    return { ok: true, duplicate: true }
+  }
+
   const usePhase1Activation = Boolean(payload.signedTransactionInfo)
   const endpoint = usePhase1Activation
     ? '/api/apple/activate-subscription'
@@ -83,6 +100,14 @@ async function activateAppleSubscription(payload: AppleActivationPayload) {
         appAccountToken: payload.appAccountToken ?? undefined,
       }
 
+  debugStoreKit('Enviando compra para backend', {
+    endpoint,
+    transactionId: payload.transactionId,
+    originalTransactionId: payload.originalTransactionId,
+    productId: payload.productId,
+    hasSignedTransactionInfo: Boolean(payload.signedTransactionInfo),
+  })
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -92,10 +117,31 @@ async function activateAppleSubscription(payload: AppleActivationPayload) {
   })
 
   const data = await response.json().catch(() => null)
+  debugStoreKit('Resposta do backend de ativação Apple', {
+    endpoint,
+    status: response.status,
+    ok: response.ok,
+    data,
+  })
+
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || 'Falha ao validar compra mobile')
+    const reason = data?.error || data?.message || 'Falha ao validar compra mobile'
+    const detailedMessage = `Erro ao ativar assinatura Apple (${endpoint}) [${response.status}]: ${reason}`
+    debugStoreKit(
+      'Falha de ativação Apple',
+      {
+        endpoint,
+        status: response.status,
+        reason,
+      },
+      {
+        alertMessage: detailedMessage,
+      }
+    )
+    throw new Error(detailedMessage)
   }
 
+  sentTransactions.add(transactionKey)
   return data
 }
 
@@ -112,7 +158,7 @@ function parseRestorePurchases(raw: unknown): Record<string, unknown>[] {
   return [value]
 }
 
-async function syncActiveEntitlements() {
+async function syncActiveEntitlements(options?: { force?: boolean }) {
   if (!window.confiaStoreKit?.getEntitlements) return
 
   const entitlementsRaw = await window.confiaStoreKit.getEntitlements()
@@ -147,8 +193,18 @@ async function syncActiveEntitlements() {
       productId
     )
 
+    const transactionKey = `${normalized.transactionId}:${normalized.originalTransactionId}`
+    if (!options?.force && sentTransactions.has(transactionKey)) {
+      continue
+    }
+
     await activateAppleSubscription(normalized)
   }
+}
+
+export async function syncAppleEntitlementsWithBackend(options?: { force?: boolean }) {
+  await syncActiveEntitlements(options)
+  return { ok: true }
 }
 
 export async function purchasePlan(
@@ -161,11 +217,17 @@ export async function purchasePlan(
   }
 
   const productId = mapPlanToProduct(planId)
+  debugStoreKit('Iniciando purchase() Apple', { planId, productId })
+
   const purchaseData = await window.confiaStoreKit!.purchase(productId)
+  debugStoreKit('Retorno bruto do purchase() Apple', purchaseData)
+
   const payload = normalizeApplePayload(purchaseData, productId)
+  debugStoreKit('Payload Apple normalizado para backend', payload)
 
   const result = await activateAppleSubscription(payload)
   await syncActiveEntitlements()
+  debugStoreKit('Compra Apple finalizada com sucesso', result)
 
   return {
     ok: true,
@@ -184,6 +246,7 @@ export async function restoreMobilePurchases() {
   }
 
   const restoreData = await restoreFn()
+  debugStoreKit('Retorno bruto do restore() Apple', restoreData)
   const purchases = parseRestorePurchases(restoreData)
 
   if (purchases.length === 0) {
@@ -196,6 +259,7 @@ export async function restoreMobilePurchases() {
     if (!productId) continue
 
     const payload = normalizeApplePayload(purchase, productId)
+    debugStoreKit('Processando item de restore Apple', payload)
     const result = await activateAppleSubscription(payload)
     restored.push(result)
   }
