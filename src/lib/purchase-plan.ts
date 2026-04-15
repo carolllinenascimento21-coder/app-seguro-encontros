@@ -10,7 +10,7 @@ type AppleActivationPayload = {
   expirationDate: string | null
   environment: 'sandbox' | 'production'
   appAccountToken: string | null
-  signedTransactionInfo: string
+  signedTransactionInfo: string | null
 }
 
 type PurchasePlanResult = {
@@ -49,7 +49,7 @@ function normalizeApplePayload(raw: unknown, fallbackProductId: string): AppleAc
       ? purchase.appAccountToken
       : null
   const signedTransactionInfo =
-    typeof purchase.signedTransactionInfo === 'string' ? purchase.signedTransactionInfo.trim() : ''
+    typeof purchase.signedTransactionInfo === 'string' ? purchase.signedTransactionInfo.trim() : null
 
   if (!productId) throw new Error('Compra Apple sem productId')
   if (!transactionId) throw new Error('Compra Apple sem transactionId')
@@ -69,12 +69,26 @@ function normalizeApplePayload(raw: unknown, fallbackProductId: string): AppleAc
 }
 
 async function activateAppleSubscription(payload: AppleActivationPayload) {
-  const response = await fetch('/api/apple/activate-subscription', {
+  const usePhase1Activation = Boolean(payload.signedTransactionInfo)
+  const endpoint = usePhase1Activation
+    ? '/api/apple/activate-subscription'
+    : '/api/billing/apple/validate'
+
+  const requestBody = usePhase1Activation
+    ? payload
+    : {
+        productId: payload.productId,
+        transactionId: payload.transactionId,
+        originalTransactionId: payload.originalTransactionId,
+        appAccountToken: payload.appAccountToken ?? undefined,
+      }
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(requestBody),
   })
 
   const data = await response.json().catch(() => null)
