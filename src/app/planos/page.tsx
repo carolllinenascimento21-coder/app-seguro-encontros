@@ -76,9 +76,14 @@ export default function PlanosPage() {
 
   const redirectToProfile = () => {
     if (typeof window !== 'undefined') {
+      console.log('[Confia+ Apple] antes de redirecionar para /perfil', {
+        pathname: window.location.pathname,
+        href: window.location.href,
+      })
       window.location.replace('/perfil')
       window.setTimeout(() => {
         if (window.location.pathname !== '/perfil') {
+          console.log('[Confia+ Apple] fallback de redirecionamento para /perfil via location.href')
           window.location.href = '/perfil'
         }
       }, 250)
