@@ -75,15 +75,17 @@ export default function PlanosPage() {
   const isMobileApp = isMobileAppRuntime()
 
   const redirectToProfile = () => {
-    router.replace('/perfil')
-
     if (typeof window !== 'undefined') {
+      window.location.replace('/perfil')
       window.setTimeout(() => {
         if (window.location.pathname !== '/perfil') {
-          window.location.assign('/perfil')
+          window.location.href = '/perfil'
         }
-      }, 350)
+      }, 250)
+      return
     }
+
+    router.replace('/perfil')
   }
 
   useEffect(() => {
