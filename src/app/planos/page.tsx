@@ -75,14 +75,23 @@ export default function PlanosPage() {
   const isMobileApp = isMobileAppRuntime()
 
   useEffect(() => {
-    if (!isMobileApp) return
-
     let active = true
     const runEntitlementSync = async (force = false) => {
       try {
-        await syncAppleEntitlementsWithBackend({ force })
+        return await syncAppleEntitlementsWithBackend({ force })
       } catch (error) {
         console.error('Falha ao sincronizar entitlements Apple:', error)
+        throw error
+      }
+    }
+
+    // Disponível também para testes via Web Inspector, mesmo antes do bridge estar pronto.
+    window.__confiaSyncAppleEntitlements = async () => runEntitlementSync(true)
+
+    if (!isMobileApp) {
+      return () => {
+        active = false
+        delete window.__confiaSyncAppleEntitlements
       }
     }
 
@@ -91,8 +100,6 @@ export default function PlanosPage() {
       if (!active) return
       void runEntitlementSync(false)
     }, 15000)
-
-    window.__confiaSyncAppleEntitlements = async () => runEntitlementSync(true)
 
     return () => {
       active = false

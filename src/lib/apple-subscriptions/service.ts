@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createHash } from 'crypto'
 
 import { getPlanFromAppleProduct } from '@/lib/apple-subscriptions/catalog'
 import type {
@@ -42,6 +43,22 @@ function isDuplicateKeyError(message?: string | null) {
   return typeof message === 'string' && message.toLowerCase().includes('duplicate key')
 }
 
+function canonicalizeAppleTransactionId(input: {
+  value: string
+  signedTransactionInfo: string
+  fallbackSeed: string
+  prefix: 'tx' | 'otx'
+}) {
+  if (input.value !== '0') return input.value
+
+  const hash = createHash('sha256')
+    .update(`${input.signedTransactionInfo}:${input.fallbackSeed}`)
+    .digest('hex')
+    .slice(0, 24)
+
+  return `${input.prefix}_xcode_${hash}`
+}
+
 function toResponse(params: {
   productId: string
   plan: ApplePlanId
@@ -77,11 +94,24 @@ export async function activateAppleSubscription(
     environment: input.payload.environment,
   })
 
+  const canonicalTransactionId = canonicalizeAppleTransactionId({
+    value: input.payload.transactionId,
+    signedTransactionInfo: input.payload.signedTransactionInfo,
+    fallbackSeed: `${input.userId}:${input.payload.productId}:${input.payload.purchaseDate}`,
+    prefix: 'tx',
+  })
+  const canonicalOriginalTransactionId = canonicalizeAppleTransactionId({
+    value: input.payload.originalTransactionId,
+    signedTransactionInfo: input.payload.signedTransactionInfo,
+    fallbackSeed: `${input.userId}:${input.payload.productId}:${input.payload.purchaseDate}:original`,
+    prefix: 'otx',
+  })
+
   const eventInsertPayload = {
     user_id: input.userId,
     product_id: input.payload.productId,
-    transaction_id: input.payload.transactionId,
-    original_transaction_id: input.payload.originalTransactionId,
+    transaction_id: canonicalTransactionId,
+    original_transaction_id: canonicalOriginalTransactionId,
     purchase_date: input.payload.purchaseDate,
     expiration_date: input.payload.expirationDate,
     environment: input.payload.environment,
@@ -106,7 +136,7 @@ export async function activateAppleSubscription(
     const { data: existingEvent, error: existingEventError } = await supabase
       .from('apple_purchase_events')
       .select('user_id, product_id, transaction_id, original_transaction_id, purchase_date, expiration_date')
-      .eq('transaction_id', input.payload.transactionId)
+      .eq('transaction_id', canonicalTransactionId)
       .maybeSingle()
 
     if (existingEventError || !existingEvent) {

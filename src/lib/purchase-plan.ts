@@ -20,6 +20,21 @@ type PurchasePlanResult = {
 
 const sentTransactions = new Set<string>()
 
+function buildTransactionKey(payload: {
+  transactionId: string
+  originalTransactionId: string
+  signedTransactionInfo: string | null
+  purchaseDate: string
+  productId: string
+}) {
+  const hasPlaceholderTransactionIds = payload.transactionId === '0' && payload.originalTransactionId === '0'
+  if (!hasPlaceholderTransactionIds) {
+    return `${payload.transactionId}:${payload.originalTransactionId}`
+  }
+
+  return `xcode:${payload.productId}:${payload.purchaseDate}:${payload.signedTransactionInfo ?? 'no-signed-info'}`
+}
+
 function debugStoreKit(step: string, payload?: unknown, options?: { alertMessage?: string }) {
   const timestamp = new Date().toISOString()
   console.log(`[Confia+ Apple][${timestamp}] ${step}`, payload ?? null)
@@ -65,8 +80,6 @@ function normalizeApplePayload(raw: unknown, fallbackProductId: string): AppleAc
   if (!productId) throw new Error('Compra Apple sem productId')
   if (!transactionId) throw new Error('Compra Apple sem transactionId')
   if (!originalTransactionId) throw new Error('Compra Apple sem originalTransactionId')
-  if (!signedTransactionInfo) throw new Error('Compra Apple sem signedTransactionInfo')
-
   return {
     productId,
     transactionId,
@@ -80,7 +93,7 @@ function normalizeApplePayload(raw: unknown, fallbackProductId: string): AppleAc
 }
 
 async function activateAppleSubscription(payload: AppleActivationPayload) {
-  const transactionKey = `${payload.transactionId}:${payload.originalTransactionId}`
+  const transactionKey = buildTransactionKey(payload)
   if (sentTransactions.has(transactionKey)) {
     debugStoreKit('Compra já sincronizada, ignorando duplicidade', { transactionKey })
     return { ok: true, duplicate: true }
@@ -159,7 +172,10 @@ function parseRestorePurchases(raw: unknown): Record<string, unknown>[] {
 }
 
 async function syncActiveEntitlements(options?: { force?: boolean }) {
-  if (!window.confiaStoreKit?.getEntitlements) return
+  if (!window.confiaStoreKit?.getEntitlements) {
+    debugStoreKit('Bridge StoreKit ainda indisponível para sync de entitlements')
+    return
+  }
 
   const entitlementsRaw = await window.confiaStoreKit.getEntitlements()
   const entries = Array.isArray(entitlementsRaw)
@@ -169,6 +185,12 @@ async function syncActiveEntitlements(options?: { force?: boolean }) {
       : []
 
   for (const item of entries) {
+    if (typeof item === 'string') {
+      debugStoreKit('Entitlement Apple sem metadados de transação (string). Aguardando purchase/restore completo.', {
+        productId: item,
+      })
+      continue
+    }
     if (!item || typeof item !== 'object') continue
 
     const entitlement = item as Record<string, unknown>
@@ -183,8 +205,6 @@ async function syncActiveEntitlements(options?: { force?: boolean }) {
     ) {
       continue
     }
-    if (typeof entitlement.signedTransactionInfo !== 'string') continue
-
     const normalized = normalizeApplePayload(
       {
         ...entitlement,
@@ -193,7 +213,7 @@ async function syncActiveEntitlements(options?: { force?: boolean }) {
       productId
     )
 
-    const transactionKey = `${normalized.transactionId}:${normalized.originalTransactionId}`
+    const transactionKey = buildTransactionKey(normalized)
     if (!options?.force && sentTransactions.has(transactionKey)) {
       continue
     }
