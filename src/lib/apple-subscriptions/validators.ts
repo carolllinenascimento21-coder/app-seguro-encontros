@@ -10,8 +10,8 @@ const isoDateString = z.string().refine((value) => !Number.isNaN(Date.parse(valu
 const requestSchema = z
   .object({
     productId: z.string().min(3),
-    transactionId: z.string().min(3),
-    originalTransactionId: z.string().min(3),
+    transactionId: z.string().min(1),
+    originalTransactionId: z.string().min(1),
     purchaseDate: isoDateString,
     expirationDate: isoDateString.nullable(),
     environment: z.enum(['sandbox', 'production']),
