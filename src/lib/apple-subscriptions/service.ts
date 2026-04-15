@@ -49,6 +49,15 @@ function isDuplicateKeyError(message?: string | null) {
   return typeof message === 'string' && message.toLowerCase().includes('duplicate key')
 }
 
+function isMissingRelationError(message: string | null | undefined, relation: string) {
+  if (!message) return false
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes(`relation '${relation.toLowerCase()}'`) ||
+    (normalized.includes('schema cache') && normalized.includes(relation.toLowerCase()))
+  )
+}
+
 async function resolveProfilePlanId(
   supabase: SupabaseClient,
   plan: ApplePlanId
@@ -220,7 +229,9 @@ export async function activateAppleSubscription(
     .upsert(subscriptionPayload, { onConflict: 'platform,external_subscription_id' })
 
   if (subscriptionError) {
-    throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+    if (!isMissingRelationError(subscriptionError.message, 'public.billing_subscriptions')) {
+      throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+    }
   }
 
   const { error: profileError } = await supabase
@@ -291,7 +302,9 @@ export async function activateAppleEntitlementFallback(
   )
 
   if (subscriptionError) {
-    throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+    if (!isMissingRelationError(subscriptionError.message, 'public.billing_subscriptions')) {
+      throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+    }
   }
 
   const { error: profileError } = await supabase
