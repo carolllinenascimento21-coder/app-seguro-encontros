@@ -158,6 +158,34 @@ async function activateAppleSubscription(payload: AppleActivationPayload) {
   return data
 }
 
+async function activateAppleEntitlement(productId: string) {
+  debugStoreKit('Sincronizando entitlement sem metadados de transação', { productId })
+
+  const response = await fetch('/api/apple/activate-entitlement', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ productId, environment: 'sandbox' }),
+  })
+
+  const data = await response.json().catch(() => null)
+  debugStoreKit('Resposta do backend de ativação Apple', {
+    endpoint,
+    status: response.status,
+    ok: response.ok,
+    data,
+  })
+
+  if (!response.ok) {
+    const reason = data?.error || data?.message || 'Falha ao ativar entitlement Apple'
+    throw new Error(`Erro ao ativar entitlement (${response.status}): ${reason}`)
+  }
+
+  sentTransactions.add(`entitlement:${productId}`)
+  return data
+}
+
 function parseRestorePurchases(raw: unknown): Record<string, unknown>[] {
   if (!raw) return []
   if (Array.isArray(raw)) return raw.filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
@@ -186,9 +214,11 @@ async function syncActiveEntitlements(options?: { force?: boolean }) {
 
   for (const item of entries) {
     if (typeof item === 'string') {
-      debugStoreKit('Entitlement Apple sem metadados de transação (string). Aguardando purchase/restore completo.', {
+      debugStoreKit('Entitlement Apple sem metadados de transação (string). Usando fallback de ativação.', {
         productId: item,
       })
+      if (!options?.force && sentTransactions.has(`entitlement:${item}`)) continue
+      await activateAppleEntitlement(item)
       continue
     }
     if (!item || typeof item !== 'object') continue

@@ -14,6 +14,12 @@ type ActivateAppleSubscriptionInput = {
   payload: AppleActivateSubscriptionRequest
 }
 
+type ActivateAppleEntitlementInput = {
+  userId: string
+  productId: string
+  environment?: 'sandbox' | 'production'
+}
+
 class AppleActivationError extends Error {
   status: number
 
@@ -212,4 +218,70 @@ export async function activateAppleSubscription(
 
 export function isAppleActivationError(error: unknown): error is AppleActivationError {
   return error instanceof AppleActivationError
+}
+
+export async function activateAppleEntitlementFallback(
+  input: ActivateAppleEntitlementInput
+): Promise<AppleSubscriptionResponse> {
+  const supabase = adminClient()
+  const plan = getPlanFromAppleProduct(input.productId)
+
+  if (!plan) {
+    throw new AppleActivationError(400, 'product_id_not_allowed')
+  }
+
+  const externalId = `entitlement:${input.userId}:${input.productId}`
+  const nowIso = new Date().toISOString()
+
+  const { error: subscriptionError } = await supabase.from('billing_subscriptions').upsert(
+    {
+      user_id: input.userId,
+      platform: 'apple',
+      product_id: input.productId,
+      plan_id: plan,
+      status: 'active',
+      is_active: true,
+      environment: input.environment ?? 'sandbox',
+      external_subscription_id: externalId,
+      external_transaction_id: externalId,
+      original_transaction_id: externalId,
+      purchase_token: null,
+      started_at: nowIso,
+      expires_at: null,
+      canceled_at: null,
+      revoked_at: null,
+      last_event_timestamp_ms: Date.now(),
+      raw_source: {
+        source: 'apple_entitlement_fallback',
+        productId: input.productId,
+      },
+    },
+    { onConflict: 'platform,external_subscription_id' }
+  )
+
+  if (subscriptionError) {
+    throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+  }
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      has_active_plan: true,
+      current_plan_id: plan,
+      subscription_status: 'active',
+    })
+    .eq('id', input.userId)
+
+  if (profileError) {
+    throw new AppleActivationError(500, `profile_update_failed:${profileError.message}`)
+  }
+
+  return toResponse({
+    productId: input.productId,
+    plan,
+    transactionId: externalId,
+    originalTransactionId: externalId,
+    startsAt: nowIso,
+    expiresAt: null,
+  })
 }
