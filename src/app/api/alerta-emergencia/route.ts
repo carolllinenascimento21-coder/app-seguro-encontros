@@ -18,6 +18,13 @@ type EmergencyContactRow = {
   created_at?: string | null
 }
 
+type ChannelResult = {
+  enabled: boolean
+  sent: number
+  failed: number
+  errors: string[]
+}
+
 const ALERT_COOLDOWN_MS = 2 * 60 * 1000
 const MAX_CONTACTS = 3
 
@@ -44,6 +51,7 @@ function isValidCoordinates(latitude?: number, longitude?: number) {
 
 function normalizePhone(phone: string | null | undefined): string | null {
   if (!phone) return null
+
   const trimmed = phone.trim()
   if (!trimmed) return null
 
@@ -60,9 +68,12 @@ function maskPhone(phone: string | null | undefined): string {
   if (!normalized) return 'invalid'
 
   const raw = normalized.replace('+', '')
-  if (raw.length <= 4) return `***${raw}`
+  if (raw.length <= 4) {
+    return `***${raw}`
+  }
 
-  return `${normalized.startsWith('+') ? '+' : ''}${raw.slice(0, 2)}***${raw.slice(-2)}`
+  const prefix = normalized.startsWith('+') ? '+' : ''
+  return `${prefix}${raw.slice(0, 2)}***${raw.slice(-2)}`
 }
 
 function isWithinCooldown(lastAlertAt: string | null | undefined): boolean {
@@ -74,30 +85,42 @@ function isWithinCooldown(lastAlertAt: string | null | undefined): boolean {
   return Date.now() - timestamp < ALERT_COOLDOWN_MS
 }
 
-async function sendPushAlerts(_contacts: EmergencyContactRow[], _message: string) {
+// Placeholder seguro até implementar push real
+async function sendPushAlerts(
+  _contacts: EmergencyContactRow[],
+  _message: string
+): Promise<ChannelResult> {
   return {
     enabled: ENABLE_PUSH,
     sent: 0,
     failed: 0,
-    errors: [] as string[],
+    errors: [],
   }
 }
 
-async function sendWhatsAppAlerts(_contacts: EmergencyContactRow[], _message: string) {
+// Placeholder seguro até implementar WhatsApp real
+async function sendWhatsAppAlerts(
+  _contacts: EmergencyContactRow[],
+  _message: string
+): Promise<ChannelResult> {
   return {
     enabled: ENABLE_WHATSAPP,
     sent: 0,
     failed: 0,
-    errors: [] as string[],
+    errors: [],
   }
 }
 
-async function sendSmsAlerts(_contacts: EmergencyContactRow[], _message: string) {
+// Placeholder seguro até implementar SMS real
+async function sendSmsAlerts(
+  _contacts: EmergencyContactRow[],
+  _message: string
+): Promise<ChannelResult> {
   return {
     enabled: ENABLE_SMS,
     sent: 0,
     failed: 0,
-    errors: [] as string[],
+    errors: [],
   }
 }
 
@@ -111,10 +134,10 @@ export async function POST(request: Request) {
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
       console.error('[alerta-emergencia] Missing Supabase envs', {
+        requestId,
         hasUrl: !!supabaseUrl,
         hasAnonKey: !!supabaseAnonKey,
         hasServiceRoleKey: !!supabaseServiceRoleKey,
-        requestId,
       })
       return jsonError('Supabase não configurado', 503, { requestId })
     }
@@ -159,8 +182,8 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       console.error('[alerta-emergencia] Auth error', {
-        userError,
         requestId,
+        userError,
       })
       return jsonError('Usuária não autenticada', 401, { requestId })
     }
@@ -175,9 +198,9 @@ export async function POST(request: Request) {
 
     if (profileError) {
       console.error('[alerta-emergencia] Profile fetch error', {
-        profileError,
-        userId,
         requestId,
+        userId,
+        profileError,
       })
       return jsonError('Erro ao validar perfil', 500, { requestId })
     }
@@ -192,9 +215,9 @@ export async function POST(request: Request) {
 
       if (insertProfileError) {
         console.error('[alerta-emergencia] Profile create error', {
-          insertProfileError,
-          userId,
           requestId,
+          userId,
+          insertProfileError,
         })
         return jsonError('Erro ao validar perfil', 500, { requestId })
       }
@@ -222,6 +245,7 @@ export async function POST(request: Request) {
     contacts = (contactsResult.data as EmergencyContactRow[] | null) ?? null
     contactsError = contactsResult.error
 
+    // fallback seguro caso RLS/cookies falhem no contexto web
     if (contactsError || !contacts || contacts.length === 0) {
       const fallbackResult = await supabaseAdmin
         .from('emergency_contacts')
@@ -236,9 +260,9 @@ export async function POST(request: Request) {
 
     if (contactsError) {
       console.error('[alerta-emergencia] Contacts fetch error', {
-        contactsError,
-        userId,
         requestId,
+        userId,
+        contactsError,
       })
       return jsonError('Erro ao buscar contatos', 500, { requestId })
     }
@@ -276,10 +300,13 @@ export async function POST(request: Request) {
       ...smsResult.errors,
     ]
 
+    const anyChannelEnabled =
+      ENABLE_PUSH || ENABLE_WHATSAPP || ENABLE_SMS
+
     const overallStatus =
       totalSent > 0
         ? 'success'
-        : channelsUsed.length === 0
+        : !anyChannelEnabled
         ? 'registered_only'
         : 'failed'
 
@@ -304,9 +331,9 @@ export async function POST(request: Request) {
 
     if (logError) {
       console.error('[alerta-emergencia] Log insert error', {
-        logError,
-        userId,
         requestId,
+        userId,
+        logError,
       })
     }
 
@@ -318,14 +345,14 @@ export async function POST(request: Request) {
 
       if (updateProfileError) {
         console.error('[alerta-emergencia] last_alert_at update error', {
-          updateProfileError,
-          userId,
           requestId,
+          userId,
+          updateProfileError,
         })
       }
     }
 
-    if (overallStatus === 'failed') {
+    if (overallStatus === 'failed' && anyChannelEnabled) {
       return NextResponse.json(
         {
           error: 'Falha ao enviar alerta para todos os contatos',
@@ -360,9 +387,10 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     console.error('[alerta-emergencia] Fatal error', {
+      requestId,
       error,
     })
 
-    return jsonError('Erro interno', 500)
+    return jsonError('Erro interno', 500, { requestId })
   }
 }
