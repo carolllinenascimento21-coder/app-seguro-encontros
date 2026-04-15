@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createHash } from 'crypto'
 
 import { getPlanFromAppleProduct } from '@/lib/apple-subscriptions/catalog'
 import type {
@@ -11,6 +12,12 @@ import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 type ActivateAppleSubscriptionInput = {
   userId: string
   payload: AppleActivateSubscriptionRequest
+}
+
+type ActivateAppleEntitlementInput = {
+  userId: string
+  productId: string
+  environment?: 'sandbox' | 'production'
 }
 
 class AppleActivationError extends Error {
@@ -42,6 +49,60 @@ function isDuplicateKeyError(message?: string | null) {
   return typeof message === 'string' && message.toLowerCase().includes('duplicate key')
 }
 
+function isMissingRelationError(message: string | null | undefined, relation: string) {
+  if (!message) return false
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes(`relation '${relation.toLowerCase()}'`) ||
+    (normalized.includes('schema cache') && normalized.includes(relation.toLowerCase()))
+  )
+}
+
+async function resolveProfilePlanId(
+  supabase: SupabaseClient,
+  plan: ApplePlanId
+): Promise<string> {
+  const aliases: Record<ApplePlanId, string[]> = {
+    premium_monthly: ['premium_monthly', 'premium_mensal'],
+    premium_annual: ['premium_annual', 'premium_yearly', 'premium_anual'],
+    premium_plus: ['premium_plus'],
+  }
+
+  const candidates = aliases[plan]
+  const { data, error } = await supabase
+    .from('plans')
+    .select('id')
+    .in('id', candidates)
+    .limit(1)
+
+  if (error) {
+    throw new AppleActivationError(500, `plans_lookup_failed:${error.message}`)
+  }
+
+  const planId = data?.[0]?.id
+  if (!planId) {
+    throw new AppleActivationError(500, `profile_plan_id_not_found_in_plans_table:${plan}`)
+  }
+
+  return planId
+}
+
+function canonicalizeAppleTransactionId(input: {
+  value: string
+  signedTransactionInfo: string
+  fallbackSeed: string
+  prefix: 'tx' | 'otx'
+}) {
+  if (input.value !== '0') return input.value
+
+  const hash = createHash('sha256')
+    .update(`${input.signedTransactionInfo}:${input.fallbackSeed}`)
+    .digest('hex')
+    .slice(0, 24)
+
+  return `${input.prefix}_xcode_${hash}`
+}
+
 function toResponse(params: {
   productId: string
   plan: ApplePlanId
@@ -71,17 +132,31 @@ export async function activateAppleSubscription(
   if (!plan) {
     throw new AppleActivationError(400, 'product_id_not_allowed')
   }
+  const profilePlanId = await resolveProfilePlanId(supabase, plan)
 
   await validateSignedTransactionInfoPhase2Placeholder({
     signedTransactionInfo: input.payload.signedTransactionInfo,
     environment: input.payload.environment,
   })
 
+  const canonicalTransactionId = canonicalizeAppleTransactionId({
+    value: input.payload.transactionId,
+    signedTransactionInfo: input.payload.signedTransactionInfo,
+    fallbackSeed: `${input.userId}:${input.payload.productId}:${input.payload.purchaseDate}`,
+    prefix: 'tx',
+  })
+  const canonicalOriginalTransactionId = canonicalizeAppleTransactionId({
+    value: input.payload.originalTransactionId,
+    signedTransactionInfo: input.payload.signedTransactionInfo,
+    fallbackSeed: `${input.userId}:${input.payload.productId}:${input.payload.purchaseDate}:original`,
+    prefix: 'otx',
+  })
+
   const eventInsertPayload = {
     user_id: input.userId,
     product_id: input.payload.productId,
-    transaction_id: input.payload.transactionId,
-    original_transaction_id: input.payload.originalTransactionId,
+    transaction_id: canonicalTransactionId,
+    original_transaction_id: canonicalOriginalTransactionId,
     purchase_date: input.payload.purchaseDate,
     expiration_date: input.payload.expirationDate,
     environment: input.payload.environment,
@@ -106,7 +181,7 @@ export async function activateAppleSubscription(
     const { data: existingEvent, error: existingEventError } = await supabase
       .from('apple_purchase_events')
       .select('user_id, product_id, transaction_id, original_transaction_id, purchase_date, expiration_date')
-      .eq('transaction_id', input.payload.transactionId)
+      .eq('transaction_id', canonicalTransactionId)
       .maybeSingle()
 
     if (existingEventError || !existingEvent) {
@@ -154,14 +229,16 @@ export async function activateAppleSubscription(
     .upsert(subscriptionPayload, { onConflict: 'platform,external_subscription_id' })
 
   if (subscriptionError) {
-    throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+    if (!isMissingRelationError(subscriptionError.message, 'public.billing_subscriptions')) {
+      throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+    }
   }
 
   const { error: profileError } = await supabase
     .from('profiles')
     .update({
       has_active_plan: true,
-      current_plan_id: plan,
+      current_plan_id: profilePlanId,
       subscription_status: 'active',
     })
     .eq('id', input.userId)
@@ -182,4 +259,73 @@ export async function activateAppleSubscription(
 
 export function isAppleActivationError(error: unknown): error is AppleActivationError {
   return error instanceof AppleActivationError
+}
+
+export async function activateAppleEntitlementFallback(
+  input: ActivateAppleEntitlementInput
+): Promise<AppleSubscriptionResponse> {
+  const supabase = adminClient()
+  const plan = getPlanFromAppleProduct(input.productId)
+
+  if (!plan) {
+    throw new AppleActivationError(400, 'product_id_not_allowed')
+  }
+  const profilePlanId = await resolveProfilePlanId(supabase, plan)
+
+  const externalId = `entitlement:${input.userId}:${input.productId}`
+  const nowIso = new Date().toISOString()
+
+  const { error: subscriptionError } = await supabase.from('billing_subscriptions').upsert(
+    {
+      user_id: input.userId,
+      platform: 'apple',
+      product_id: input.productId,
+      plan_id: plan,
+      status: 'active',
+      is_active: true,
+      environment: input.environment ?? 'sandbox',
+      external_subscription_id: externalId,
+      external_transaction_id: externalId,
+      original_transaction_id: externalId,
+      purchase_token: null,
+      started_at: nowIso,
+      expires_at: null,
+      canceled_at: null,
+      revoked_at: null,
+      last_event_timestamp_ms: Date.now(),
+      raw_source: {
+        source: 'apple_entitlement_fallback',
+        productId: input.productId,
+      },
+    },
+    { onConflict: 'platform,external_subscription_id' }
+  )
+
+  if (subscriptionError) {
+    if (!isMissingRelationError(subscriptionError.message, 'public.billing_subscriptions')) {
+      throw new AppleActivationError(500, `billing_subscription_upsert_failed:${subscriptionError.message}`)
+    }
+  }
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      has_active_plan: true,
+      current_plan_id: profilePlanId,
+      subscription_status: 'active',
+    })
+    .eq('id', input.userId)
+
+  if (profileError) {
+    throw new AppleActivationError(500, `profile_update_failed:${profileError.message}`)
+  }
+
+  return toResponse({
+    productId: input.productId,
+    plan,
+    transactionId: externalId,
+    originalTransactionId: externalId,
+    startsAt: nowIso,
+    expiresAt: null,
+  })
 }
