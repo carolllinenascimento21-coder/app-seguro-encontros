@@ -1,10 +1,14 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { isMobileAppRuntime } from '@/lib/mobile-billing'
-import { purchasePlan, restoreMobilePurchases } from '@/lib/purchase-plan'
+import {
+  purchasePlan,
+  restoreMobilePurchases,
+  syncAppleEntitlementsWithBackend,
+} from '@/lib/purchase-plan'
 
 type FreePlanId = 'free'
 type SubscriptionPlanId = 'premium_monthly' | 'premium_yearly'
@@ -70,6 +74,40 @@ export default function PlanosPage() {
   const [restoring, setRestoring] = useState(false)
   const isMobileApp = isMobileAppRuntime()
 
+  useEffect(() => {
+    let active = true
+    const runEntitlementSync = async (force = false) => {
+      try {
+        return await syncAppleEntitlementsWithBackend({ force })
+      } catch (error) {
+        console.error('Falha ao sincronizar entitlements Apple:', error)
+        return { ok: false, error }
+      }
+    }
+
+    // Disponível também para testes via Web Inspector, mesmo antes do bridge estar pronto.
+    window.__confiaSyncAppleEntitlements = async () => runEntitlementSync(true)
+
+    if (!isMobileApp) {
+      return () => {
+        active = false
+        delete window.__confiaSyncAppleEntitlements
+      }
+    }
+
+    runEntitlementSync(false)
+    const intervalId = window.setInterval(() => {
+      if (!active) return
+      void runEntitlementSync(false)
+    }, 15000)
+
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+      delete window.__confiaSyncAppleEntitlements
+    }
+  }, [isMobileApp])
+
   const startStripeCheckout = async (planId: SubscriptionPlanId) => {
     const res = await fetch('/api/stripe/checkout', {
       method: 'POST',
@@ -100,7 +138,11 @@ export default function PlanosPage() {
   const handleCheckout = async (planId: SubscriptionPlanId) => {
     try {
       setLoadingPlan(planId)
-      await purchasePlan(planId, startStripeCheckout)
+      const result = await purchasePlan(planId, startStripeCheckout)
+      if (result?.ok) {
+        alert('Assinatura ativada com sucesso. Redirecionando para seu perfil...')
+        router.push('/perfil')
+      }
     } catch (error: any) {
       console.error('Erro ao iniciar checkout:', error)
       alert(error?.message || 'Erro ao iniciar pagamento')
@@ -112,8 +154,12 @@ export default function PlanosPage() {
   const handleRestorePurchases = async () => {
     try {
       setRestoring(true)
-      await restoreMobilePurchases()
-      alert('Compras restauradas com sucesso.')
+      const result = await restoreMobilePurchases()
+      if (result?.ok) {
+        alert('Compras restauradas com sucesso. Redirecionando para seu perfil...')
+        router.push('/perfil')
+        return
+      }
     } catch (error: any) {
       console.error('Erro ao restaurar compras:', error)
       alert(error?.message || 'Erro ao restaurar compras')
