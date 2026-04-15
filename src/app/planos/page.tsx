@@ -75,12 +75,15 @@ export default function PlanosPage() {
   const isMobileApp = isMobileAppRuntime()
 
   const redirectToProfile = () => {
-    if (typeof window !== 'undefined') {
-      window.location.replace('/perfil')
-      return
-    }
-
     router.replace('/perfil')
+
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        if (window.location.pathname !== '/perfil') {
+          window.location.assign('/perfil')
+        }
+      }, 350)
+    }
   }
 
   useEffect(() => {
@@ -148,8 +151,12 @@ export default function PlanosPage() {
     try {
       setLoadingPlan(planId)
       const result = await purchasePlan(planId, startStripeCheckout)
-      if (isMobileAppRuntime() || result?.ok) {
+      if (isMobileAppRuntime() || result?.ok) 
         redirectToProfile()
+      if (result?.ok) {
+        redirectToProfile()
+        alert('Assinatura ativada com sucesso. Redirecionando para seu perfil...')
+        router.push('/perfil')
       }
     } catch (error: any) {
       console.error('Erro ao iniciar checkout:', error)
@@ -162,9 +169,13 @@ export default function PlanosPage() {
   const handleRestorePurchases = async () => {
     try {
       setRestoring(true)
-      await restoreMobilePurchases()
-      redirectToProfile()
-      return
+      const result = await restoreMobilePurchases()
+      if (result?.ok) {
+        redirectToProfile()
+        alert('Compras restauradas com sucesso. Redirecionando para seu perfil...')
+        router.push('/perfil')
+        return
+      }
     } catch (error: any) {
       console.error('Erro ao restaurar compras:', error)
       alert(error?.message || 'Erro ao restaurar compras')
