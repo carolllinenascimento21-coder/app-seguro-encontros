@@ -74,6 +74,18 @@ export default function PlanosPage() {
   const [restoring, setRestoring] = useState(false)
   const isMobileApp = isMobileAppRuntime()
 
+  const redirectToProfile = () => {
+    router.replace('/perfil')
+
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        if (window.location.pathname !== '/perfil') {
+          window.location.assign('/perfil')
+        }
+      }, 350)
+    }
+  }
+
   useEffect(() => {
     let active = true
     const runEntitlementSync = async (force = false) => {
@@ -140,6 +152,7 @@ export default function PlanosPage() {
       setLoadingPlan(planId)
       const result = await purchasePlan(planId, startStripeCheckout)
       if (result?.ok) {
+        redirectToProfile()
         alert('Assinatura ativada com sucesso. Redirecionando para seu perfil...')
         router.push('/perfil')
       }
@@ -156,6 +169,7 @@ export default function PlanosPage() {
       setRestoring(true)
       const result = await restoreMobilePurchases()
       if (result?.ok) {
+        redirectToProfile()
         alert('Compras restauradas com sucesso. Redirecionando para seu perfil...')
         router.push('/perfil')
         return
