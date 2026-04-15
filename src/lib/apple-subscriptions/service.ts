@@ -49,6 +49,35 @@ function isDuplicateKeyError(message?: string | null) {
   return typeof message === 'string' && message.toLowerCase().includes('duplicate key')
 }
 
+async function resolveProfilePlanId(
+  supabase: SupabaseClient,
+  plan: ApplePlanId
+): Promise<string> {
+  const aliases: Record<ApplePlanId, string[]> = {
+    premium_monthly: ['premium_monthly', 'premium_mensal'],
+    premium_annual: ['premium_annual', 'premium_yearly', 'premium_anual'],
+    premium_plus: ['premium_plus'],
+  }
+
+  const candidates = aliases[plan]
+  const { data, error } = await supabase
+    .from('plans')
+    .select('id')
+    .in('id', candidates)
+    .limit(1)
+
+  if (error) {
+    throw new AppleActivationError(500, `plans_lookup_failed:${error.message}`)
+  }
+
+  const planId = data?.[0]?.id
+  if (!planId) {
+    throw new AppleActivationError(500, `profile_plan_id_not_found_in_plans_table:${plan}`)
+  }
+
+  return planId
+}
+
 function canonicalizeAppleTransactionId(input: {
   value: string
   signedTransactionInfo: string
@@ -94,6 +123,7 @@ export async function activateAppleSubscription(
   if (!plan) {
     throw new AppleActivationError(400, 'product_id_not_allowed')
   }
+  const profilePlanId = await resolveProfilePlanId(supabase, plan)
 
   await validateSignedTransactionInfoPhase2Placeholder({
     signedTransactionInfo: input.payload.signedTransactionInfo,
@@ -197,7 +227,7 @@ export async function activateAppleSubscription(
     .from('profiles')
     .update({
       has_active_plan: true,
-      current_plan_id: plan,
+      current_plan_id: profilePlanId,
       subscription_status: 'active',
     })
     .eq('id', input.userId)
@@ -229,6 +259,7 @@ export async function activateAppleEntitlementFallback(
   if (!plan) {
     throw new AppleActivationError(400, 'product_id_not_allowed')
   }
+  const profilePlanId = await resolveProfilePlanId(supabase, plan)
 
   const externalId = `entitlement:${input.userId}:${input.productId}`
   const nowIso = new Date().toISOString()
@@ -267,7 +298,7 @@ export async function activateAppleEntitlementFallback(
     .from('profiles')
     .update({
       has_active_plan: true,
-      current_plan_id: plan,
+      current_plan_id: profilePlanId,
       subscription_status: 'active',
     })
     .eq('id', input.userId)

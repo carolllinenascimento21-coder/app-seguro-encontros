@@ -81,7 +81,7 @@ export default function PlanosPage() {
         return await syncAppleEntitlementsWithBackend({ force })
       } catch (error) {
         console.error('Falha ao sincronizar entitlements Apple:', error)
-        throw error
+        return { ok: false, error }
       }
     }
 

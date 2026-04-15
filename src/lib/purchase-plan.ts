@@ -159,9 +159,10 @@ async function activateAppleSubscription(payload: AppleActivationPayload) {
 }
 
 async function activateAppleEntitlement(productId: string) {
+  const endpoint = '/api/apple/activate-entitlement'
   debugStoreKit('Sincronizando entitlement sem metadados de transação', { productId })
 
-  const response = await fetch('/api/apple/activate-entitlement', {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -170,16 +171,15 @@ async function activateAppleEntitlement(productId: string) {
   })
 
   const data = await response.json().catch(() => null)
-  debugStoreKit('Resposta do backend de ativação Apple', {
+  debugStoreKit('Resposta do backend de fallback entitlement Apple', {
     endpoint,
     status: response.status,
     ok: response.ok,
     data,
   })
-
   if (!response.ok) {
     const reason = data?.error || data?.message || 'Falha ao ativar entitlement Apple'
-    throw new Error(`Erro ao ativar entitlement (${response.status}): ${reason}`)
+    throw new Error(`Erro ao ativar entitlement Apple (${endpoint}) [${response.status}]: ${reason}`)
   }
 
   sentTransactions.add(`entitlement:${productId}`)
