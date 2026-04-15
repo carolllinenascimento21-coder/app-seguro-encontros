@@ -170,6 +170,13 @@ async function activateAppleEntitlement(productId: string) {
   })
 
   const data = await response.json().catch(() => null)
+  debugStoreKit('Resposta do backend de ativação Apple', {
+    endpoint,
+    status: response.status,
+    ok: response.ok,
+    data,
+  })
+
   if (!response.ok) {
     const reason = data?.error || data?.message || 'Falha ao ativar entitlement Apple'
     throw new Error(`Erro ao ativar entitlement (${response.status}): ${reason}`)
