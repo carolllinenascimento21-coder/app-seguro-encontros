@@ -156,14 +156,12 @@ export default function PlanosPage() {
 
   const handleCheckout = async (planId: SubscriptionPlanId) => {
     try {
+      console.log('[Confia+ Apple] Clique em assinar plano', { planId })
       setLoadingPlan(planId)
       const result = await purchasePlan(planId, startStripeCheckout)
-      if (isMobileAppRuntime() || result?.ok) 
+      console.log('[Confia+ Apple] Resultado do purchasePlan', result)
+      if (isMobileAppRuntime() && result) {
         redirectToProfile()
-      if (result?.ok) {
-        redirectToProfile()
-        alert('Assinatura ativada com sucesso. Redirecionando para seu perfil...')
-        router.push('/perfil')
       }
     } catch (error: any) {
       console.error('Erro ao iniciar checkout:', error)
