@@ -65,6 +65,8 @@ function normalizeApplePayload(raw: unknown, fallbackProductId: string): AppleAc
   if (!productId) throw new Error('Compra Apple sem productId')
   if (!transactionId) throw new Error('Compra Apple sem transactionId')
   if (!originalTransactionId) throw new Error('Compra Apple sem originalTransactionId')
+  if (!signedTransactionInfo) throw new Error('Compra Apple sem signedTransactionInfo')
+
   return {
     productId,
     transactionId,
@@ -181,6 +183,8 @@ async function syncActiveEntitlements(options?: { force?: boolean }) {
     ) {
       continue
     }
+    if (typeof entitlement.signedTransactionInfo !== 'string') continue
+
     const normalized = normalizeApplePayload(
       {
         ...entitlement,
