@@ -15,49 +15,75 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const loginInFlightRef = useRef(false)
   const oauthCheckRanRef = useRef(false)
+  const resolvingRouteRef = useRef(false)
 
   const resolvePostLoginRoute = useCallback(async () => {
-    const supabase = createSupabaseClient()
-    const maxAttempts = 3
+    if (resolvingRouteRef.current) return
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
+    resolvingRouteRef.current = true
 
-      if (userError && !isAuthSessionMissingError(userError)) {
-        console.error('Erro ao validar sessão na tela de login:', userError)
-      }
+    try {
+      const supabase = createSupabaseClient()
+      const maxAttempts = 4
 
-      if (!user) {
-        if (attempt < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 250))
-          continue
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession()
+
+        if (sessionError && !isAuthSessionMissingError(sessionError)) {
+          console.error('Erro ao validar persistência da sessão na tela de login:', sessionError)
         }
 
+        if (!session) {
+          if (attempt < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 250))
+            continue
+          }
+
+          return
+        }
+
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError && !isAuthSessionMissingError(userError)) {
+          console.error('Erro ao validar usuário na tela de login:', userError)
+        }
+
+        if (!user) {
+          if (attempt < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 250))
+            continue
+          }
+
+          return
+        }
+
+        const { profile, error: profileError } = await ensureProfileForUser(supabase, user)
+
+        if (profileError) {
+          console.error('Erro ao buscar perfil no login:', profileError)
+        }
+
+        if (!profile) {
+          return
+        }
+
+        router.refresh()
+        if (profile.onboarding_completed === false) {
+          router.replace('/onboarding/selfie')
+          return
+        }
+
+        router.replace('/home')
         return
       }
-
-      const { profile, error: profileError } = await ensureProfileForUser(supabase, user)
-
-      if (profileError) {
-        console.error('Erro ao buscar perfil no login:', profileError)
-      }
-
-      if (!profile) {
-        console.error('Perfil não encontrado')
-        return
-      }
-
-      router.refresh()
-      if (profile.onboarding_completed === false) {
-        router.replace('/onboarding/selfie')
-        return
-      }
-
-      router.replace('/home')
-      return
+    } finally {
+      resolvingRouteRef.current = false
     }
   }, [router])
 
