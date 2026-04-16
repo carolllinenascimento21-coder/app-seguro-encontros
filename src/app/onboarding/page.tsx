@@ -54,7 +54,7 @@ export default function OnboardingPage() {
         return
       }
 
-      const redirectTo = getRedirectUrl('/auth/callback?next=/login')
+      const redirectTo = getRedirectUrl('/login')
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

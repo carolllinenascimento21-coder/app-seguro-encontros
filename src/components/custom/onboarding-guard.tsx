@@ -159,9 +159,7 @@ export default function OnboardingGuard({
       return
     }
 
-    const needsOnboarding =
-      profile.onboarding_completed === false ||
-      profile.onboarding_completed === null
+    const needsOnboarding = profile.onboarding_completed === false
 
     if (needsOnboarding) {
       if (!isOnboardingRoute) {
