@@ -115,12 +115,25 @@ export default function LoginPage() {
         }
 
         // 🔥 FLUXO DE ONBOARDING
-        if (profile?.onboarding_completed === false)
-        {
-          router.refresh()
-          router.replace('/onboarding/selfie')
-          return
-        }
+        // 🔥 GARANTE QUE PROFILE EXISTE
+    if (!profile) {
+      console.error('Perfil não encontrado após login')
+  
+      // fallback seguro (evita loop infinito)
+      router.replace('/erro')
+      return
+    }
+
+// 🔥 FLUXO DE ONBOARDING
+if (profile.onboarding_completed === false) {
+  router.refresh()
+  router.replace('/onboarding/selfie')
+  return
+}
+
+// 🔥 REDIRECIONAMENTO FINAL
+router.refresh()
+router.replace('/home')
       }
 
       // 🔥 REDIRECIONAMENTO FINAL
