@@ -31,6 +31,8 @@ export function LoginScreen() {
   }
 
   async function handleSocialLogin(provider: SocialProvider) {
+    if (socialLoading !== null) return
+
     try {
       setSocialLoading(provider)
       const result = provider === 'google' ? await signInWithGoogle() : await signInWithApple()

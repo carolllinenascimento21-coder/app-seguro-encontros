@@ -25,10 +25,8 @@ export async function GET(req: Request) {
   }
 
   const requestUrl = new URL(req.url)
-  const next = requestUrl.searchParams.get('next') || '/login'
-
   const callbackUrl = new URL('/auth/callback', requestUrl.origin)
-  callbackUrl.searchParams.set('next', next)
+  callbackUrl.searchParams.set('next', '/login')
 
   const cookieStore = await cookies()
 

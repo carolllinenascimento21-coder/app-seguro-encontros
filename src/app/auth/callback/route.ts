@@ -5,7 +5,6 @@ import { cookies } from 'next/headers'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_NEXT_PATH = '/login'
-const FALLBACK_SUCCESS_PATH = '/home'
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -108,7 +107,7 @@ export async function GET(request: NextRequest) {
       code: sessionError?.code,
       hasSession: Boolean(session),
     })
-    return NextResponse.redirect(new URL(FALLBACK_SUCCESS_PATH, origin))
+    return buildLoginErrorRedirect(origin, next, 'auth_session_not_persisted')
   }
 
   return NextResponse.redirect(new URL(next, origin))

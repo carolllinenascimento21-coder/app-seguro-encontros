@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { User } from '@supabase/supabase-js'
 import { createSupabaseClient } from '@/lib/supabase/browser'
-import { ensureProfileForUser } from '@/lib/profile-utils'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
 
 export default function LoginPage() {
@@ -17,34 +15,44 @@ export default function LoginPage() {
   const loginInFlightRef = useRef(false)
   const oauthCheckRanRef = useRef(false)
 
-  const resolvePostLoginRoute = useCallback(
-    async (user: User) => {
-      const supabase = createSupabaseClient()
-      const { profile, error: profileError } = await ensureProfileForUser(supabase, user)
+  const resolvePostLoginRoute = useCallback(async () => {
+    const supabase = createSupabaseClient()
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
 
-      if (profileError) {
-        console.error('Erro ao carregar/criar profile no login:', profileError)
-      }
+    if (userError && !isAuthSessionMissingError(userError)) {
+      console.error('Erro ao validar sessão na tela de login:', userError)
+    }
 
-      if (!profile) {
-        console.error('Profile ausente após autenticação. Mantendo sessão e indo para /home.')
-        setError('Não foi possível carregar seu perfil agora. Você foi direcionada para a home.')
-        router.refresh()
-        router.replace('/home')
-        return
-      }
+    if (!user) {
+      return
+    }
 
-      if (profile.onboarding_completed === false) {
-        router.refresh()
-        router.replace('/onboarding/selfie')
-        return
-      }
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
 
-      router.refresh()
-      router.replace('/home')
-    },
-    [router]
-  )
+    if (profileError) {
+      console.error('Erro ao buscar perfil no login:', profileError)
+    }
+
+    if (!profile) {
+      console.error('Perfil não encontrado')
+      return
+    }
+
+    router.refresh()
+    if (profile.onboarding_completed === false) {
+      router.replace('/onboarding/selfie')
+      return
+    }
+
+    router.replace('/home')
+  }, [router])
 
   useEffect(() => {
     if (oauthCheckRanRef.current) return
@@ -52,19 +60,7 @@ export default function LoginPage() {
     oauthCheckRanRef.current = true
 
     const runOAuthLandingCheck = async () => {
-      const supabase = createSupabaseClient()
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError && !isAuthSessionMissingError(userError)) {
-        console.error('Erro ao validar sessão na tela de login:', userError)
-      }
-
-      if (!user) return
-
-      await resolvePostLoginRoute(user)
+      await resolvePostLoginRoute()
     }
 
     runOAuthLandingCheck()
@@ -139,21 +135,7 @@ export default function LoginPage() {
 
       await new Promise((resolve) => setTimeout(resolve, 150))
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError && !isAuthSessionMissingError(userError)) {
-        console.error('Erro ao carregar usuário:', userError)
-      }
-
-      if (!user) {
-        setError('Sua sessão não foi carregada corretamente. Tente novamente.')
-        return
-      }
-
-      await resolvePostLoginRoute(user)
+      await resolvePostLoginRoute()
     } catch (err) {
       console.error('Erro inesperado no login:', err)
 
