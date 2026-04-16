@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { Linking, Platform } from 'react-native'
+import * as WebBrowser from 'expo-web-browser'
 import Constants from 'expo-constants'
 import { Session, User } from '@supabase/supabase-js'
 
@@ -13,6 +14,10 @@ type Credentials = {
 type OAuthProvider = 'google' | 'apple'
 
 const OAUTH_TIMEOUT_MS = 90_000
+const SESSION_RETRY_ATTEMPTS = 8
+const SESSION_RETRY_DELAY_MS = 250
+
+WebBrowser.maybeCompleteAuthSession()
 
 function getRedirectUrl() {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -21,36 +26,6 @@ function getRedirectUrl() {
 
   const scheme = Constants.expoConfig?.scheme || 'confiaplus'
   return `${scheme}://auth/callback`
-}
-
-function waitForAuthRedirect(redirectTo: string) {
-  return new Promise<string | null>(async (resolve) => {
-    let settled = false
-    let subscription: { remove: () => void } | null = null
-
-    const complete = (url: string | null) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeoutId)
-      subscription?.remove()
-      resolve(url)
-    }
-
-    const timeoutId = setTimeout(() => {
-      complete(null)
-    }, OAUTH_TIMEOUT_MS)
-
-    const initialUrl = await Linking.getInitialURL()
-    if (initialUrl?.startsWith(redirectTo)) {
-      complete(initialUrl)
-      return
-    }
-
-    subscription = Linking.addEventListener('url', ({ url }) => {
-      if (!url.startsWith(redirectTo)) return
-      complete(url)
-    })
-  })
 }
 
 function getQueryParam(rawUrl: string, key: string) {
@@ -64,11 +39,83 @@ function getQueryParam(rawUrl: string, key: string) {
   }
 }
 
+function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedState: string | null) {
+  if (!url) return false
+  if (!url.startsWith(redirectTo)) return false
+
+  const hasAuthPayload = Boolean(getQueryParam(url, 'code') || getQueryParam(url, 'error'))
+  if (!hasAuthPayload) return false
+
+  if (!expectedState) return true
+
+  const callbackState = getQueryParam(url, 'state')
+  return Boolean(callbackState && callbackState === expectedState)
+}
+
+function waitForAuthRedirect(
+  redirectTo: string,
+  expectedState: string | null,
+  lastHandledUrlRef: MutableRefObject<string | null>
+) {
+  return new Promise<string | null>((resolve) => {
+    let settled = false
+    let subscription: { remove: () => void } | null = null
+
+    const complete = (url: string | null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutId)
+      subscription?.remove()
+      resolve(url)
+    }
+
+    const tryConsume = (url: string | null) => {
+      if (!isExpectedOAuthUrl(url, redirectTo, expectedState)) return
+      if (url === lastHandledUrlRef.current) return
+
+      lastHandledUrlRef.current = url
+      complete(url)
+    }
+
+    const timeoutId = setTimeout(() => {
+      complete(null)
+    }, OAUTH_TIMEOUT_MS)
+
+    Linking.getInitialURL()
+      .then((initialUrl) => {
+        tryConsume(initialUrl)
+      })
+      .catch(() => {
+        // Ignora erros de leitura da URL inicial para não interromper o fluxo.
+      })
+
+    subscription = Linking.addEventListener('url', ({ url }) => {
+      tryConsume(url)
+    })
+  })
+}
+
+async function waitForSessionToPersist() {
+  for (let attempt = 0; attempt < SESSION_RETRY_ATTEMPTS; attempt += 1) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (session) return session
+
+    await new Promise((resolve) => setTimeout(resolve, SESSION_RETRY_DELAY_MS))
+  }
+
+  return null
+}
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const oauthInFlightRef = useRef(false)
+  const processingRef = useRef(false)
+  const lastHandledUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -122,35 +169,63 @@ export function useAuth() {
         throw new Error('Não foi possível iniciar autenticação social.')
       }
 
-      const pendingRedirect = waitForAuthRedirect(redirectTo)
+      const expectedState = getQueryParam(data.url, 'state')
+      const pendingRedirect = waitForAuthRedirect(redirectTo, expectedState, lastHandledUrlRef)
 
-      await Linking.openURL(data.url)
+      let callbackUrl: string | null = null
 
-      const callbackUrl = await pendingRedirect
+      if (Platform.OS === 'web') {
+        window.location.assign(data.url)
+        callbackUrl = await pendingRedirect
+      } else {
+        const authResult = await WebBrowser.openAuthSessionAsync(data.url, redirectTo)
+        if (authResult.type === 'success') {
+          callbackUrl = authResult.url
+        } else {
+          callbackUrl = await pendingRedirect
+        }
+      }
 
-      if (!callbackUrl) {
+      if (!isExpectedOAuthUrl(callbackUrl, redirectTo, expectedState)) {
         return { cancelled: true }
       }
 
-      const callbackError = getQueryParam(callbackUrl, 'error')
+      const finalCallbackUrl = callbackUrl as string
+
+      const callbackError = getQueryParam(finalCallbackUrl, 'error')
       if (callbackError) {
         throw new Error('Falha no retorno da autenticação social.')
       }
 
-      const code = getQueryParam(callbackUrl, 'code')
+      const code = getQueryParam(finalCallbackUrl, 'code')
       if (!code) {
         return { cancelled: true }
       }
 
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-      if (exchangeError) {
-        const {
-          data: { session: existingSession },
-        } = await supabase.auth.getSession()
+      if (processingRef.current) {
+        return { cancelled: true }
+      }
 
-        if (!existingSession) {
-          throw new Error(exchangeError.message)
+      processingRef.current = true
+
+      try {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (exchangeError) {
+          const {
+            data: { session: existingSession },
+          } = await supabase.auth.getSession()
+
+          if (!existingSession) {
+            throw new Error(exchangeError.message)
+          }
         }
+
+        const persistedSession = await waitForSessionToPersist()
+        if (!persistedSession) {
+          throw new Error('Sessão não persistida após autenticação social.')
+        }
+      } finally {
+        processingRef.current = false
       }
 
       return { cancelled: false }
