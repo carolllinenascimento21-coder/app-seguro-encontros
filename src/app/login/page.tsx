@@ -16,9 +16,13 @@ export default function LoginPage() {
   const loginInFlightRef = useRef(false)
   const oauthCheckRanRef = useRef(false)
   const resolvingRouteRef = useRef(false)
+  const shouldRetryRef = useRef(false)
 
   const resolvePostLoginRoute = useCallback(async () => {
-    if (resolvingRouteRef.current) return
+    if (resolvingRouteRef.current) {
+      shouldRetryRef.current = true
+      return
+    }
 
     resolvingRouteRef.current = true
 
@@ -84,6 +88,11 @@ export default function LoginPage() {
       }
     } finally {
       resolvingRouteRef.current = false
+
+      if (shouldRetryRef.current) {
+        shouldRetryRef.current = false
+        void resolvePostLoginRoute()
+      }
     }
   }, [router])
 
