@@ -115,10 +115,8 @@ export default function LoginPage() {
         }
 
         // 🔥 FLUXO DE ONBOARDING
-        if (
-          profile?.onboarding_completed === false ||
-          profile?.onboarding_completed === null
-        ) {
+        if (profile?.onboarding_completed === false)
+        {
           router.refresh()
           router.replace('/onboarding/selfie')
           return
