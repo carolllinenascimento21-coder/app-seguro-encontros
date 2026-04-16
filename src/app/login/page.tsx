@@ -46,14 +46,37 @@ export default function LoginPage() {
           setError('E-mail ou senha inválidos.')
         }
 
-        setLoading(false)
         return
       }
 
-      /**
-       * 🔑 FORÇA criação da sessão no cookie
-       */
-      await supabase.auth.getSession()
+      if (!data.session?.access_token || !data.session.refresh_token) {
+        console.error('Login sem sessão válida retornada pelo Supabase:', {
+          hasSession: Boolean(data.session),
+        })
+        setError('Não foi possível iniciar sua sessão. Tente novamente.')
+        return
+      }
+
+      const syncResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }),
+      })
+
+      if (!syncResponse.ok) {
+        const syncResult = await syncResponse
+          .json()
+          .catch(() => ({ error: 'unknown_error' }))
+        console.error('Falha ao sincronizar sessão no servidor:', syncResult)
+        setError('Falha ao persistir sessão. Tente novamente.')
+        return
+      }
 
       const {
         data: { user },
@@ -84,17 +107,14 @@ export default function LoginPage() {
         }
       }
 
-      /**
-       * 🔑 Atualiza estado do App Router
-       */
       router.refresh()
       router.replace('/home')
     } catch (err) {
       console.error('Erro inesperado no login:', err)
       setError('Erro inesperado. Tente novamente.')
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (
