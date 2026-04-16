@@ -15,6 +15,9 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   const handleLogin = async () => {
+    // 🔒 evita múltiplos cliques (CRÍTICO)
+    if (loading) return
+
     setLoading(true)
     setError(null)
 
@@ -27,6 +30,7 @@ export default function LoginPage() {
     const supabase = createSupabaseClient()
 
     try {
+      // 🔥 LOGIN
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
@@ -49,17 +53,19 @@ export default function LoginPage() {
         return
       }
 
+      // 🔥 VALIDA SESSÃO
       if (!data.session?.access_token || !data.session.refresh_token) {
-        console.error('Login sem sessão válida retornada pelo Supabase:', {
+        console.error('Login sem sessão válida:', {
           hasSession: Boolean(data.session),
         })
         setError('Não foi possível iniciar sua sessão. Tente novamente.')
         return
       }
 
+      // 🔥 SINCRONIZA COM SERVER
       const syncResponse = await fetch('/api/auth/login', {
         method: 'POST',
-        credentials: 'include',
+        credentials: 'include', // ESSENCIAL PARA iOS
         headers: {
           'Content-Type': 'application/json',
         },
@@ -73,11 +79,20 @@ export default function LoginPage() {
         const syncResult = await syncResponse
           .json()
           .catch(() => ({ error: 'unknown_error' }))
-        console.error('Falha ao sincronizar sessão no servidor:', syncResult)
+
+        console.error('Falha ao sincronizar sessão:', syncResult)
+
+        // 🔥 CORREÇÃO CRÍTICA (resolve iOS)
+        await supabase.auth.signOut()
+
         setError('Falha ao persistir sessão. Tente novamente.')
         return
       }
 
+      // 🔥 PEQUENO DELAY (resolve iOS / cookie timing)
+      await new Promise((resolve) => setTimeout(resolve, 150))
+
+      // 🔥 CARREGA USUÁRIO
       const {
         data: { user },
         error: userError,
@@ -97,6 +112,7 @@ export default function LoginPage() {
           console.error('Erro ao garantir perfil:', profileError)
         }
 
+        // 🔥 FLUXO DE ONBOARDING
         if (
           profile?.onboarding_completed === false ||
           profile?.onboarding_completed === null
@@ -107,10 +123,18 @@ export default function LoginPage() {
         }
       }
 
+      // 🔥 REDIRECIONAMENTO FINAL
       router.refresh()
       router.replace('/home')
+
     } catch (err) {
       console.error('Erro inesperado no login:', err)
+
+      // 🔥 fallback de segurança
+      try {
+        await createSupabaseClient().auth.signOut()
+      } catch {}
+
       setError('Erro inesperado. Tente novamente.')
     } finally {
       setLoading(false)
