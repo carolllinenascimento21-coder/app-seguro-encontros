@@ -4,6 +4,8 @@ import { createServerClient } from '@supabase/ssr'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_NEXT_PATH = '/login'
+const MOBILE_CALLBACK_PATH = '/auth/callback'
+const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -11,6 +13,25 @@ function getSafeRedirectPath(next: string | null) {
   if (next.startsWith('//')) return DEFAULT_NEXT_PATH
   if (next.startsWith('/auth/callback')) return DEFAULT_NEXT_PATH
   return next
+}
+
+function getMobileRedirectTarget(redirectTo: string | null) {
+  if (!redirectTo) return null
+
+  try {
+    const parsed = new URL(redirectTo)
+    if (!ALLOWED_MOBILE_SCHEMES.has(parsed.protocol.replace(':', ''))) {
+      return null
+    }
+
+    if (parsed.pathname !== MOBILE_CALLBACK_PATH) {
+      return null
+    }
+
+    return parsed.toString()
+  } catch {
+    return null
+  }
 }
 
 export async function GET(req: Request) {
@@ -35,9 +56,13 @@ export async function GET(req: Request) {
   }
 
   const requestUrl = new URL(req.url)
+  const mobileRedirectTo = getMobileRedirectTarget(requestUrl.searchParams.get('redirect_to'))
+
   const nextPath = getSafeRedirectPath(requestUrl.searchParams.get('next'))
   const callbackUrl = new URL('/auth/callback', requestUrl.origin)
   callbackUrl.searchParams.set('next', nextPath)
+
+  const redirectTo = mobileRedirectTo ?? callbackUrl.toString()
 
   const cookieStore = await cookies()
 
@@ -61,7 +86,7 @@ export async function GET(req: Request) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: callbackUrl.toString(),
+      redirectTo,
       skipBrowserRedirect: true,
     },
   })
@@ -72,6 +97,7 @@ export async function GET(req: Request) {
       status: error?.status,
       code: error?.code,
       hasUrl: Boolean(data?.url),
+      redirectTo,
     })
 
     return NextResponse.redirect(new URL('/login?error=google_oauth_start', requestUrl.origin))
