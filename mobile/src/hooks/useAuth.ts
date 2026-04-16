@@ -1,5 +1,6 @@
 import { MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
-import { Linking, Platform } from 'react-native'
+import { Linking as ReactNativeLinking, Platform } from 'react-native'
+import * as ExpoLinking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
 import Constants from 'expo-constants'
 import { Session, User } from '@supabase/supabase-js'
@@ -16,6 +17,7 @@ type OAuthProvider = 'google' | 'apple'
 const OAUTH_TIMEOUT_MS = 90_000
 const SESSION_RETRY_ATTEMPTS = 8
 const SESSION_RETRY_DELAY_MS = 250
+const DEFAULT_APP_SCHEME = 'confiamais'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -24,8 +26,18 @@ function getRedirectUrl() {
     return `${window.location.origin}/auth/callback`
   }
 
-  const scheme = Constants.expoConfig?.scheme || 'confiaplus'
-  return `${scheme}://auth/callback`
+  const scheme = Constants.expoConfig?.scheme || DEFAULT_APP_SCHEME
+  return ExpoLinking.createURL('auth/callback', { scheme })
+}
+
+function getGoogleAuthStartUrl(redirectTo: string) {
+  const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '')
+
+  if (!apiBaseUrl) {
+    throw new Error('Variável de ambiente ausente: EXPO_PUBLIC_API_BASE_URL.')
+  }
+
+  return `${apiBaseUrl}/api/auth/google?redirect_to=${encodeURIComponent(redirectTo)}`
 }
 
 function getQueryParam(rawUrl: string, key: string) {
@@ -81,7 +93,7 @@ function waitForAuthRedirect(
       complete(null)
     }, OAUTH_TIMEOUT_MS)
 
-    Linking.getInitialURL()
+    ReactNativeLinking.getInitialURL()
       .then((initialUrl) => {
         tryConsume(initialUrl)
       })
@@ -89,7 +101,7 @@ function waitForAuthRedirect(
         // Ignora erros de leitura da URL inicial para não interromper o fluxo.
       })
 
-    subscription = Linking.addEventListener('url', ({ url }) => {
+    subscription = ReactNativeLinking.addEventListener('url', ({ url }) => {
       tryConsume(url)
     })
   })
@@ -116,6 +128,7 @@ export function useAuth() {
   const oauthInFlightRef = useRef(false)
   const processingRef = useRef(false)
   const lastHandledUrlRef = useRef<string | null>(null)
+  const lastProcessedCodeRef = useRef<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -153,32 +166,41 @@ export function useAuth() {
     try {
       const redirectTo = getRedirectUrl()
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      })
+      let authStartUrl: string
+      let expectedState: string | null = null
 
-      if (error) {
-        throw new Error(error.message)
+      if (provider === 'google' && Platform.OS !== 'web') {
+        authStartUrl = getGoogleAuthStartUrl(redirectTo)
+      } else {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo,
+            skipBrowserRedirect: true,
+          },
+        })
+
+        if (error) {
+          throw new Error(error.message)
+        }
+
+        if (!data?.url) {
+          throw new Error('Não foi possível iniciar autenticação social.')
+        }
+
+        authStartUrl = data.url
+        expectedState = getQueryParam(data.url, 'state')
       }
 
-      if (!data?.url) {
-        throw new Error('Não foi possível iniciar autenticação social.')
-      }
-
-      const expectedState = getQueryParam(data.url, 'state')
       const pendingRedirect = waitForAuthRedirect(redirectTo, expectedState, lastHandledUrlRef)
 
       let callbackUrl: string | null = null
 
       if (Platform.OS === 'web') {
-        window.location.assign(data.url)
+        window.location.assign(authStartUrl)
         callbackUrl = await pendingRedirect
       } else {
-        const authResult = await WebBrowser.openAuthSessionAsync(data.url, redirectTo)
+        const authResult = await WebBrowser.openAuthSessionAsync(authStartUrl, redirectTo)
         if (authResult.type === 'success') {
           callbackUrl = authResult.url
         } else {
@@ -202,11 +224,12 @@ export function useAuth() {
         return { cancelled: true }
       }
 
-      if (processingRef.current) {
+      if (processingRef.current || code === lastProcessedCodeRef.current) {
         return { cancelled: true }
       }
 
       processingRef.current = true
+      lastProcessedCodeRef.current = code
 
       try {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
@@ -258,8 +281,8 @@ export function useAuth() {
     user,
     isAuthenticated: Boolean(session?.user),
     signIn,
-    signInWithApple,
     signInWithGoogle,
+    signInWithApple,
     signOut,
   }
 }
