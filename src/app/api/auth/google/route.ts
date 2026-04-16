@@ -1,20 +1,9 @@
 import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
-const DEFAULT_NEXT_PATH = '/login'
-
-function getSafeRedirectPath(next: string | null) {
-  if (!next) return DEFAULT_NEXT_PATH
-  if (!next.startsWith('/')) return DEFAULT_NEXT_PATH
-  if (next.startsWith('//')) return DEFAULT_NEXT_PATH
-  if (next.startsWith('/auth/callback')) return DEFAULT_NEXT_PATH
-  return next
-}
-
-export async function GET(request: NextRequest) {
+export async function GET(req: Request) {
   let supabaseEnv
 
   try {
@@ -23,18 +12,22 @@ export async function GET(request: NextRequest) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
       console.error(envError.message)
-      return new NextResponse(envError.message, { status: envError.status })
+      return NextResponse.json({ error: envError.message }, { status: envError.status })
     }
     throw error
   }
 
   if (!supabaseEnv) {
-    return new NextResponse('Supabase público não configurado', { status: 503 })
+    return NextResponse.json(
+      { error: 'Supabase público não configurado' },
+      { status: 503 }
+    )
   }
 
-  const { searchParams, origin } = new URL(request.url)
-  const next = getSafeRedirectPath(searchParams.get('next'))
-  const callbackUrl = new URL('/auth/callback', origin)
+  const requestUrl = new URL(req.url)
+  const next = requestUrl.searchParams.get('next') || '/login'
+
+  const callbackUrl = new URL('/auth/callback', requestUrl.origin)
   callbackUrl.searchParams.set('next', next)
 
   const cookieStore = await cookies()
@@ -48,13 +41,9 @@ export async function GET(request: NextRequest) {
           return cookieStore.getAll()
         },
         setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
-            })
-          } catch (error) {
-            console.error('Erro ao salvar cookies antes do OAuth Google:', error)
-          }
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options)
+          })
         },
       },
     }
@@ -69,17 +58,14 @@ export async function GET(request: NextRequest) {
   })
 
   if (error || !data?.url) {
-    console.error('Falha ao iniciar OAuth Google:', {
+    console.error('Erro ao iniciar OAuth Google:', {
       message: error?.message,
       status: error?.status,
       code: error?.code,
       hasUrl: Boolean(data?.url),
     })
 
-    const loginUrl = new URL('/login', origin)
-    loginUrl.searchParams.set('error', 'google_oauth_init_failed')
-    loginUrl.searchParams.set('next', next)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(new URL('/login?error=google_oauth_start', requestUrl.origin))
   }
 
   return NextResponse.redirect(data.url)
