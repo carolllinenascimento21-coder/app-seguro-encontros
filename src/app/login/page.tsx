@@ -26,9 +26,9 @@ export default function LoginPage() {
     if (!email.trim() || !password.trim()) {
       setError('Informe e-mail e senha.')
       setLoading(false)
+      loginInFlightRef.current = false
       return
     }
-
     const supabase = createSupabaseClient()
 
     try {
