@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
 
   let cookiesPersisted = true
 
@@ -91,12 +91,18 @@ export async function POST(req: Request) {
     refresh_token: refreshToken,
   })
 
+  const persistedCookieNames = cookieStore.getAll().map((cookie) => cookie.name)
+  const hasSupabaseSessionCookie = persistedCookieNames.some(
+    (name) => name.startsWith('sb-') && name.includes('-auth-token')
+  )
+
   // 🔥 VALIDAÇÃO MAIS RÍGIDA
   if (
     error ||
     !data?.session ||
     !data?.user ||
-    !cookiesPersisted
+    !cookiesPersisted ||
+    !hasSupabaseSessionCookie
   ) {
     console.error('Falha ao sincronizar sessão no servidor:', {
       message: error?.message,
@@ -105,6 +111,7 @@ export async function POST(req: Request) {
       hasSession: Boolean(data?.session),
       hasUser: Boolean(data?.user),
       cookiesPersisted,
+      hasSupabaseSessionCookie,
     })
 
     return NextResponse.json(
