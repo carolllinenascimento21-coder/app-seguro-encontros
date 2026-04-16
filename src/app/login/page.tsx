@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { ensureProfileForUser } from '@/lib/profile-utils'
@@ -13,11 +13,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const loginInFlightRef = useRef(false)
 
   const handleLogin = async () => {
-    // 🔒 evita múltiplos cliques (CRÍTICO)
-    if (loading) return
+    // 🔒 evita múltiplos cliques/race de estado (CRÍTICO)
+    if (loading || loginInFlightRef.current) return
 
+    loginInFlightRef.current = true
     setLoading(true)
     setError(null)
 
@@ -126,17 +128,17 @@ export default function LoginPage() {
       // 🔥 REDIRECIONAMENTO FINAL
       router.refresh()
       router.replace('/home')
-
     } catch (err) {
       console.error('Erro inesperado no login:', err)
 
       // 🔥 fallback de segurança
       try {
-        await createSupabaseClient().auth.signOut()
+        await supabase.auth.signOut()
       } catch {}
 
       setError('Erro inesperado. Tente novamente.')
     } finally {
+      loginInFlightRef.current = false
       setLoading(false)
     }
   }

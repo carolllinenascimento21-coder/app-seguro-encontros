@@ -33,18 +33,27 @@ export default function OnboardingPage() {
     if (!validatePreconditions()) return
     if (oauthInFlightRef.current) return
 
-    const supabase = createSupabaseClient()
-
-    if (!supabase) {
-      console.error('Supabase client não inicializado no onboarding.')
-      alert('Serviço indisponível no momento. Tente novamente mais tarde.')
-      return
-    }
-
     oauthInFlightRef.current = true
     setOauthLoading(provider)
 
     try {
+      if (provider === 'google') {
+        const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
+        googleEntryUrl.searchParams.set('next', '/onboarding/selfie')
+        window.location.assign(googleEntryUrl.toString())
+        return
+      }
+
+      const supabase = createSupabaseClient()
+
+      if (!supabase) {
+        console.error('Supabase client não inicializado no onboarding.')
+        alert('Serviço indisponível no momento. Tente novamente mais tarde.')
+        oauthInFlightRef.current = false
+        setOauthLoading(null)
+        return
+      }
+
       const redirectTo = getRedirectUrl('/onboarding/selfie')
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
