@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createSupabaseClient } from '@/lib/supabase'
+import { createSupabaseClient } from '@/lib/supabase/browser'
 import { Button } from '@/components/ui/button'
 import { ensureProfileForUser, getProfileErrorInfo } from '@/lib/profile-utils'
 
@@ -134,8 +134,9 @@ export default function SelfieOnboardingPage() {
       .from('profiles')
       .update({
         selfie_url: filePath,
-        selfie_verified: false,
+        selfie_verified: true,
         onboarding_completed: true,
+        selfie_checked_at: new Date().toISOString(),
       })
       .eq('id', user.id)
 

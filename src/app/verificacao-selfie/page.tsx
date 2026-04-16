@@ -42,6 +42,7 @@ export default function VerificacaoSelfiePage() {
 
     const res = await fetch('/api/verify-selfie', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image }),
     })
