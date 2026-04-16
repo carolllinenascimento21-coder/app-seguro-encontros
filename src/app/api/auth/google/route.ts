@@ -60,13 +60,22 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: callbackUrl.toString(),
-      skipBrowserRedirect: true,
+    redirectTo: callbackUrl.toString(),
+    skipBrowserRedirect: true,
     },
   })
+
+// 🔥 RETORNA A URL PARA O CLIENTE
+if (error || !data?.url) {
+  return NextResponse.json({ error: 'Erro ao iniciar OAuth' }, { status: 400 })
+}
+
+return NextResponse.json({
+  url: data.url,
+})
 
   if (error || !data?.url) {
     console.error('Falha ao iniciar OAuth Google:', {
