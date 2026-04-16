@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
+import { ensureProfileForUser } from '@/lib/profile-utils'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,41 +18,47 @@ export default function LoginPage() {
 
   const resolvePostLoginRoute = useCallback(async () => {
     const supabase = createSupabaseClient()
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    const maxAttempts = 3
 
-    if (userError && !isAuthSessionMissingError(userError)) {
-      console.error('Erro ao validar sessão na tela de login:', userError)
-    }
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
 
-    if (!user) {
+      if (userError && !isAuthSessionMissingError(userError)) {
+        console.error('Erro ao validar sessão na tela de login:', userError)
+      }
+
+      if (!user) {
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 250))
+          continue
+        }
+
+        return
+      }
+
+      const { profile, error: profileError } = await ensureProfileForUser(supabase, user)
+
+      if (profileError) {
+        console.error('Erro ao buscar perfil no login:', profileError)
+      }
+
+      if (!profile) {
+        console.error('Perfil não encontrado')
+        return
+      }
+
+      router.refresh()
+      if (profile.onboarding_completed === false) {
+        router.replace('/onboarding/selfie')
+        return
+      }
+
+      router.replace('/home')
       return
     }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-
-    if (profileError) {
-      console.error('Erro ao buscar perfil no login:', profileError)
-    }
-
-    if (!profile) {
-      console.error('Perfil não encontrado')
-      return
-    }
-
-    router.refresh()
-    if (profile.onboarding_completed === false) {
-      router.replace('/onboarding/selfie')
-      return
-    }
-
-    router.replace('/home')
   }, [router])
 
   useEffect(() => {
@@ -64,6 +71,22 @@ export default function LoginPage() {
     }
 
     runOAuthLandingCheck()
+  }, [resolvePostLoginRoute])
+
+  useEffect(() => {
+    const supabase = createSupabaseClient()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        void resolvePostLoginRoute()
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [resolvePostLoginRoute])
 
   const handleLogin = async () => {

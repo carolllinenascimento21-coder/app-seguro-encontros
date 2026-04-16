@@ -3,6 +3,16 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
+const DEFAULT_NEXT_PATH = '/login'
+
+function getSafeRedirectPath(next: string | null) {
+  if (!next) return DEFAULT_NEXT_PATH
+  if (!next.startsWith('/')) return DEFAULT_NEXT_PATH
+  if (next.startsWith('//')) return DEFAULT_NEXT_PATH
+  if (next.startsWith('/auth/callback')) return DEFAULT_NEXT_PATH
+  return next
+}
+
 export async function GET(req: Request) {
   let supabaseEnv
 
@@ -25,8 +35,9 @@ export async function GET(req: Request) {
   }
 
   const requestUrl = new URL(req.url)
+  const nextPath = getSafeRedirectPath(requestUrl.searchParams.get('next'))
   const callbackUrl = new URL('/auth/callback', requestUrl.origin)
-  callbackUrl.searchParams.set('next', '/login')
+  callbackUrl.searchParams.set('next', nextPath)
 
   const cookieStore = await cookies()
 
