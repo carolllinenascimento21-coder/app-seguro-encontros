@@ -39,7 +39,7 @@ export default function OnboardingPage() {
     try {
       if (provider === 'google') {
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
-        googleEntryUrl.searchParams.set('next', '/onboarding/selfie')
+        googleEntryUrl.searchParams.set('next', '/login')
         window.location.assign(googleEntryUrl.toString())
         return
       }
@@ -54,7 +54,7 @@ export default function OnboardingPage() {
         return
       }
 
-      const redirectTo = getRedirectUrl('/onboarding/selfie')
+      const redirectTo = getRedirectUrl('/auth/callback?next=/login')
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

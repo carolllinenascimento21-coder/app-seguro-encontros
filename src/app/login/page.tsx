@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { User } from '@supabase/supabase-js'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { ensureProfileForUser } from '@/lib/profile-utils'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
@@ -14,9 +15,62 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const loginInFlightRef = useRef(false)
+  const oauthCheckRanRef = useRef(false)
+
+  const resolvePostLoginRoute = useCallback(
+    async (user: User) => {
+      const supabase = createSupabaseClient()
+      const { profile, error: profileError } = await ensureProfileForUser(supabase, user)
+
+      if (profileError) {
+        console.error('Erro ao carregar/criar profile no login:', profileError)
+      }
+
+      if (!profile) {
+        console.error('Profile ausente após autenticação. Mantendo sessão e indo para /home.')
+        setError('Não foi possível carregar seu perfil agora. Você foi direcionada para a home.')
+        router.refresh()
+        router.replace('/home')
+        return
+      }
+
+      if (profile.onboarding_completed === false) {
+        router.refresh()
+        router.replace('/onboarding/selfie')
+        return
+      }
+
+      router.refresh()
+      router.replace('/home')
+    },
+    [router]
+  )
+
+  useEffect(() => {
+    if (oauthCheckRanRef.current) return
+
+    oauthCheckRanRef.current = true
+
+    const runOAuthLandingCheck = async () => {
+      const supabase = createSupabaseClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError && !isAuthSessionMissingError(userError)) {
+        console.error('Erro ao validar sessão na tela de login:', userError)
+      }
+
+      if (!user) return
+
+      await resolvePostLoginRoute(user)
+    }
+
+    runOAuthLandingCheck()
+  }, [resolvePostLoginRoute])
 
   const handleLogin = async () => {
-    // 🔒 evita múltiplos cliques/race de estado (CRÍTICO)
     if (loading || loginInFlightRef.current) return
 
     loginInFlightRef.current = true
@@ -29,10 +83,10 @@ export default function LoginPage() {
       loginInFlightRef.current = false
       return
     }
+
     const supabase = createSupabaseClient()
 
     try {
-      // 🔥 LOGIN
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
@@ -45,9 +99,7 @@ export default function LoginPage() {
           error.message.toLowerCase().includes('email') &&
           error.message.toLowerCase().includes('confirm')
         ) {
-          setError(
-            'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou spam.'
-          )
+          setError('Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou spam.')
         } else {
           setError('E-mail ou senha inválidos.')
         }
@@ -55,7 +107,6 @@ export default function LoginPage() {
         return
       }
 
-      // 🔥 VALIDA SESSÃO
       if (!data.session?.access_token || !data.session.refresh_token) {
         console.error('Login sem sessão válida:', {
           hasSession: Boolean(data.session),
@@ -64,10 +115,9 @@ export default function LoginPage() {
         return
       }
 
-      // 🔥 SINCRONIZA COM SERVER
       const syncResponse = await fetch('/api/auth/login', {
         method: 'POST',
-        credentials: 'include', // ESSENCIAL PARA iOS
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -78,23 +128,17 @@ export default function LoginPage() {
       })
 
       if (!syncResponse.ok) {
-        const syncResult = await syncResponse
-          .json()
-          .catch(() => ({ error: 'unknown_error' }))
+        const syncResult = await syncResponse.json().catch(() => ({ error: 'unknown_error' }))
 
         console.error('Falha ao sincronizar sessão:', syncResult)
 
-        // 🔥 CORREÇÃO CRÍTICA (resolve iOS)
         await supabase.auth.signOut()
-
         setError('Falha ao persistir sessão. Tente novamente.')
         return
       }
 
-      // 🔥 PEQUENO DELAY (resolve iOS / cookie timing)
       await new Promise((resolve) => setTimeout(resolve, 150))
 
-      // 🔥 CARREGA USUÁRIO
       const {
         data: { user },
         error: userError,
@@ -104,45 +148,15 @@ export default function LoginPage() {
         console.error('Erro ao carregar usuário:', userError)
       }
 
-      if (user) {
-        const { profile, error: profileError } = await ensureProfileForUser(
-          supabase,
-          user
-        )
-
-        if (profileError) {
-          console.error('Erro ao garantir perfil:', profileError)
-        }
-
-        // 🔥 FLUXO DE ONBOARDING
-        // 🔥 GARANTE QUE PROFILE EXISTE
-    if (!profile) {
-      console.error('Perfil não encontrado após login')
-  
-      // fallback seguro (evita loop infinito)
-      router.replace('/erro')
-      return
-    }
-
-// 🔥 FLUXO DE ONBOARDING
-if (profile.onboarding_completed === false) {
-  router.refresh()
-  router.replace('/onboarding/selfie')
-  return
-}
-
-// 🔥 REDIRECIONAMENTO FINAL
-router.refresh()
-router.replace('/home')
+      if (!user) {
+        setError('Sua sessão não foi carregada corretamente. Tente novamente.')
+        return
       }
 
-      // 🔥 REDIRECIONAMENTO FINAL
-      router.refresh()
-      router.replace('/home')
+      await resolvePostLoginRoute(user)
     } catch (err) {
       console.error('Erro inesperado no login:', err)
 
-      // 🔥 fallback de segurança
       try {
         await supabase.auth.signOut()
       } catch {}
@@ -157,9 +171,7 @@ router.replace('/home')
   return (
     <div className="min-h-screen flex items-center justify-center bg-black px-4">
       <div className="w-full max-w-sm space-y-6 rounded-2xl border border-[#D4AF37] p-8">
-        <h1 className="text-2xl font-bold text-center text-white">
-          Entrar
-        </h1>
+        <h1 className="text-2xl font-bold text-center text-white">Entrar</h1>
 
         {error && (
           <div className="rounded-md border border-red-700 bg-red-950/60 px-4 py-2 text-sm text-red-200 text-center">

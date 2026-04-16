@@ -4,21 +4,22 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
-const DEFAULT_REDIRECT_PATH = '/home'
-const LOGIN_PATH = '/login'
+const DEFAULT_NEXT_PATH = '/login'
+const FALLBACK_SUCCESS_PATH = '/home'
 
 function getSafeRedirectPath(next: string | null) {
-  if (!next) return DEFAULT_REDIRECT_PATH
-  if (!next.startsWith('/')) return DEFAULT_REDIRECT_PATH
-  if (next.startsWith('//')) return DEFAULT_REDIRECT_PATH
+  if (!next) return DEFAULT_NEXT_PATH
+  if (!next.startsWith('/')) return DEFAULT_NEXT_PATH
+  if (next.startsWith('//')) return DEFAULT_NEXT_PATH
+  if (next.startsWith('/auth/callback')) return DEFAULT_NEXT_PATH
   return next
 }
 
-function buildLoginRedirect(origin: string, next: string, error: string) {
-  const loginUrl = new URL(LOGIN_PATH, origin)
-  loginUrl.searchParams.set('error', error)
-  loginUrl.searchParams.set('next', next)
-  return NextResponse.redirect(loginUrl)
+function buildLoginErrorRedirect(origin: string, next: string, error: string) {
+  const url = new URL('/login', origin)
+  url.searchParams.set('error', error)
+  url.searchParams.set('next', next)
+  return NextResponse.redirect(url)
 }
 
 export async function GET(request: NextRequest) {
@@ -40,19 +41,17 @@ export async function GET(request: NextRequest) {
 
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = getSafeRedirectPath(searchParams.get('next'))
   const providerError = searchParams.get('error')
-
-  if (next === LOGIN_PATH || next.startsWith('/auth/callback')) {
-    return NextResponse.redirect(`${origin}${DEFAULT_REDIRECT_PATH}`)
-  }
+  const next = getSafeRedirectPath(searchParams.get('next'))
 
   if (providerError) {
-    return buildLoginRedirect(origin, next, providerError)
+    console.error('OAuth provider retornou erro no callback:', providerError)
+    return buildLoginErrorRedirect(origin, next, providerError)
   }
 
   if (!code) {
-    return NextResponse.redirect(`${origin}${next}`)
+    console.warn('OAuth callback sem code; enviando para destino seguro.', { next })
+    return NextResponse.redirect(new URL(next, origin))
   }
 
   const cookieStore = await cookies()
@@ -67,11 +66,14 @@ export async function GET(request: NextRequest) {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
-          } catch {}
+          } catch (error) {
+            console.error('Erro ao salvar cookies no callback OAuth:', error)
+          }
         },
       },
     }
   )
+
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
@@ -80,16 +82,18 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getSession()
 
     if (existingSession) {
-      return NextResponse.redirect(`${origin}${next}`)
+      console.warn('Código OAuth já utilizado; sessão existente reaproveitada.', {
+        userId: existingSession.user.id,
+      })
+      return NextResponse.redirect(new URL(next, origin))
     }
 
-    console.error('auth callback exchange error', {
+    console.error('Falha no exchangeCodeForSession:', {
       message: exchangeError.message,
       status: exchangeError.status,
       code: exchangeError.code,
     })
-
-    return buildLoginRedirect(origin, next, 'auth_callback_failed')
+    return buildLoginErrorRedirect(origin, next, 'auth_callback_failed')
   }
 
   const {
@@ -98,13 +102,14 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getSession()
 
   if (sessionError || !session) {
-    console.error('auth callback session validation error', {
-      sessionError,
+    console.error('Sessão não persistida após callback OAuth:', {
+      message: sessionError?.message,
+      status: sessionError?.status,
+      code: sessionError?.code,
       hasSession: Boolean(session),
     })
-
-    return buildLoginRedirect(origin, next, 'auth_session_not_persisted')
+    return NextResponse.redirect(new URL(FALLBACK_SUCCESS_PATH, origin))
   }
 
-  return NextResponse.redirect(`${origin}${next}`)
+  return NextResponse.redirect(new URL(next, origin))
 }
