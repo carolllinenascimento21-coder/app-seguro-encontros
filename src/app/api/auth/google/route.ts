@@ -4,8 +4,14 @@ import { createServerClient } from '@supabase/ssr'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_NEXT_PATH = '/login'
-const MOBILE_CALLBACK_PATH = '/auth/callback'
 const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
+const MOBILE_CALLBACK_PATH = '/auth/callback'
+
+function isAllowedMobileCallbackPath(parsed: URL) {
+  if (parsed.pathname === MOBILE_CALLBACK_PATH) return true
+  if (parsed.hostname === 'auth' && parsed.pathname === '/callback') return true
+  return false
+}
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -24,11 +30,8 @@ function getMobileRedirectTarget(redirectTo: string | null) {
 
     if (!ALLOWED_MOBILE_SCHEMES.has(protocol)) return null
 
-    const pathname = parsed.pathname
-
-    // 🔥 mais tolerante e correto
-    if (!pathname || !pathname.includes(MOBILE_CALLBACK_PATH)) {
-      console.warn('OAuth mobile callback inválido:', pathname)
+    if (!isAllowedMobileCallbackPath(parsed)) {
+      console.warn('OAuth mobile callback inválido:', parsed.toString())
       return null
     }
 
