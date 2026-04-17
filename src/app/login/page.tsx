@@ -74,6 +74,13 @@ export default function LoginPage() {
         }
 
         if (!profile) {
+          if (attempt < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 250))
+            continue
+          }
+
+          console.warn('Perfil ainda indisponível após tentativas de sincronização pós-login.')
+          setError('Estamos finalizando seu acesso. Tente novamente em alguns segundos.')
           return
         }
 

@@ -36,6 +36,29 @@ function buildSuccessRedirect(origin: string, next: string, code: string) {
   return response
 }
 
+async function getSessionWithRetry(
+  supabase: ReturnType<typeof createServerClient>,
+  attempts = 4,
+  delayMs = 150
+) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const sessionResult = await supabase.auth.getSession()
+    const session = sessionResult.data.session
+
+    if (session) {
+      return { session, error: sessionResult.error }
+    }
+
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    } else {
+      return { session: null, error: sessionResult.error }
+    }
+  }
+
+  return { session: null, error: null }
+}
+
 export async function GET(request: NextRequest) {
   let supabaseEnv
 
@@ -92,10 +115,9 @@ export async function GET(request: NextRequest) {
   // 🔒 CORREÇÃO PRINCIPAL:
   // só ignora code repetido se já houver sessão válida
   if (lastHandledCode && lastHandledCode === code) {
-    const {
-      data: { session: existingSession },
-      error: existingSessionError,
-    } = await supabase.auth.getSession()
+    const { session: existingSession, error: existingSessionError } = await getSessionWithRetry(
+      supabase
+    )
 
     if (existingSessionError) {
       console.error('[AUTH CALLBACK] Erro ao verificar sessão existente:', {
@@ -124,10 +146,7 @@ export async function GET(request: NextRequest) {
       code: exchangeError.code,
     })
 
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession()
+    const { session, error: sessionError } = await getSessionWithRetry(supabase)
 
     if (sessionError) {
       console.error('[AUTH CALLBACK] Erro ao verificar sessão após falha no exchange:', {
@@ -144,10 +163,9 @@ export async function GET(request: NextRequest) {
     console.warn('[AUTH CALLBACK] Sessão já existia após falha no exchange; continuando')
   }
 
-  const {
-    data: { session: persistedSession },
-    error: persistedSessionError,
-  } = await supabase.auth.getSession()
+  const { session: persistedSession, error: persistedSessionError } = await getSessionWithRetry(
+    supabase
+  )
 
   if (persistedSessionError) {
     console.error('[AUTH CALLBACK] Erro ao validar sessão persistida:', {
