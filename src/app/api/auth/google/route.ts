@@ -15,39 +15,26 @@ function getSafeRedirectPath(next: string | null) {
   return next
 }
 
-/**
- * 🔥 CORREÇÃO CRÍTICA AQUI
- * Agora aceita corretamente deep links mobile
- */
 function getMobileRedirectTarget(redirectTo: string | null) {
   if (!redirectTo) return null
 
   try {
     const parsed = new URL(redirectTo)
-
     const protocol = parsed.protocol.replace(':', '')
 
-    // ✔ valida scheme (confiamais://)
-    if (!ALLOWED_MOBILE_SCHEMES.has(protocol)) {
-      return null
-    }
+    if (!ALLOWED_MOBILE_SCHEMES.has(protocol)) return null
 
-    // 🔥 CORREÇÃO PRINCIPAL:
-    // antes: igualdade exata (quebrava mobile)
-    // agora: aceita variações válidas
     const pathname = parsed.pathname
 
-    if (!pathname || !pathname.endsWith(MOBILE_CALLBACK_PATH)) {
-      console.warn('OAuth mobile callback rejeitado por pathname inválido:', {
-        pathname,
-        expected: MOBILE_CALLBACK_PATH,
-      })
+    // 🔥 mais tolerante e correto
+    if (!pathname || !pathname.includes(MOBILE_CALLBACK_PATH)) {
+      console.warn('OAuth mobile callback inválido:', pathname)
       return null
     }
 
     return parsed.toString()
   } catch (err) {
-    console.error('Erro ao processar redirect_to mobile:', err)
+    console.error('Erro redirect_to mobile:', err)
     return null
   }
 }
@@ -67,15 +54,11 @@ export async function GET(req: Request) {
   }
 
   if (!supabaseEnv) {
-    return NextResponse.json(
-      { error: 'Supabase público não configurado' },
-      { status: 503 }
-    )
+    return NextResponse.json({ error: 'Supabase público não configurado' }, { status: 503 })
   }
 
   const requestUrl = new URL(req.url)
 
-  // 🔥 detecta se veio do mobile
   const mobileRedirectTo = getMobileRedirectTarget(
     requestUrl.searchParams.get('redirect_to')
   )
@@ -84,11 +67,9 @@ export async function GET(req: Request) {
     requestUrl.searchParams.get('next')
   )
 
-  // ✔ callback web padrão
   const callbackUrl = new URL('/auth/callback', requestUrl.origin)
   callbackUrl.searchParams.set('next', nextPath)
 
-  // 🔥 prioriza mobile se válido
   const redirectTo = mobileRedirectTo ?? callbackUrl.toString()
 
   const cookieStore = await cookies()
@@ -98,10 +79,8 @@ export async function GET(req: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
+        getAll: () => cookieStore.getAll(),
+        setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options)
           })
@@ -119,14 +98,7 @@ export async function GET(req: Request) {
   })
 
   if (error || !data?.url) {
-    console.error('Erro ao iniciar OAuth Google:', {
-      message: error?.message,
-      status: error?.status,
-      code: error?.code,
-      hasUrl: Boolean(data?.url),
-      redirectTo,
-    })
-
+    console.error('OAuth Google erro:', error)
     return NextResponse.redirect(
       new URL('/login?error=google_oauth_start', requestUrl.origin)
     )
