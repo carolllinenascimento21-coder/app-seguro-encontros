@@ -22,6 +22,20 @@ function buildError(origin: string, next: string, error: string) {
   return NextResponse.redirect(url)
 }
 
+function buildSuccessRedirect(origin: string, next: string, code: string) {
+  const response = NextResponse.redirect(new URL(next, origin))
+
+  response.cookies.set(LAST_HANDLED_CODE_COOKIE, code, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 5,
+  })
+
+  return response
+}
+
 export async function GET(request: NextRequest) {
   let supabaseEnv
 
@@ -53,18 +67,12 @@ export async function GET(request: NextRequest) {
   }
 
   if (!code) {
-    console.warn('[AUTH CALLBACK] Sem code, redirecionando:', next)
+    console.warn('[AUTH CALLBACK] Sem code; redirecionando para:', next)
     return NextResponse.redirect(new URL(next, origin))
   }
 
   const cookieStore = await cookies()
   const lastHandledCode = cookieStore.get(LAST_HANDLED_CODE_COOKIE)?.value
-
-  // 🔒 PROTEÇÃO ANTI-DUPLICAÇÃO (ANTES do exchange)
-  if (lastHandledCode && lastHandledCode === code) {
-    console.warn('[AUTH CALLBACK] Código já processado, ignorando')
-    return NextResponse.redirect(new URL(next, origin))
-  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,30 +89,32 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  // 🔍 Verifica sessão antes de tentar exchange
-  const {
-    data: { session: existingSession },
-  } = await supabase.auth.getSession()
+  // 🔒 CORREÇÃO PRINCIPAL:
+  // só ignora code repetido se já houver sessão válida
+  if (lastHandledCode && lastHandledCode === code) {
+    const {
+      data: { session: existingSession },
+      error: existingSessionError,
+    } = await supabase.auth.getSession()
 
-  if (existingSession) {
-    console.warn('[AUTH CALLBACK] Sessão já existe, evitando novo exchange', {
-      userId: existingSession.user.id,
-    })
+    if (existingSessionError) {
+      console.error('[AUTH CALLBACK] Erro ao verificar sessão existente:', {
+        message: existingSessionError.message,
+        status: existingSessionError.status,
+        code: existingSessionError.code,
+      })
+    }
 
-    const response = NextResponse.redirect(new URL(next, origin))
+    if (existingSession) {
+      console.warn('[AUTH CALLBACK] Code repetido com sessão válida; reaproveitando sessão', {
+        userId: existingSession.user.id,
+      })
+      return buildSuccessRedirect(origin, next, code)
+    }
 
-    response.cookies.set(LAST_HANDLED_CODE_COOKIE, code, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/', // 🔥 corrigido
-      maxAge: 60 * 5,
-    })
-
-    return response
+    console.warn('[AUTH CALLBACK] Code repetido sem sessão válida; tentando exchange novamente')
   }
 
-  // 🔁 Exchange do código
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
@@ -116,27 +126,45 @@ export async function GET(request: NextRequest) {
 
     const {
       data: { session },
+      error: sessionError,
     } = await supabase.auth.getSession()
+
+    if (sessionError) {
+      console.error('[AUTH CALLBACK] Erro ao verificar sessão após falha no exchange:', {
+        message: sessionError.message,
+        status: sessionError.status,
+        code: sessionError.code,
+      })
+    }
 
     if (!session) {
       return buildError(origin, next, 'auth_exchange_failed')
     }
 
-    console.warn('[AUTH CALLBACK] Sessão recuperada após falha no exchange')
+    console.warn('[AUTH CALLBACK] Sessão já existia após falha no exchange; continuando')
   }
 
-  // ✅ SUCESSO FINAL
-  const response = NextResponse.redirect(new URL(next, origin))
+  const {
+    data: { session: persistedSession },
+    error: persistedSessionError,
+  } = await supabase.auth.getSession()
 
-  response.cookies.set(LAST_HANDLED_CODE_COOKIE, code, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/', // 🔥 importante
-    maxAge: 60 * 5,
+  if (persistedSessionError) {
+    console.error('[AUTH CALLBACK] Erro ao validar sessão persistida:', {
+      message: persistedSessionError.message,
+      status: persistedSessionError.status,
+      code: persistedSessionError.code,
+    })
+  }
+
+  if (!persistedSession) {
+    console.error('[AUTH CALLBACK] Sessão não persistida após callback')
+    return buildError(origin, next, 'auth_session_not_persisted')
+  }
+
+  console.log('[AUTH CALLBACK] Login finalizado com sucesso', {
+    userId: persistedSession.user.id,
   })
 
-  console.log('[AUTH CALLBACK] Login finalizado com sucesso')
-
-  return response
+  return buildSuccessRedirect(origin, next, code)
 }
