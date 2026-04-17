@@ -26,15 +26,20 @@ function createFlowId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+function getConfiguredScheme() {
+  const configuredScheme = Constants.expoConfig?.scheme
+  if (Array.isArray(configuredScheme)) {
+    return configuredScheme[0] || DEFAULT_APP_SCHEME
+  }
+  return configuredScheme || DEFAULT_APP_SCHEME
+}
+
 function getRedirectUrl(flowId?: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `${window.location.origin}/auth/callback`
   }
 
-  const configuredScheme = Constants.expoConfig?.scheme
-  const scheme = Array.isArray(configuredScheme)
-    ? configuredScheme[0]
-    : configuredScheme || DEFAULT_APP_SCHEME
+  const scheme = getConfiguredScheme()
   const baseRedirectUrl = ExpoLinking.createURL('auth/callback', { scheme })
 
   if (!flowId) return baseRedirectUrl
@@ -64,23 +69,32 @@ function getQueryParam(rawUrl: string, key: string) {
   }
 }
 
+function normalizeUrlForComparison(url: string) {
+  return url.replace(/\/+(\?|$)/, '$1')
+}
+
 function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedState: string | null) {
   if (!url) return false
-  if (!url.includes('auth/callback')) return false
-  if (!url.startsWith(redirectTo)) return false
 
-  const hasAuthPayload = Boolean(getQueryParam(url, 'code') || getQueryParam(url, 'error'))
+  const normalizedUrl = normalizeUrlForComparison(url)
+  const normalizedRedirectTo = normalizeUrlForComparison(redirectTo)
+
+  if (!normalizedUrl.startsWith(normalizedRedirectTo)) return false
+  if (!normalizedUrl.includes('auth/callback')) return false
+
+  const hasAuthPayload = Boolean(getQueryParam(normalizedUrl, 'code') || getQueryParam(normalizedUrl, 'error'))
   if (!hasAuthPayload) return false
 
   if (!expectedState) return true
 
-  const callbackState = getQueryParam(url, 'state')
+  const callbackState = getQueryParam(normalizedUrl, 'state')
   return Boolean(callbackState && callbackState === expectedState)
 }
 
 function waitForAuthRedirect(
   redirectTo: string,
   expectedState: string | null,
+  flowId: string | null,
   lastHandledUrlRef: MutableRefObject<string | null>
 ) {
   return new Promise<string | null>((resolve) => {
@@ -99,6 +113,11 @@ function waitForAuthRedirect(
       if (!isExpectedOAuthUrl(url, redirectTo, expectedState)) return
       if (url === lastHandledUrlRef.current) return
 
+      if (flowId) {
+        const callbackFlowId = getQueryParam(url!, FLOW_ID_QUERY_PARAM)
+        if (!callbackFlowId || callbackFlowId !== flowId) return
+      }
+
       lastHandledUrlRef.current = url
       complete(url)
     }
@@ -109,7 +128,9 @@ function waitForAuthRedirect(
 
     ReactNativeLinking.getInitialURL()
       .then((initialUrl) => tryConsume(initialUrl))
-      .catch(() => {})
+      .catch(() => {
+        // ignora
+      })
 
     subscription = ReactNativeLinking.addEventListener('url', ({ url }) => {
       tryConsume(url)
@@ -196,7 +217,12 @@ export function useAuth() {
         expectedState = getQueryParam(data.url, 'state')
       }
 
-      const pendingRedirect = waitForAuthRedirect(redirectTo, expectedState, lastHandledUrlRef)
+      const pendingRedirect = waitForAuthRedirect(
+        redirectTo,
+        expectedState,
+        flowId,
+        lastHandledUrlRef
+      )
 
       if (Platform.OS === 'web') {
         window.location.assign(authStartUrl)
@@ -204,17 +230,31 @@ export function useAuth() {
       }
 
       const authSessionResult = await WebBrowser.openAuthSessionAsync(authStartUrl, redirectTo)
-      const authSessionUrl = authSessionResult.type === 'success' ? authSessionResult.url : null
-      const callbackUrl = isExpectedOAuthUrl(authSessionUrl, redirectTo, expectedState)
-        ? authSessionUrl
-        : await pendingRedirect
+
+      let callbackUrl: string | null = null
+
+      if (authSessionResult.type === 'success') {
+        callbackUrl = authSessionResult.url
+      }
+
+      if (!isExpectedOAuthUrl(callbackUrl, redirectTo, expectedState)) {
+        callbackUrl = await pendingRedirect
+      }
 
       if (!isExpectedOAuthUrl(callbackUrl, redirectTo, expectedState)) {
         return { cancelled: true }
       }
 
-      if (flowId && getQueryParam(callbackUrl!, FLOW_ID_QUERY_PARAM) !== flowId) {
-        return { cancelled: true }
+      if (flowId) {
+        const callbackFlowId = getQueryParam(callbackUrl!, FLOW_ID_QUERY_PARAM)
+        if (!callbackFlowId || callbackFlowId !== flowId) {
+          return { cancelled: true }
+        }
+      }
+
+      const callbackError = getQueryParam(callbackUrl!, 'error')
+      if (callbackError) {
+        throw new Error('Falha no retorno da autenticação social.')
       }
 
       const code = getQueryParam(callbackUrl!, 'code')
@@ -242,7 +282,7 @@ export function useAuth() {
 
         const persistedSession = await waitForSessionToPersist()
         if (!persistedSession) {
-          throw new Error('Sessão não persistida')
+          throw new Error('Sessão não persistida após autenticação social.')
         }
       } finally {
         resolvingRef.current = false
