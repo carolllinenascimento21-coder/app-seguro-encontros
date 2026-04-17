@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_NEXT_PATH = '/login'
+const LAST_HANDLED_CODE_COOKIE = 'confia_last_oauth_code'
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cookieStore = await cookies()
+  const lastHandledCode = cookieStore.get(LAST_HANDLED_CODE_COOKIE)?.value
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,6 +71,10 @@ export async function GET(request: NextRequest) {
     }
   )
 
+  if (lastHandledCode && lastHandledCode === code) {
+    return NextResponse.redirect(new URL(next, origin))
+  }
+
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
@@ -81,5 +87,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(new URL(next, origin))
+  const response = NextResponse.redirect(new URL(next, origin))
+  response.cookies.set(LAST_HANDLED_CODE_COOKIE, code, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/auth/callback',
+    maxAge: 60 * 5,
+  })
+
+  return response
 }

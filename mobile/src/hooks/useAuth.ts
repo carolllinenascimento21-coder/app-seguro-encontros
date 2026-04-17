@@ -18,16 +18,29 @@ const OAUTH_TIMEOUT_MS = 90_000
 const SESSION_RETRY_ATTEMPTS = 8
 const SESSION_RETRY_DELAY_MS = 250
 const DEFAULT_APP_SCHEME = 'confiamais'
+const FLOW_ID_QUERY_PARAM = 'flow_id'
 
 WebBrowser.maybeCompleteAuthSession()
 
-function getRedirectUrl() {
+function createFlowId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function getRedirectUrl(flowId?: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `${window.location.origin}/auth/callback`
   }
 
-  const scheme = Constants.expoConfig?.scheme || DEFAULT_APP_SCHEME
-  return ExpoLinking.createURL('auth/callback', { scheme })
+  const configuredScheme = Constants.expoConfig?.scheme
+  const scheme = Array.isArray(configuredScheme)
+    ? configuredScheme[0]
+    : configuredScheme || DEFAULT_APP_SCHEME
+  const baseRedirectUrl = ExpoLinking.createURL('auth/callback', { scheme })
+
+  if (!flowId) return baseRedirectUrl
+
+  const separator = baseRedirectUrl.includes('?') ? '&' : '?'
+  return `${baseRedirectUrl}${separator}${FLOW_ID_QUERY_PARAM}=${encodeURIComponent(flowId)}`
 }
 
 function getGoogleAuthStartUrl(redirectTo: string) {
@@ -53,6 +66,7 @@ function getQueryParam(rawUrl: string, key: string) {
 
 function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedState: string | null) {
   if (!url) return false
+  if (!url.includes('auth/callback')) return false
   if (!url.startsWith(redirectTo)) return false
 
   const hasAuthPayload = Boolean(getQueryParam(url, 'code') || getQueryParam(url, 'error'))
@@ -123,7 +137,7 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   const oauthInFlightRef = useRef(false)
-  const processingRef = useRef(false)
+  const resolvingRef = useRef(false)
   const lastHandledUrlRef = useRef<string | null>(null)
   const lastProcessedCodeRef = useRef<string | null>(null)
 
@@ -158,7 +172,8 @@ export function useAuth() {
     oauthInFlightRef.current = true
 
     try {
-      const redirectTo = getRedirectUrl()
+      const flowId = Platform.OS === 'web' ? null : createFlowId()
+      const redirectTo = getRedirectUrl(flowId ?? undefined)
 
       let authStartUrl: string
       let expectedState: string | null = null
@@ -188,23 +203,28 @@ export function useAuth() {
         return { cancelled: false }
       }
 
-      await WebBrowser.openAuthSessionAsync(authStartUrl, redirectTo)
-
-      // 🔴 SEMPRE usar o listener (corrige Google + Apple)
-      const callbackUrl = await pendingRedirect
+      const authSessionResult = await WebBrowser.openAuthSessionAsync(authStartUrl, redirectTo)
+      const authSessionUrl = authSessionResult.type === 'success' ? authSessionResult.url : null
+      const callbackUrl = isExpectedOAuthUrl(authSessionUrl, redirectTo, expectedState)
+        ? authSessionUrl
+        : await pendingRedirect
 
       if (!isExpectedOAuthUrl(callbackUrl, redirectTo, expectedState)) {
+        return { cancelled: true }
+      }
+
+      if (flowId && getQueryParam(callbackUrl!, FLOW_ID_QUERY_PARAM) !== flowId) {
         return { cancelled: true }
       }
 
       const code = getQueryParam(callbackUrl!, 'code')
       if (!code) return { cancelled: true }
 
-      if (processingRef.current || code === lastProcessedCodeRef.current) {
+      if (resolvingRef.current || code === lastProcessedCodeRef.current) {
         return { cancelled: true }
       }
 
-      processingRef.current = true
+      resolvingRef.current = true
       lastProcessedCodeRef.current = code
 
       try {
@@ -225,7 +245,7 @@ export function useAuth() {
           throw new Error('Sessão não persistida')
         }
       } finally {
-        processingRef.current = false
+        resolvingRef.current = false
       }
 
       return { cancelled: false }
