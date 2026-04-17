@@ -30,12 +30,14 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
+      console.error('[AUTH CALLBACK] ENV ERROR:', envError.message)
       return new NextResponse(envError.message, { status: envError.status })
     }
     throw error
   }
 
   if (!supabaseEnv) {
+    console.error('[AUTH CALLBACK] Supabase não configurado')
     return new NextResponse('Supabase não configurado', { status: 503 })
   }
 
@@ -46,15 +48,23 @@ export async function GET(request: NextRequest) {
   const next = getSafeRedirectPath(searchParams.get('next'))
 
   if (providerError) {
+    console.error('[AUTH CALLBACK] Provider error:', providerError)
     return buildError(origin, next, providerError)
   }
 
   if (!code) {
+    console.warn('[AUTH CALLBACK] Sem code, redirecionando:', next)
     return NextResponse.redirect(new URL(next, origin))
   }
 
   const cookieStore = await cookies()
   const lastHandledCode = cookieStore.get(LAST_HANDLED_CODE_COOKIE)?.value
+
+  // 🔒 PROTEÇÃO ANTI-DUPLICAÇÃO (ANTES do exchange)
+  if (lastHandledCode && lastHandledCode === code) {
+    console.warn('[AUTH CALLBACK] Código já processado, ignorando')
+    return NextResponse.redirect(new URL(next, origin))
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -71,13 +81,39 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  if (lastHandledCode && lastHandledCode === code) {
-    return NextResponse.redirect(new URL(next, origin))
+  // 🔍 Verifica sessão antes de tentar exchange
+  const {
+    data: { session: existingSession },
+  } = await supabase.auth.getSession()
+
+  if (existingSession) {
+    console.warn('[AUTH CALLBACK] Sessão já existe, evitando novo exchange', {
+      userId: existingSession.user.id,
+    })
+
+    const response = NextResponse.redirect(new URL(next, origin))
+
+    response.cookies.set(LAST_HANDLED_CODE_COOKIE, code, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/', // 🔥 corrigido
+      maxAge: 60 * 5,
+    })
+
+    return response
   }
 
+  // 🔁 Exchange do código
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
+    console.error('[AUTH CALLBACK] exchangeCodeForSession falhou:', {
+      message: exchangeError.message,
+      status: exchangeError.status,
+      code: exchangeError.code,
+    })
+
     const {
       data: { session },
     } = await supabase.auth.getSession()
@@ -85,16 +121,22 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return buildError(origin, next, 'auth_exchange_failed')
     }
+
+    console.warn('[AUTH CALLBACK] Sessão recuperada após falha no exchange')
   }
 
+  // ✅ SUCESSO FINAL
   const response = NextResponse.redirect(new URL(next, origin))
+
   response.cookies.set(LAST_HANDLED_CODE_COOKIE, code, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    path: '/auth/callback',
+    path: '/', // 🔥 importante
     maxAge: 60 * 5,
   })
+
+  console.log('[AUTH CALLBACK] Login finalizado com sucesso')
 
   return response
 }
