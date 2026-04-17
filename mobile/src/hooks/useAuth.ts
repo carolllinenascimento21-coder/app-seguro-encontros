@@ -152,12 +152,12 @@ async function waitForSessionToPersist() {
   return null
 }
 
-async function waitForActiveResolution(resolvingRef: MutableRefObject<boolean>) {
-  const maxAttempts = 20
-  const delayMs = 100
+async function waitAndAcquireResolutionLock(resolvingRef: MutableRefObject<boolean>) {
+  const delayMs = 50
 
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+  while (true) {
     if (!resolvingRef.current) {
+      resolvingRef.current = true
       return
     }
 
@@ -273,21 +273,19 @@ export function useAuth() {
       const code = getQueryParam(callbackUrl!, 'code')
       if (!code) return { cancelled: true }
 
-      await waitForActiveResolution(resolvingRef)
-
-      if (code === lastProcessedCodeRef.current) {
-        const {
-          data: { session: existingSession },
-        } = await supabase.auth.getSession()
-
-        if (existingSession) {
-          return { cancelled: false }
-        }
-      }
-
-      resolvingRef.current = true
+      await waitAndAcquireResolutionLock(resolvingRef)
 
       try {
+        if (code === lastProcessedCodeRef.current) {
+          const {
+            data: { session: existingSession },
+          } = await supabase.auth.getSession()
+
+          if (existingSession) {
+            return { cancelled: false }
+          }
+        }
+
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
         if (exchangeError) {
