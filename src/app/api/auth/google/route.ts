@@ -15,21 +15,39 @@ function getSafeRedirectPath(next: string | null) {
   return next
 }
 
+/**
+ * 🔥 CORREÇÃO CRÍTICA AQUI
+ * Agora aceita corretamente deep links mobile
+ */
 function getMobileRedirectTarget(redirectTo: string | null) {
   if (!redirectTo) return null
 
   try {
     const parsed = new URL(redirectTo)
-    if (!ALLOWED_MOBILE_SCHEMES.has(parsed.protocol.replace(':', ''))) {
+
+    const protocol = parsed.protocol.replace(':', '')
+
+    // ✔ valida scheme (confiamais://)
+    if (!ALLOWED_MOBILE_SCHEMES.has(protocol)) {
       return null
     }
 
-    if (parsed.pathname !== MOBILE_CALLBACK_PATH) {
+    // 🔥 CORREÇÃO PRINCIPAL:
+    // antes: igualdade exata (quebrava mobile)
+    // agora: aceita variações válidas
+    const pathname = parsed.pathname
+
+    if (!pathname || !pathname.endsWith(MOBILE_CALLBACK_PATH)) {
+      console.warn('OAuth mobile callback rejeitado por pathname inválido:', {
+        pathname,
+        expected: MOBILE_CALLBACK_PATH,
+      })
       return null
     }
 
     return parsed.toString()
-  } catch {
+  } catch (err) {
+    console.error('Erro ao processar redirect_to mobile:', err)
     return null
   }
 }
@@ -56,12 +74,21 @@ export async function GET(req: Request) {
   }
 
   const requestUrl = new URL(req.url)
-  const mobileRedirectTo = getMobileRedirectTarget(requestUrl.searchParams.get('redirect_to'))
 
-  const nextPath = getSafeRedirectPath(requestUrl.searchParams.get('next'))
+  // 🔥 detecta se veio do mobile
+  const mobileRedirectTo = getMobileRedirectTarget(
+    requestUrl.searchParams.get('redirect_to')
+  )
+
+  const nextPath = getSafeRedirectPath(
+    requestUrl.searchParams.get('next')
+  )
+
+  // ✔ callback web padrão
   const callbackUrl = new URL('/auth/callback', requestUrl.origin)
   callbackUrl.searchParams.set('next', nextPath)
 
+  // 🔥 prioriza mobile se válido
   const redirectTo = mobileRedirectTo ?? callbackUrl.toString()
 
   const cookieStore = await cookies()
@@ -100,7 +127,9 @@ export async function GET(req: Request) {
       redirectTo,
     })
 
-    return NextResponse.redirect(new URL('/login?error=google_oauth_start', requestUrl.origin))
+    return NextResponse.redirect(
+      new URL('/login?error=google_oauth_start', requestUrl.origin)
+    )
   }
 
   return NextResponse.redirect(data.url)
