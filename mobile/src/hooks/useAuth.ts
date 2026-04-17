@@ -94,12 +94,8 @@ function waitForAuthRedirect(
     }, OAUTH_TIMEOUT_MS)
 
     ReactNativeLinking.getInitialURL()
-      .then((initialUrl) => {
-        tryConsume(initialUrl)
-      })
-      .catch(() => {
-        // Ignora erros de leitura da URL inicial para não interromper o fluxo.
-      })
+      .then((initialUrl) => tryConsume(initialUrl))
+      .catch(() => {})
 
     subscription = ReactNativeLinking.addEventListener('url', ({ url }) => {
       tryConsume(url)
@@ -125,6 +121,7 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+
   const oauthInFlightRef = useRef(false)
   const processingRef = useRef(false)
   const lastHandledUrlRef = useRef<string | null>(null)
@@ -150,10 +147,7 @@ export function useAuth() {
 
   const signIn = useCallback(async ({ email, password }: Credentials) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (error) {
-      throw new Error(error.message)
-    }
+    if (error) throw new Error(error.message)
   }, [])
 
   const signInWithOAuth = useCallback(async (provider: OAuthProvider) => {
@@ -180,13 +174,8 @@ export function useAuth() {
           },
         })
 
-        if (error) {
-          throw new Error(error.message)
-        }
-
-        if (!data?.url) {
-          throw new Error('Não foi possível iniciar autenticação social.')
-        }
+        if (error) throw new Error(error.message)
+        if (!data?.url) throw new Error('OAuth sem URL')
 
         authStartUrl = data.url
         expectedState = getQueryParam(data.url, 'state')
@@ -194,35 +183,22 @@ export function useAuth() {
 
       const pendingRedirect = waitForAuthRedirect(redirectTo, expectedState, lastHandledUrlRef)
 
-      let callbackUrl: string | null = null
-
       if (Platform.OS === 'web') {
         window.location.assign(authStartUrl)
-        callbackUrl = await pendingRedirect
-      } else {
-        const authResult = await WebBrowser.openAuthSessionAsync(authStartUrl, redirectTo)
-        if (authResult.type === 'success') {
-          callbackUrl = authResult.url
-        } else {
-          callbackUrl = await pendingRedirect
-        }
+        return { cancelled: false }
       }
+
+      await WebBrowser.openAuthSessionAsync(authStartUrl, redirectTo)
+
+      // 🔴 SEMPRE usar o listener (corrige Google + Apple)
+      const callbackUrl = await pendingRedirect
 
       if (!isExpectedOAuthUrl(callbackUrl, redirectTo, expectedState)) {
         return { cancelled: true }
       }
 
-      const finalCallbackUrl = callbackUrl as string
-
-      const callbackError = getQueryParam(finalCallbackUrl, 'error')
-      if (callbackError) {
-        throw new Error('Falha no retorno da autenticação social.')
-      }
-
-      const code = getQueryParam(finalCallbackUrl, 'code')
-      if (!code) {
-        return { cancelled: true }
-      }
+      const code = getQueryParam(callbackUrl!, 'code')
+      if (!code) return { cancelled: true }
 
       if (processingRef.current || code === lastProcessedCodeRef.current) {
         return { cancelled: true }
@@ -233,6 +209,7 @@ export function useAuth() {
 
       try {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
         if (exchangeError) {
           const {
             data: { session: existingSession },
@@ -245,7 +222,7 @@ export function useAuth() {
 
         const persistedSession = await waitForSessionToPersist()
         if (!persistedSession) {
-          throw new Error('Sessão não persistida após autenticação social.')
+          throw new Error('Sessão não persistida')
         }
       } finally {
         processingRef.current = false
@@ -269,10 +246,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
-
-    if (error) {
-      throw new Error(error.message)
-    }
+    if (error) throw new Error(error.message)
   }, [])
 
   return {
