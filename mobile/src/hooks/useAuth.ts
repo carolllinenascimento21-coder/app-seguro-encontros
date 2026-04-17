@@ -152,6 +152,19 @@ async function waitForSessionToPersist() {
   return null
 }
 
+async function waitForActiveResolution(resolvingRef: MutableRefObject<boolean>) {
+  const maxAttempts = 20
+  const delayMs = 100
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (!resolvingRef.current) {
+      return
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+}
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -217,17 +230,17 @@ export function useAuth() {
         expectedState = getQueryParam(data.url, 'state')
       }
 
+      if (Platform.OS === 'web') {
+        window.location.assign(authStartUrl)
+        return { cancelled: false }
+      }
+
       const pendingRedirect = waitForAuthRedirect(
         redirectTo,
         expectedState,
         flowId,
         lastHandledUrlRef
       )
-
-      if (Platform.OS === 'web') {
-        window.location.assign(authStartUrl)
-        return { cancelled: false }
-      }
 
       const authSessionResult = await WebBrowser.openAuthSessionAsync(authStartUrl, redirectTo)
 
@@ -260,12 +273,19 @@ export function useAuth() {
       const code = getQueryParam(callbackUrl!, 'code')
       if (!code) return { cancelled: true }
 
-      if (resolvingRef.current || code === lastProcessedCodeRef.current) {
-        return { cancelled: true }
+      await waitForActiveResolution(resolvingRef)
+
+      if (code === lastProcessedCodeRef.current) {
+        const {
+          data: { session: existingSession },
+        } = await supabase.auth.getSession()
+
+        if (existingSession) {
+          return { cancelled: false }
+        }
       }
 
       resolvingRef.current = true
-      lastProcessedCodeRef.current = code
 
       try {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
@@ -284,6 +304,8 @@ export function useAuth() {
         if (!persistedSession) {
           throw new Error('Sessão não persistida após autenticação social.')
         }
+
+        lastProcessedCodeRef.current = code
       } finally {
         resolvingRef.current = false
       }
