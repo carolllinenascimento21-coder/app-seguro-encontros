@@ -6,6 +6,7 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_NEXT_PATH = '/login'
 const LAST_HANDLED_CODE_COOKIE = 'confia_last_oauth_code'
+const OAUTH_STATE_COOKIE = 'confia_oauth_state'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
@@ -130,9 +131,12 @@ async function getSessionWithRetry(
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
+  const cookieStore = await cookies()
 
   const code = searchParams.get('code')
-  const state = searchParams.get('state')
+  const stateFromQuery = searchParams.get('state')
+  const stateFromCookie = cookieStore.get(OAUTH_STATE_COOKIE)?.value ?? null
+  const state = stateFromQuery ?? stateFromCookie
   const flowId = searchParams.get('flow_id')
   const nonce = searchParams.get('nonce')
   const providerError = searchParams.get('error')
@@ -142,6 +146,10 @@ export async function GET(request: NextRequest) {
   const returnMode = searchParams.get('return_mode')
   const appReturnTo = getSafeAppReturnTo(searchParams.get('return_to'))
   const isAppMode = returnMode === APP_RETURN_MODE && Boolean(appReturnTo)
+
+  if (!stateFromQuery && stateFromCookie) {
+    console.log('[AUTH CALLBACK] state ausente na query; usando state persistido em cookie')
+  }
 
   if (providerError) {
     console.error('[AUTH CALLBACK] Provider error:', {
@@ -199,7 +207,6 @@ export async function GET(request: NextRequest) {
     return new NextResponse('Supabase não configurado', { status: 503 })
   }
 
-  const cookieStore = await cookies()
   const lastHandledCode = cookieStore.get(LAST_HANDLED_CODE_COOKIE)?.value
 
   const supabase = createServerClient(
@@ -318,15 +325,34 @@ export async function GET(request: NextRequest) {
       hasFlowId: Boolean(flowId),
       hasNonce: Boolean(nonce),
     })
-    return buildAppRedirect(appReturnTo, {
+    const response = buildAppRedirect(appReturnTo, {
       code,
       state,
       flowId,
       nonce,
     })
+
+    response.cookies.set(OAUTH_STATE_COOKIE, '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 0,
+    })
+
+    return response
   }
 
   console.log('[AUTH CALLBACK] redirect final web', { next })
 
-  return buildSuccessRedirect(origin, next, code)
+  const response = buildSuccessRedirect(origin, next, code)
+  response.cookies.set(OAUTH_STATE_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  })
+
+  return response
 }

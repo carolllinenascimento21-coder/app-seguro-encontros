@@ -8,6 +8,7 @@ const DEFAULT_RETURN_MODE = 'web'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
 const MOBILE_CALLBACK_PATH = '/auth/callback'
+const OAUTH_STATE_COOKIE = 'confia_oauth_state'
 
 function isAllowedMobileCallbackPath(parsed: URL) {
   if (parsed.pathname === MOBILE_CALLBACK_PATH) return true
@@ -138,6 +139,23 @@ export async function GET(req: Request) {
     return NextResponse.redirect(
       new URL('/login?error=google_oauth_start', requestUrl.origin)
     )
+  }
+
+  try {
+    const oauthStartUrl = new URL(data.url)
+    const oauthState = oauthStartUrl.searchParams.get('state')
+
+    if (oauthState) {
+      cookieStore.set(OAUTH_STATE_COOKIE, oauthState, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 60 * 10,
+      })
+    }
+  } catch (parseError) {
+    console.warn('[GOOGLE OAUTH START] não foi possível extrair state:', parseError)
   }
 
   return NextResponse.redirect(data.url)
