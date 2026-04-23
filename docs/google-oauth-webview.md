@@ -17,7 +17,7 @@ Isso é uma política do Google e **não é corrigido apenas com configuração 
 
 - Endpoint dedicado para iniciar Google OAuth com callback seguro: `GET /api/auth/google`.
 - Validação de callback mobile permitido (`confiamais://auth/callback`) antes de iniciar OAuth.
-- No onboarding web, quando detectar WebView, o botão “Continuar com Google” é bloqueado e exibimos instrução para abrir no navegador externo.
+- Suporte a parâmetros explícitos de fluxo app (`return_mode=app`, `return_to`, `flow_id`, `nonce`) para finalizar no deep link mobile após callback.
 
 ## Checklist de configuração
 
