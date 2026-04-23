@@ -42,7 +42,6 @@ export default function OnboardingPage() {
   }
 
   const startOAuth = async (provider: 'google' | 'apple') => {
-    if (!validatePreconditions()) return
     if (oauthInFlightRef.current) return
 
     oauthInFlightRef.current = true
@@ -211,7 +210,7 @@ export default function OnboardingPage() {
 
         <button
           onClick={signInWithGoogle}
-          disabled={!agreed || !gender || oauthLoading !== null || isEmbeddedWebView}
+          disabled={oauthLoading !== null}
           className="btn-google w-full bg-[#D4AF37] text-black py-6 rounded-2xl font-medium disabled:opacity-50"
         >
           {oauthLoading === 'google' ? 'Conectando com Google...' : 'Continuar com Google'}
@@ -219,7 +218,7 @@ export default function OnboardingPage() {
 
         <button
           onClick={signInWithApple}
-          disabled={!agreed || !gender || oauthLoading !== null}
+          disabled={oauthLoading !== null}
           className="btn-apple w-full rounded-2xl border border-[#D4AF37] py-6 font-medium text-[#EFD9A7] disabled:opacity-50"
         >
           {oauthLoading === 'apple' ? 'Conectando com Apple...' : 'Continuar com Apple'}
