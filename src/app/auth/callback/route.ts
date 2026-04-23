@@ -6,6 +6,9 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_NEXT_PATH = '/login'
 const LAST_HANDLED_CODE_COOKIE = 'confia_last_oauth_code'
+const APP_RETURN_MODE = 'app'
+const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
+const APP_CALLBACK_PATH = '/auth/callback'
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -39,6 +42,53 @@ function buildError(
   }
 
   return NextResponse.redirect(url)
+}
+
+function isAllowedAppCallback(parsed: URL) {
+  if (parsed.pathname === APP_CALLBACK_PATH) return true
+  if (parsed.hostname === 'auth' && parsed.pathname === '/callback') return true
+  return false
+}
+
+function getSafeAppReturnTo(returnTo: string | null) {
+  if (!returnTo) return null
+
+  try {
+    const parsed = new URL(returnTo)
+    const protocol = parsed.protocol.replace(':', '')
+
+    if (!ALLOWED_APP_SCHEMES.has(protocol)) return null
+    if (!isAllowedAppCallback(parsed)) return null
+
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+function buildAppRedirect(
+  appReturnTo: string,
+  params: {
+    code?: string | null
+    state?: string | null
+    flowId?: string | null
+    nonce?: string | null
+    error?: string | null
+    errorDescription?: string | null
+    errorCode?: string | null
+  }
+) {
+  const appUrl = new URL(appReturnTo)
+
+  if (params.code) appUrl.searchParams.set('code', params.code)
+  if (params.state) appUrl.searchParams.set('state', params.state)
+  if (params.flowId) appUrl.searchParams.set('flow_id', params.flowId)
+  if (params.nonce) appUrl.searchParams.set('nonce', params.nonce)
+  if (params.error) appUrl.searchParams.set('error', params.error)
+  if (params.errorDescription) appUrl.searchParams.set('error_description', params.errorDescription)
+  if (params.errorCode) appUrl.searchParams.set('error_code', params.errorCode)
+
+  return NextResponse.redirect(appUrl)
 }
 
 function buildSuccessRedirect(origin: string, next: string, code: string) {
@@ -82,10 +132,16 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
 
   const code = searchParams.get('code')
+  const state = searchParams.get('state')
+  const flowId = searchParams.get('flow_id')
+  const nonce = searchParams.get('nonce')
   const providerError = searchParams.get('error')
   const providerErrorDescription = searchParams.get('error_description')
   const providerErrorCode = searchParams.get('error_code')
   const next = getSafeRedirectPath(searchParams.get('next'))
+  const returnMode = searchParams.get('return_mode')
+  const appReturnTo = getSafeAppReturnTo(searchParams.get('return_to'))
+  const isAppMode = returnMode === APP_RETURN_MODE && Boolean(appReturnTo)
 
   if (providerError) {
     console.error('[AUTH CALLBACK] Provider error:', {
@@ -93,12 +149,35 @@ export async function GET(request: NextRequest) {
       errorCode: providerErrorCode,
       errorDescription: providerErrorDescription,
       next,
+      isAppMode,
+      hasFlowId: Boolean(flowId),
     })
+
+    if (isAppMode && appReturnTo) {
+      console.warn('[AUTH CALLBACK] retorno app com erro de provider')
+      return buildAppRedirect(appReturnTo, {
+        state,
+        flowId,
+        nonce,
+        error: providerError,
+        errorDescription: providerErrorDescription,
+        errorCode: providerErrorCode,
+      })
+    }
+
     return buildError(origin, next, providerError, providerErrorDescription, providerErrorCode)
   }
 
   if (!code) {
     console.warn('[AUTH CALLBACK] Sem code; redirecionando para:', next)
+    if (isAppMode && appReturnTo) {
+      return buildAppRedirect(appReturnTo, {
+        state,
+        flowId,
+        nonce,
+        error: 'missing_code',
+      })
+    }
     return NextResponse.redirect(new URL(next, origin))
   }
 
@@ -183,6 +262,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (!session) {
+      if (isAppMode && appReturnTo) {
+        return buildAppRedirect(appReturnTo, {
+          state,
+          flowId,
+          nonce,
+          error: 'auth_exchange_failed',
+        })
+      }
       return buildError(origin, next, 'auth_exchange_failed')
     }
 
@@ -203,12 +290,43 @@ export async function GET(request: NextRequest) {
 
   if (!persistedSession) {
     console.error('[AUTH CALLBACK] Sessão não persistida após callback')
+    if (isAppMode && appReturnTo) {
+      return buildAppRedirect(appReturnTo, {
+        state,
+        flowId,
+        nonce,
+        error: 'auth_session_not_persisted',
+      })
+    }
     return buildError(origin, next, 'auth_session_not_persisted')
   }
 
   console.log('[AUTH CALLBACK] Login finalizado com sucesso', {
     userId: persistedSession.user.id,
+    isAppMode,
+    hasFlowId: Boolean(flowId),
   })
+
+  if (returnMode === APP_RETURN_MODE && !isAppMode) {
+    console.error('[AUTH CALLBACK] return_mode=app sem return_to válido; fallback web')
+  }
+
+  if (isAppMode && appReturnTo) {
+    console.log('[AUTH CALLBACK] redirect final para app', {
+      returnTo: appReturnTo,
+      hasState: Boolean(state),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+    return buildAppRedirect(appReturnTo, {
+      code,
+      state,
+      flowId,
+      nonce,
+    })
+  }
+
+  console.log('[AUTH CALLBACK] redirect final web', { next })
 
   return buildSuccessRedirect(origin, next, code)
 }
