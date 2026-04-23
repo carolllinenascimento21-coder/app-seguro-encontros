@@ -141,11 +141,18 @@ export async function GET(req: Request) {
     )
   }
 
+  let finalOAuthStartUrl = data.url
+
   try {
     const oauthStartUrl = new URL(data.url)
     const oauthState = oauthStartUrl.searchParams.get('state')
 
     if (oauthState) {
+      const callbackUrlWithState = new URL(redirectTo)
+      callbackUrlWithState.searchParams.set('oauth_state', oauthState)
+      oauthStartUrl.searchParams.set('redirect_to', callbackUrlWithState.toString())
+      finalOAuthStartUrl = oauthStartUrl.toString()
+
       cookieStore.set(OAUTH_STATE_COOKIE, oauthState, {
         httpOnly: true,
         sameSite: 'lax',
@@ -158,5 +165,5 @@ export async function GET(req: Request) {
     console.warn('[GOOGLE OAUTH START] não foi possível extrair state:', parseError)
   }
 
-  return NextResponse.redirect(data.url)
+  return NextResponse.redirect(finalOAuthStartUrl)
 }

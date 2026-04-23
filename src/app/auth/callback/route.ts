@@ -135,8 +135,9 @@ export async function GET(request: NextRequest) {
 
   const code = searchParams.get('code')
   const stateFromQuery = searchParams.get('state')
+  const stateFromRedirectParam = searchParams.get('oauth_state')
   const stateFromCookie = cookieStore.get(OAUTH_STATE_COOKIE)?.value ?? null
-  const state = stateFromQuery ?? stateFromCookie
+  const state = stateFromQuery ?? stateFromRedirectParam ?? stateFromCookie
   const flowId = searchParams.get('flow_id')
   const nonce = searchParams.get('nonce')
   const providerError = searchParams.get('error')
@@ -147,8 +148,11 @@ export async function GET(request: NextRequest) {
   const appReturnTo = getSafeAppReturnTo(searchParams.get('return_to'))
   const isAppMode = returnMode === APP_RETURN_MODE && Boolean(appReturnTo)
 
-  if (!stateFromQuery && stateFromCookie) {
-    console.log('[AUTH CALLBACK] state ausente na query; usando state persistido em cookie')
+  if (!stateFromQuery && (stateFromRedirectParam || stateFromCookie)) {
+    console.log('[AUTH CALLBACK] state ausente na query; usando fallback persistido', {
+      fromRedirectParam: Boolean(stateFromRedirectParam),
+      fromCookie: Boolean(stateFromCookie),
+    })
   }
 
   if (providerError) {
