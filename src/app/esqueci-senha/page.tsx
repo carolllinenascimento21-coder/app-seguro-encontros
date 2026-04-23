@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
     setLoading(true)
 
     try {
-      const redirectTo = new URL('/auth/recovery', window.location.origin)
+      const redirectTo = new URL('/auth/recovery/start', window.location.origin)
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: redirectTo.toString(),
