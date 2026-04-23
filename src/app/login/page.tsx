@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
+import {
+  clearRememberedLoginEmail,
+  readRememberedLoginEmail,
+  rememberLoginEmail,
+} from '@/lib/auth-remember'
 import { ensureProfileForUser } from '@/lib/profile-utils'
 
 export default function LoginPage() {
@@ -11,6 +16,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const loginInFlightRef = useRef(false)
@@ -104,6 +110,15 @@ export default function LoginPage() {
   }, [router])
 
   useEffect(() => {
+    const rememberedEmail = readRememberedLoginEmail()
+
+    if (rememberedEmail) {
+      setEmail(rememberedEmail)
+      setRememberMe(true)
+    }
+  }, [])
+
+  useEffect(() => {
     if (oauthCheckRanRef.current) return
 
     oauthCheckRanRef.current = true
@@ -120,7 +135,7 @@ export default function LoginPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === 'SIGNED_IN') {
         void resolvePostLoginRoute()
       }
@@ -198,6 +213,12 @@ export default function LoginPage() {
         return
       }
 
+      if (rememberMe) {
+        rememberLoginEmail(email)
+      } else {
+        clearRememberedLoginEmail()
+      }
+
       await new Promise((resolve) => setTimeout(resolve, 150))
 
       await resolvePostLoginRoute()
@@ -241,6 +262,16 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none"
         />
+
+        <label className="-mt-2 inline-flex items-center gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            className="h-4 w-4 rounded border border-[#D4AF37] bg-transparent accent-[#D4AF37]"
+          />
+          Lembrar meu e-mail
+        </label>
 
         <button
           onClick={handleLogin}

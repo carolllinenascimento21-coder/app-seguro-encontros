@@ -15,10 +15,29 @@ function getSafeRedirectPath(next: string | null) {
   return next
 }
 
-function buildError(origin: string, next: string, error: string) {
-  const url = new URL('/login', origin)
+function buildError(
+  origin: string,
+  next: string,
+  error: string,
+  errorDescription?: string | null,
+  errorCode?: string | null
+) {
+  const isRecoveryFlow = next === '/update-password'
+  const url = new URL(isRecoveryFlow ? '/update-password' : '/login', origin)
   url.searchParams.set('error', error)
-  url.searchParams.set('next', next)
+
+  if (errorDescription) {
+    url.searchParams.set('error_description', errorDescription)
+  }
+
+  if (errorCode) {
+    url.searchParams.set('error_code', errorCode)
+  }
+
+  if (!isRecoveryFlow) {
+    url.searchParams.set('next', next)
+  }
+
   return NextResponse.redirect(url)
 }
 
@@ -60,6 +79,29 @@ async function getSessionWithRetry(
 }
 
 export async function GET(request: NextRequest) {
+  const { searchParams, origin } = new URL(request.url)
+
+  const code = searchParams.get('code')
+  const providerError = searchParams.get('error')
+  const providerErrorDescription = searchParams.get('error_description')
+  const providerErrorCode = searchParams.get('error_code')
+  const next = getSafeRedirectPath(searchParams.get('next'))
+
+  if (providerError) {
+    console.error('[AUTH CALLBACK] Provider error:', {
+      error: providerError,
+      errorCode: providerErrorCode,
+      errorDescription: providerErrorDescription,
+      next,
+    })
+    return buildError(origin, next, providerError, providerErrorDescription, providerErrorCode)
+  }
+
+  if (!code) {
+    console.warn('[AUTH CALLBACK] Sem code; redirecionando para:', next)
+    return NextResponse.redirect(new URL(next, origin))
+  }
+
   let supabaseEnv
 
   try {
@@ -76,22 +118,6 @@ export async function GET(request: NextRequest) {
   if (!supabaseEnv) {
     console.error('[AUTH CALLBACK] Supabase não configurado')
     return new NextResponse('Supabase não configurado', { status: 503 })
-  }
-
-  const { searchParams, origin } = new URL(request.url)
-
-  const code = searchParams.get('code')
-  const providerError = searchParams.get('error')
-  const next = getSafeRedirectPath(searchParams.get('next'))
-
-  if (providerError) {
-    console.error('[AUTH CALLBACK] Provider error:', providerError)
-    return buildError(origin, next, providerError)
-  }
-
-  if (!code) {
-    console.warn('[AUTH CALLBACK] Sem code; redirecionando para:', next)
-    return NextResponse.redirect(new URL(next, origin))
   }
 
   const cookieStore = await cookies()
