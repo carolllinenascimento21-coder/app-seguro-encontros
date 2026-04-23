@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -13,19 +13,7 @@ export default function OnboardingPage() {
   const [agreed, setAgreed] = useState(false)
   const [gender, setGender] = useState('')
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
-  const [isEmbeddedWebView, setIsEmbeddedWebView] = useState(false)
   const oauthInFlightRef = useRef(false)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const ua = window.navigator.userAgent || ''
-    const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua)
-    const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
-    const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
-
-    setIsEmbeddedWebView(isAndroidWebView || isIOSWebView || isInAppBrowser)
-  }, [])
 
   const validatePreconditions = () => {
     if (!agreed) {
@@ -49,13 +37,6 @@ export default function OnboardingPage() {
 
     try {
       if (provider === 'google') {
-        if (isEmbeddedWebView) {
-          alert('Login Google não funciona dentro de WebView. Abra este link no navegador externo.')
-          oauthInFlightRef.current = false
-          setOauthLoading(null)
-          return
-        }
-
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
         googleEntryUrl.searchParams.set('next', '/login')
 
@@ -201,16 +182,10 @@ export default function OnboardingPage() {
         </div>
 
         {/* Google */}
-        {isEmbeddedWebView && (
-          <div className="rounded-xl border border-amber-500/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-            O Google bloqueia login em WebView (erro 403 disallowed_useragent). Abra no navegador externo
-            para continuar com Google.
-          </div>
-        )}
-
         <button
           onClick={signInWithGoogle}
           disabled={oauthLoading !== null}
+          data-oauth-version="unblocked-v2"
           className="btn-google w-full bg-[#D4AF37] text-black py-6 rounded-2xl font-medium disabled:opacity-50"
         >
           {oauthLoading === 'google' ? 'Conectando com Google...' : 'Continuar com Google'}
