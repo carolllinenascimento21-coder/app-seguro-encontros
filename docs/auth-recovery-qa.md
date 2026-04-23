@@ -6,7 +6,7 @@ Este roteiro foi criado para evitar regressões no fluxo “Esqueci minha senha�
 
 1. Supabase com template de **Reset Password** em português.
 2. Redirect URLs cadastradas:
-   - `https://www.confiamais.net/auth/recovery`
+   - `https://www.confiamais.net/auth/recovery/start`
    - `https://www.confiamais.net/auth/recovery/complete`
    - `https://www.confiamais.net/update-password`
 3. Aplicação deployada no ambiente que será validado.
