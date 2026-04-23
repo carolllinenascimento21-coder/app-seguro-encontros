@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
 import { ensureProfileForUser } from '@/lib/profile-utils'
@@ -120,7 +121,7 @@ export default function LoginPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === 'SIGNED_IN') {
         void resolvePostLoginRoute()
       }
@@ -241,6 +242,12 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none"
         />
+
+        <div className="-mt-2 text-right">
+          <Link href="/esqueci-senha" className="text-sm font-medium text-[#D4AF37] hover:underline">
+            Esqueci minha senha
+          </Link>
+        </div>
 
         <button
           onClick={handleLogin}
