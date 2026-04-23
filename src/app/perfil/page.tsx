@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, LogOut, Plus, Trash2, Shield, Pencil, Crown, X, Camera } from 'lucide-react'
+import { clearRememberedLoginEmail } from '@/lib/auth-remember'
 import { createSupabaseClient } from '@/lib/supabase'
 import { ensureProfileForUser, getProfileErrorInfo, type ProfileRecord } from '@/lib/profile-utils'
 
@@ -163,6 +164,7 @@ export default function PerfilPage() {
 
   const logout = async () => {
     await supabase.auth.signOut()
+    clearRememberedLoginEmail()
     router.replace('/login')
   }
 
@@ -179,6 +181,7 @@ export default function PerfilPage() {
         method: 'POST',
       })
       await supabase.auth.signOut()
+      clearRememberedLoginEmail()
     } catch (err) {
       console.error(err)
     }
