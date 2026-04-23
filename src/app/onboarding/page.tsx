@@ -30,7 +30,6 @@ export default function OnboardingPage() {
   }
 
   const startOAuth = async (provider: 'google' | 'apple') => {
-    if (!validatePreconditions()) return
     if (oauthInFlightRef.current) return
 
     oauthInFlightRef.current = true
@@ -40,6 +39,22 @@ export default function OnboardingPage() {
       if (provider === 'google') {
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
         googleEntryUrl.searchParams.set('next', '/login')
+
+        const currentParams = new URLSearchParams(window.location.search)
+        const returnMode = currentParams.get('return_mode')
+        const returnTo = currentParams.get('return_to')
+        const platform = currentParams.get('platform')
+        const flowId = currentParams.get('flow_id')
+        const nonce = currentParams.get('nonce')
+
+        if (returnMode === 'app' && returnTo) {
+          googleEntryUrl.searchParams.set('return_mode', 'app')
+          googleEntryUrl.searchParams.set('return_to', returnTo)
+          googleEntryUrl.searchParams.set('platform', platform || 'android')
+          if (flowId) googleEntryUrl.searchParams.set('flow_id', flowId)
+          if (nonce) googleEntryUrl.searchParams.set('nonce', nonce)
+        }
+
         window.location.assign(googleEntryUrl.toString())
         return
       }
@@ -169,7 +184,7 @@ export default function OnboardingPage() {
         {/* Google */}
         <button
           onClick={signInWithGoogle}
-          disabled={!agreed || !gender || oauthLoading !== null}
+          disabled={oauthLoading !== null}
           className="btn-google w-full bg-[#D4AF37] text-black py-6 rounded-2xl font-medium disabled:opacity-50"
         >
           {oauthLoading === 'google' ? 'Conectando com Google...' : 'Continuar com Google'}
@@ -177,7 +192,7 @@ export default function OnboardingPage() {
 
         <button
           onClick={signInWithApple}
-          disabled={!agreed || !gender || oauthLoading !== null}
+          disabled={oauthLoading !== null}
           className="btn-apple w-full rounded-2xl border border-[#D4AF37] py-6 font-medium text-[#EFD9A7] disabled:opacity-50"
         >
           {oauthLoading === 'apple' ? 'Conectando com Apple...' : 'Continuar com Apple'}
