@@ -32,6 +32,13 @@ export default function UpdatePasswordClient() {
       setError(null)
 
       try {
+        const providerError = searchParams.get('error_description') ?? searchParams.get('error')
+        if (providerError) {
+          setStatus('invalid')
+          setError('Este link é inválido ou expirou. Solicite uma nova recuperação de senha.')
+          return
+        }
+
         const code = searchParams.get('code')
 
         if (code) {
@@ -39,6 +46,26 @@ export default function UpdatePasswordClient() {
 
           if (exchangeError) {
             console.error('Erro ao validar link de redefinição por code:', exchangeError)
+            setStatus('invalid')
+            setError('Este link é inválido ou expirou. Solicite uma nova recuperação de senha.')
+            return
+          }
+
+          setStatus('ready')
+          return
+        }
+
+        const tokenHash = searchParams.get('token_hash') ?? searchParams.get('token')
+        const typeParam = searchParams.get('type')
+
+        if (tokenHash && typeParam === 'recovery') {
+          const { error: verifyOtpError } = await supabase.auth.verifyOtp({
+            type: 'recovery',
+            token_hash: tokenHash,
+          })
+
+          if (verifyOtpError) {
+            console.error('Erro ao validar link de redefinição por token hash:', verifyOtpError)
             setStatus('invalid')
             setError('Este link é inválido ou expirou. Solicite uma nova recuperação de senha.')
             return
@@ -66,6 +93,16 @@ export default function UpdatePasswordClient() {
             return
           }
 
+          setStatus('ready')
+          return
+        }
+
+
+        const {
+          data: { session: existingSession },
+        } = await supabase.auth.getSession()
+
+        if (existingSession) {
           setStatus('ready')
           return
         }
