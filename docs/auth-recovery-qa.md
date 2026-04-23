@@ -47,4 +47,4 @@ Salvar screenshots com timestamp no nome do arquivo:
 
 Se o link expirar instantaneamente por scanners automáticos de caixa de entrada, use no template de e-mail um link para a página de confirmação intermediária:
 
-`https://www.confiamais.net/auth/recovery/start?token_hash={{ .TokenHash }}&type=recovery`
+`https://www.confiamais.net/auth/recovery?token_hash={{ .TokenHash }}&type=recovery`
