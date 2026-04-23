@@ -40,6 +40,22 @@ export default function OnboardingPage() {
       if (provider === 'google') {
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
         googleEntryUrl.searchParams.set('next', '/login')
+
+        const currentParams = new URLSearchParams(window.location.search)
+        const returnMode = currentParams.get('return_mode')
+        const returnTo = currentParams.get('return_to')
+        const platform = currentParams.get('platform')
+        const flowId = currentParams.get('flow_id')
+        const nonce = currentParams.get('nonce')
+
+        if (returnMode === 'app' && returnTo) {
+          googleEntryUrl.searchParams.set('return_mode', 'app')
+          googleEntryUrl.searchParams.set('return_to', returnTo)
+          googleEntryUrl.searchParams.set('platform', platform || 'android')
+          if (flowId) googleEntryUrl.searchParams.set('flow_id', flowId)
+          if (nonce) googleEntryUrl.searchParams.set('nonce', nonce)
+        }
+
         window.location.assign(googleEntryUrl.toString())
         return
       }
