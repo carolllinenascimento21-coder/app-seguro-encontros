@@ -48,7 +48,7 @@ function getRedirectUrl(flowId?: string) {
   return `${baseRedirectUrl}${separator}${FLOW_ID_QUERY_PARAM}=${encodeURIComponent(flowId)}`
 }
 
-function getGoogleAuthStartUrl(redirectTo: string, flowId: string | null) {
+function getGoogleAuthStartUrl(redirectTo: string, flowId: string | null, state: string | null) {
   const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '')
 
   if (!apiBaseUrl) {
@@ -62,6 +62,10 @@ function getGoogleAuthStartUrl(redirectTo: string, flowId: string | null) {
 
   if (flowId) {
     startUrl.searchParams.set(FLOW_ID_QUERY_PARAM, flowId)
+  }
+
+  if (state) {
+    startUrl.searchParams.set('state', state)
   }
 
   return startUrl.toString()
@@ -222,7 +226,8 @@ export function useAuth() {
       let expectedState: string | null = null
 
       if (provider === 'google' && Platform.OS !== 'web') {
-        authStartUrl = getGoogleAuthStartUrl(redirectTo, flowId)
+        expectedState = createFlowId()
+        authStartUrl = getGoogleAuthStartUrl(redirectTo, flowId, expectedState)
       } else {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider,

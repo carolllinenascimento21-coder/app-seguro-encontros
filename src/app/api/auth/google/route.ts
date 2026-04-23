@@ -73,6 +73,7 @@ export async function GET(req: Request) {
   const platform = requestUrl.searchParams.get('platform')
   const flowId = requestUrl.searchParams.get('flow_id')
   const nonce = requestUrl.searchParams.get('nonce')
+  const appState = requestUrl.searchParams.get('state')
 
   const mobileRedirectTo = getMobileRedirectTarget(
     requestUrl.searchParams.get('return_to') ?? requestUrl.searchParams.get('redirect_to')
@@ -91,11 +92,13 @@ export async function GET(req: Request) {
     callbackUrl.searchParams.set('return_to', mobileRedirectTo)
     if (flowId) callbackUrl.searchParams.set('flow_id', flowId)
     if (nonce) callbackUrl.searchParams.set('nonce', nonce)
+    if (appState) callbackUrl.searchParams.set('app_state', appState)
 
     console.log('[GOOGLE OAUTH START] fluxo app inicializado', {
       platform: platform || 'android',
       hasFlowId: Boolean(flowId),
       hasNonce: Boolean(nonce),
+      hasAppState: Boolean(appState),
       returnTo: mobileRedirectTo,
     })
   }

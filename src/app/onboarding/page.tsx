@@ -45,6 +45,7 @@ export default function OnboardingPage() {
         let returnTo = currentParams.get('return_to')
         let platform = currentParams.get('platform')
         const flowId = currentParams.get('flow_id')
+        const state = currentParams.get('state')
         const nonce = currentParams.get('nonce')
 
         const ua = window.navigator.userAgent || ''
@@ -70,6 +71,7 @@ export default function OnboardingPage() {
           googleEntryUrl.searchParams.set('return_to', returnTo)
           googleEntryUrl.searchParams.set('platform', platform || 'android')
           if (flowId) googleEntryUrl.searchParams.set('flow_id', flowId)
+          if (state) googleEntryUrl.searchParams.set('state', state)
           if (nonce) googleEntryUrl.searchParams.set('nonce', nonce)
         }
 
