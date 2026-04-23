@@ -92,6 +92,16 @@ function buildAppRedirect(
   return NextResponse.redirect(appUrl)
 }
 
+function clearOauthStateCookie(response: NextResponse) {
+  response.cookies.set(OAUTH_STATE_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  })
+}
+
 function buildSuccessRedirect(origin: string, next: string, code: string) {
   const response = NextResponse.redirect(new URL(next, origin))
 
@@ -193,6 +203,23 @@ export async function GET(request: NextRequest) {
       })
     }
     return NextResponse.redirect(new URL(next, origin))
+  }
+
+  if (isAppMode && appReturnTo) {
+    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
+      hasState: Boolean(state),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+
+    const response = buildAppRedirect(appReturnTo, {
+      code,
+      state,
+      flowId,
+      nonce,
+    })
+    clearOauthStateCookie(response)
+    return response
   }
 
   let supabaseEnv
@@ -324,41 +351,10 @@ export async function GET(request: NextRequest) {
     console.error('[AUTH CALLBACK] return_mode=app sem return_to válido; fallback web')
   }
 
-  if (isAppMode && appReturnTo) {
-    console.log('[AUTH CALLBACK] redirect final para app', {
-      returnTo: appReturnTo,
-      hasState: Boolean(state),
-      hasFlowId: Boolean(flowId),
-      hasNonce: Boolean(nonce),
-    })
-    const response = buildAppRedirect(appReturnTo, {
-      code,
-      state,
-      flowId,
-      nonce,
-    })
-
-    response.cookies.set(OAUTH_STATE_COOKIE, '', {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 0,
-    })
-
-    return response
-  }
-
   console.log('[AUTH CALLBACK] redirect final web', { next })
 
   const response = buildSuccessRedirect(origin, next, code)
-  response.cookies.set(OAUTH_STATE_COOKIE, '', {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 0,
-  })
+  clearOauthStateCookie(response)
 
   return response
 }
