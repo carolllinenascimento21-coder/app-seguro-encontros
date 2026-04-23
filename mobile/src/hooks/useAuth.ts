@@ -15,8 +15,8 @@ type Credentials = {
 type OAuthProvider = 'google' | 'apple'
 
 const OAUTH_TIMEOUT_MS = 90_000
-const SESSION_RETRY_ATTEMPTS = 8
-const SESSION_RETRY_DELAY_MS = 250
+const SESSION_RETRY_ATTEMPTS = 20
+const SESSION_RETRY_DELAY_MS = 300
 const DEFAULT_APP_SCHEME = 'confiamais'
 const FLOW_ID_QUERY_PARAM = 'flow_id'
 
@@ -48,14 +48,27 @@ function getRedirectUrl(flowId?: string) {
   return `${baseRedirectUrl}${separator}${FLOW_ID_QUERY_PARAM}=${encodeURIComponent(flowId)}`
 }
 
-function getGoogleAuthStartUrl(redirectTo: string) {
+function getGoogleAuthStartUrl(redirectTo: string, flowId: string | null, state: string | null) {
   const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '')
 
   if (!apiBaseUrl) {
     throw new Error('Variável de ambiente ausente: EXPO_PUBLIC_API_BASE_URL.')
   }
 
-  return `${apiBaseUrl}/api/auth/google?redirect_to=${encodeURIComponent(redirectTo)}`
+  const startUrl = new URL('/api/auth/google', apiBaseUrl)
+  startUrl.searchParams.set('return_mode', 'app')
+  startUrl.searchParams.set('platform', 'android')
+  startUrl.searchParams.set('return_to', redirectTo)
+
+  if (flowId) {
+    startUrl.searchParams.set(FLOW_ID_QUERY_PARAM, flowId)
+  }
+
+  if (state) {
+    startUrl.searchParams.set('state', state)
+  }
+
+  return startUrl.toString()
 }
 
 function getQueryParam(rawUrl: string, key: string) {
@@ -213,7 +226,8 @@ export function useAuth() {
       let expectedState: string | null = null
 
       if (provider === 'google' && Platform.OS !== 'web') {
-        authStartUrl = getGoogleAuthStartUrl(redirectTo)
+        expectedState = createFlowId()
+        authStartUrl = getGoogleAuthStartUrl(redirectTo, flowId, expectedState)
       } else {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider,
@@ -300,6 +314,11 @@ export function useAuth() {
 
         const persistedSession = await waitForSessionToPersist()
         if (!persistedSession) {
+          console.error('OAuth Google sem sessão persistida após retries', {
+            provider,
+            flowId,
+            hasState: Boolean(expectedState),
+          })
           throw new Error('Sessão não persistida após autenticação social.')
         }
 
