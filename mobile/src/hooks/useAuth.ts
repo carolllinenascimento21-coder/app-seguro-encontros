@@ -15,8 +15,8 @@ type Credentials = {
 type OAuthProvider = 'google' | 'apple'
 
 const OAUTH_TIMEOUT_MS = 90_000
-const SESSION_RETRY_ATTEMPTS = 8
-const SESSION_RETRY_DELAY_MS = 250
+const SESSION_RETRY_ATTEMPTS = 20
+const SESSION_RETRY_DELAY_MS = 300
 const DEFAULT_APP_SCHEME = 'confiamais'
 const FLOW_ID_QUERY_PARAM = 'flow_id'
 
@@ -314,6 +314,11 @@ export function useAuth() {
 
         const persistedSession = await waitForSessionToPersist()
         if (!persistedSession) {
+          console.error('OAuth Google sem sessão persistida após retries', {
+            provider,
+            flowId,
+            hasState: Boolean(expectedState),
+          })
           throw new Error('Sessão não persistida após autenticação social.')
         }
 
