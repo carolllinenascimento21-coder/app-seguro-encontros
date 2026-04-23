@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
 import {
