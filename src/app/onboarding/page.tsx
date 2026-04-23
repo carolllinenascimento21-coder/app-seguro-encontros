@@ -41,11 +41,29 @@ export default function OnboardingPage() {
         googleEntryUrl.searchParams.set('next', '/login')
 
         const currentParams = new URLSearchParams(window.location.search)
-        const returnMode = currentParams.get('return_mode')
-        const returnTo = currentParams.get('return_to')
-        const platform = currentParams.get('platform')
+        let returnMode = currentParams.get('return_mode')
+        let returnTo = currentParams.get('return_to')
+        let platform = currentParams.get('platform')
         const flowId = currentParams.get('flow_id')
         const nonce = currentParams.get('nonce')
+
+        const ua = window.navigator.userAgent || ''
+        const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua)
+        const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
+        const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
+        const isEmbeddedWebView = isAndroidWebView || isIOSWebView || isInAppBrowser
+
+        if (!returnMode && isEmbeddedWebView) {
+          returnMode = 'app'
+        }
+
+        if (!returnTo && returnMode === 'app') {
+          returnTo = 'confiamais://auth/callback'
+        }
+
+        if (!platform && returnMode === 'app') {
+          platform = isIOSWebView ? 'ios' : 'android'
+        }
 
         if (returnMode === 'app' && returnTo) {
           googleEntryUrl.searchParams.set('return_mode', 'app')
