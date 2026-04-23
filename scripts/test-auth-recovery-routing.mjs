@@ -52,16 +52,16 @@ async function run() {
     'Callback regular deveria preservar query param next'
   )
 
-  const recoveryRouteError = await getRedirect(`/auth/recovery?${providerParams}`)
+  const recoveryRouteError = await getRedirect(`/auth/recovery/complete?${providerParams}`)
 
   assert(
     recoveryRouteError.pathname === '/update-password',
-    `/auth/recovery deveria redirecionar para /update-password, recebido ${recoveryRouteError.pathname}`
+    `/auth/recovery/complete deveria redirecionar para /update-password, recebido ${recoveryRouteError.pathname}`
   )
 
   assert(
     recoveryRouteError.searchParams.get('error_code') === 'otp_expired',
-    '/auth/recovery deveria preservar query param error_code'
+    '/auth/recovery/complete deveria preservar query param error_code'
   )
 
   console.log('✅ Smoke test de roteamento auth recovery passou.')
