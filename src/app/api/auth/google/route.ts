@@ -9,6 +9,7 @@ const APP_RETURN_MODE = 'app'
 const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
 const MOBILE_CALLBACK_PATH = '/auth/callback'
 const OAUTH_STATE_COOKIE = 'confia_oauth_state'
+const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
 
 function isAllowedMobileCallbackPath(parsed: URL) {
   if (parsed.pathname === MOBILE_CALLBACK_PATH) return true
@@ -167,6 +168,16 @@ export async function GET(req: Request) {
 
   if (oauthStateToPersist) {
     response.cookies.set(OAUTH_STATE_COOKIE, oauthStateToPersist, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 10,
+    })
+  }
+
+  if (returnMode === APP_RETURN_MODE && mobileRedirectTo) {
+    response.cookies.set(APP_RETURN_TO_COOKIE, mobileRedirectTo, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',

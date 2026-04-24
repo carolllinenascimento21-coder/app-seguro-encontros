@@ -1,4 +1,5 @@
-export default function
-App(){
-    return null
-}  
+import { RootNavigation } from './src/navigation'
+
+export default function App() {
+  return <RootNavigation />
+}
