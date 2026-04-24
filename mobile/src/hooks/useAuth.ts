@@ -63,14 +63,41 @@ function normalizeUrlForComparison(url: string) {
   return url.replace(/\/+(\?|$)/, '$1')
 }
 
+function getCanonicalCallbackTarget(url: string) {
+  try {
+    const parsed = new URL(url)
+    const scheme = parsed.protocol.replace(':', '')
+    const hostname = parsed.hostname.toLowerCase()
+    const pathname = parsed.pathname.replace(/\/+$/, '') || '/'
+
+    // Aceita os dois formatos válidos do deep link:
+    // - confiamais:///auth/callback  (hostname vazio, pathname /auth/callback)
+    // - confiamais://auth/callback   (hostname auth, pathname /callback)
+    const canonicalPath = hostname === 'auth' && pathname === '/callback'
+      ? '/auth/callback'
+      : pathname
+
+    return {
+      scheme,
+      canonicalPath,
+    }
+  } catch {
+    return null
+  }
+}
+
 function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedState: string | null) {
   if (!url) return false
 
   const normalizedUrl = normalizeUrlForComparison(url)
   const normalizedRedirectTo = normalizeUrlForComparison(redirectTo)
+  const callbackTarget = getCanonicalCallbackTarget(normalizedUrl)
+  const redirectTarget = getCanonicalCallbackTarget(normalizedRedirectTo)
 
-  if (!normalizedUrl.startsWith(normalizedRedirectTo)) return false
-  if (!normalizedUrl.includes('auth/callback')) return false
+  if (!callbackTarget || !redirectTarget) return false
+  if (callbackTarget.scheme !== redirectTarget.scheme) return false
+  if (callbackTarget.canonicalPath !== redirectTarget.canonicalPath) return false
+  if (callbackTarget.canonicalPath !== '/auth/callback') return false
 
   const hasAuthPayload = Boolean(getQueryParam(normalizedUrl, 'code') || getQueryParam(normalizedUrl, 'error'))
   if (!hasAuthPayload) return false
