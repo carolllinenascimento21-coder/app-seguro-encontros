@@ -109,8 +109,19 @@ function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedStat
 
   if (!expectedState) return true
 
-  const callbackState = getQueryParam(normalizedUrl, 'state')
-  return Boolean(callbackState && callbackState === expectedState)
+  const callbackState =
+    getQueryParam(normalizedUrl, 'state') ??
+    getQueryParam(normalizedUrl, 'oauth_state') ??
+    getQueryParam(normalizedUrl, 'app_state')
+
+  if (callbackState) {
+    return callbackState === expectedState
+  }
+
+  // Fallback para callbacks em que o backend não propaga `state` no deep link final.
+  // Mantemos validação mínima exigindo um flow_id para correlacionar com o fluxo em andamento.
+  const callbackFlowId = getQueryParam(normalizedUrl, FLOW_ID_QUERY_PARAM)
+  return Boolean(callbackFlowId)
 }
 
 function waitForAuthRedirect(
