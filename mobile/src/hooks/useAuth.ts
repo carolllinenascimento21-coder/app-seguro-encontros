@@ -102,7 +102,8 @@ function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedStat
   const hasAuthPayload = Boolean(
     getQueryParam(normalizedUrl, 'code') ||
     getQueryParam(normalizedUrl, 'error') ||
-    getQueryParam(normalizedUrl, 'access_token')
+    getQueryParam(normalizedUrl, 'access_token') ||
+    getQueryParam(normalizedUrl, 'state')
   )
   if (!hasAuthPayload) return false
 
@@ -320,7 +321,10 @@ export function useAuth() {
       }
 
       const code = getQueryParam(callbackUrl!, 'code')
-      if (!code) return { cancelled: true }
+      if (!code) {
+        const existingSession = await waitForSessionToPersist()
+        return { cancelled: !existingSession }
+      }
 
       await waitAndAcquireResolutionLock(resolvingRef)
 

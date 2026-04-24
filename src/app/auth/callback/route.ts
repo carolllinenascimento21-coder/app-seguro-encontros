@@ -296,38 +296,7 @@ export async function GET(request: NextRequest) {
   )
 
   if (isAppMode && appReturnTo) {
-    const { error: appExchangeError } = await supabase.auth.exchangeCodeForSession(code)
-
-    if (appExchangeError) {
-      console.error('[AUTH CALLBACK] exchange app-mode falhou:', {
-        message: appExchangeError.message,
-        status: appExchangeError.status,
-        code: appExchangeError.code,
-      })
-    }
-
-    const { session: appSession, error: appSessionError } = await getSessionWithRetry(supabase)
-
-    if (appSessionError) {
-      console.error('[AUTH CALLBACK] sessão app-mode indisponível:', {
-        message: appSessionError.message,
-        status: appSessionError.status,
-        code: appSessionError.code,
-      })
-    }
-
-    if (!appSession) {
-      return buildAppRedirect(appReturnTo, {
-        state,
-        flowId,
-        nonce,
-        error: 'auth_session_not_persisted',
-      })
-    }
-
     const response = buildAppRedirect(appReturnTo, {
-      accessToken: appSession.access_token,
-      refreshToken: appSession.refresh_token,
       state,
       flowId,
       nonce,
