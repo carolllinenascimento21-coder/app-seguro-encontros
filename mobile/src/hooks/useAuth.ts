@@ -113,14 +113,20 @@ function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedStat
     getQueryParam(normalizedUrl, 'state') ??
     getQueryParam(normalizedUrl, 'oauth_state') ??
     getQueryParam(normalizedUrl, 'app_state')
+  const callbackFlowId = getQueryParam(normalizedUrl, FLOW_ID_QUERY_PARAM)
 
   if (callbackState) {
-    return callbackState === expectedState
+    if (callbackState === expectedState) {
+      return true
+    }
+
+    // Alguns fluxos web->app retornam `state` derivado de `app_state` em vez do state do provedor.
+    // Nesses casos, permitimos seguir apenas quando `flow_id` existe para a validação de correlação.
+    return Boolean(callbackFlowId)
   }
 
   // Fallback para callbacks em que o backend não propaga `state` no deep link final.
   // Mantemos validação mínima exigindo um flow_id para correlacionar com o fluxo em andamento.
-  const callbackFlowId = getQueryParam(normalizedUrl, FLOW_ID_QUERY_PARAM)
   return Boolean(callbackFlowId)
 }
 
