@@ -4,8 +4,11 @@ import { createServerClient } from '@supabase/ssr'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
 const DEFAULT_NEXT_PATH = '/login'
+const DEFAULT_RETURN_MODE = 'web'
+const APP_RETURN_MODE = 'app'
 const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
 const MOBILE_CALLBACK_PATH = '/auth/callback'
+const OAUTH_STATE_COOKIE = 'confia_oauth_state'
 
 function isAllowedMobileCallbackPath(parsed: URL) {
   if (parsed.pathname === MOBILE_CALLBACK_PATH) return true
@@ -42,6 +45,11 @@ function getMobileRedirectTarget(redirectTo: string | null) {
   }
 }
 
+function getReturnMode(rawMode: string | null) {
+  if (rawMode === APP_RETURN_MODE) return APP_RETURN_MODE
+  return DEFAULT_RETURN_MODE
+}
+
 export async function GET(req: Request) {
   let supabaseEnv
 
@@ -61,9 +69,14 @@ export async function GET(req: Request) {
   }
 
   const requestUrl = new URL(req.url)
+  const returnMode = getReturnMode(requestUrl.searchParams.get('return_mode'))
+  const platform = requestUrl.searchParams.get('platform')
+  const flowId = requestUrl.searchParams.get('flow_id')
+  const nonce = requestUrl.searchParams.get('nonce')
+  const appState = requestUrl.searchParams.get('state')
 
   const mobileRedirectTo = getMobileRedirectTarget(
-    requestUrl.searchParams.get('redirect_to')
+    requestUrl.searchParams.get('return_to') ?? requestUrl.searchParams.get('redirect_to')
   )
 
   const nextPath = getSafeRedirectPath(
@@ -73,7 +86,31 @@ export async function GET(req: Request) {
   const callbackUrl = new URL('/auth/callback', requestUrl.origin)
   callbackUrl.searchParams.set('next', nextPath)
 
-  const redirectTo = mobileRedirectTo ?? callbackUrl.toString()
+  if (returnMode === APP_RETURN_MODE && mobileRedirectTo) {
+    callbackUrl.searchParams.set('return_mode', APP_RETURN_MODE)
+    callbackUrl.searchParams.set('platform', platform || 'android')
+    callbackUrl.searchParams.set('return_to', mobileRedirectTo)
+    if (flowId) callbackUrl.searchParams.set('flow_id', flowId)
+    if (nonce) callbackUrl.searchParams.set('nonce', nonce)
+    if (appState) callbackUrl.searchParams.set('app_state', appState)
+
+    console.log('[GOOGLE OAUTH START] fluxo app inicializado', {
+      platform: platform || 'android',
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+      hasAppState: Boolean(appState),
+      returnTo: mobileRedirectTo,
+    })
+  }
+
+  const redirectTo = callbackUrl.toString()
+
+  if (returnMode === APP_RETURN_MODE && !mobileRedirectTo) {
+    console.error('[GOOGLE OAUTH START] fluxo app sem return_to válido')
+    const loginUrl = new URL('/login', requestUrl.origin)
+    loginUrl.searchParams.set('error', 'google_app_return_to_invalid')
+    return NextResponse.redirect(loginUrl)
+  }
 
   const cookieStore = await cookies()
 
@@ -107,5 +144,35 @@ export async function GET(req: Request) {
     )
   }
 
-  return NextResponse.redirect(data.url)
+  let finalOAuthStartUrl = data.url
+  let oauthStateToPersist: string | null = null
+
+  try {
+    const oauthStartUrl = new URL(data.url)
+    const oauthState = oauthStartUrl.searchParams.get('state')
+
+    if (oauthState) {
+      const callbackUrlWithState = new URL(redirectTo)
+      callbackUrlWithState.searchParams.set('oauth_state', oauthState)
+      oauthStartUrl.searchParams.set('redirect_to', callbackUrlWithState.toString())
+      finalOAuthStartUrl = oauthStartUrl.toString()
+      oauthStateToPersist = oauthState
+    }
+  } catch (parseError) {
+    console.warn('[GOOGLE OAUTH START] não foi possível extrair state:', parseError)
+  }
+
+  const response = NextResponse.redirect(finalOAuthStartUrl)
+
+  if (oauthStateToPersist) {
+    response.cookies.set(OAUTH_STATE_COOKIE, oauthStateToPersist, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 10,
+    })
+  }
+
+  return response
 }
