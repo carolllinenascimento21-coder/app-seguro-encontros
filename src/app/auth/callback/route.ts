@@ -297,6 +297,7 @@ export async function GET(request: NextRequest) {
 
   if (isAppMode && appReturnTo) {
     const response = buildAppRedirect(appReturnTo, {
+      code,
       state,
       flowId,
       nonce,
