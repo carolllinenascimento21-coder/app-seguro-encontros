@@ -51,6 +51,7 @@ export default function OnboardingPage() {
 
         const ua = window.navigator.userAgent || ''
         const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
+        const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
 
         //if (!returnMode && (isEmbeddedWebView || hasAppFlowHints)) {
         if (!returnMode && hasAppFlowHints) {
