@@ -7,6 +7,7 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 const DEFAULT_NEXT_PATH = '/home'
 const LAST_HANDLED_CODE_COOKIE = 'confia_last_oauth_code'
 const OAUTH_STATE_COOKIE = 'confia_oauth_state'
+const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
@@ -71,6 +72,8 @@ function buildAppRedirect(
   appReturnTo: string,
   params: {
     code?: string | null
+    accessToken?: string | null
+    refreshToken?: string | null
     state?: string | null
     flowId?: string | null
     nonce?: string | null
@@ -82,6 +85,8 @@ function buildAppRedirect(
   const appUrl = new URL(appReturnTo)
 
   if (params.code) appUrl.searchParams.set('code', params.code)
+  if (params.accessToken) appUrl.searchParams.set('access_token', params.accessToken)
+  if (params.refreshToken) appUrl.searchParams.set('refresh_token', params.refreshToken)
   if (params.state) appUrl.searchParams.set('state', params.state)
   if (params.flowId) appUrl.searchParams.set('flow_id', params.flowId)
   if (params.nonce) appUrl.searchParams.set('nonce', params.nonce)
@@ -94,6 +99,16 @@ function buildAppRedirect(
 
 function clearOauthStateCookie(response: NextResponse) {
   response.cookies.set(OAUTH_STATE_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  })
+}
+
+function clearAppReturnToCookie(response: NextResponse) {
+  response.cookies.set(APP_RETURN_TO_COOKIE, '', {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
@@ -149,7 +164,8 @@ export async function GET(request: NextRequest) {
   const stateFromQuery = searchParams.get('state')
   const stateFromRedirectParam = searchParams.get('oauth_state')
   const stateFromCookie = cookieStore.get(OAUTH_STATE_COOKIE)?.value ?? null
-  const state = stateFromAppStart ?? stateFromQuery ?? stateFromRedirectParam ?? stateFromCookie
+  // Prioriza o state OAuth real (query/cookie). app_state é apenas fallback legado.
+  const state = stateFromQuery ?? stateFromRedirectParam ?? stateFromCookie ?? stateFromAppStart
   const flowId = searchParams.get('flow_id')
   const nonce = searchParams.get('nonce')
   const providerError = searchParams.get('error')
@@ -157,8 +173,10 @@ export async function GET(request: NextRequest) {
   const providerErrorCode = searchParams.get('error_code')
   const next = getSafeRedirectPath(searchParams.get('next'))
   const returnMode = searchParams.get('return_mode')
-  const appReturnTo = getSafeAppReturnTo(searchParams.get('return_to'))
-  const isAppMode = returnMode === APP_RETURN_MODE && Boolean(appReturnTo)
+  const appReturnTo =
+    getSafeAppReturnTo(searchParams.get('return_to')) ??
+    getSafeAppReturnTo(cookieStore.get(APP_RETURN_TO_COOKIE)?.value ?? null)
+  const isAppMode = Boolean(appReturnTo) || returnMode === APP_RETURN_MODE
 
   if (!stateFromQuery && (stateFromAppStart || stateFromRedirectParam || stateFromCookie)) {
     console.log('[AUTH CALLBACK] state ausente na query; usando fallback persistido', {
@@ -180,7 +198,7 @@ export async function GET(request: NextRequest) {
 
     if (isAppMode && appReturnTo) {
       console.warn('[AUTH CALLBACK] retorno app com erro de provider')
-      return buildAppRedirect(appReturnTo, {
+      const response = buildAppRedirect(appReturnTo, {
         state,
         flowId,
         nonce,
@@ -188,6 +206,9 @@ export async function GET(request: NextRequest) {
         errorDescription: providerErrorDescription,
         errorCode: providerErrorCode,
       })
+      clearOauthStateCookie(response)
+      clearAppReturnToCookie(response)
+      return response
     }
 
     return buildError(origin, next, providerError, providerErrorDescription, providerErrorCode)
@@ -196,34 +217,20 @@ export async function GET(request: NextRequest) {
   if (!code) {
     console.warn('[AUTH CALLBACK] Sem code; redirecionando para:', next)
     if (isAppMode && appReturnTo) {
-      return buildAppRedirect(appReturnTo, {
+      const response = buildAppRedirect(appReturnTo, {
         state,
         flowId,
         nonce,
         error: 'missing_code',
       })
+      clearOauthStateCookie(response)
+      clearAppReturnToCookie(response)
+      return response
     }
     return NextResponse.redirect(new URL(next, origin))
   }
 
-  if (isAppMode && appReturnTo) {
-    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
-      hasState: Boolean(state),
-      hasFlowId: Boolean(flowId),
-      hasNonce: Boolean(nonce),
-    })
-
-    const response = buildAppRedirect(appReturnTo, {
-      code,
-      state,
-      flowId,
-      nonce,
-    })
-    clearOauthStateCookie(response)
-    return response
-  }
-
-  if (!returnMode && code && flowId && state) {
+  if (!isAppMode && !returnMode && code && flowId && state) {
     console.warn('[AUTH CALLBACK] callback replay sem return_mode; ignorando exchange server', {
       hasFlowId: Boolean(flowId),
       hasState: Boolean(state),
@@ -231,23 +238,6 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.redirect(new URL(next, origin))
-  }
-
-  if (isAppMode && appReturnTo) {
-    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
-      hasState: Boolean(state),
-      hasFlowId: Boolean(flowId),
-      hasNonce: Boolean(nonce),
-    })
-
-    const response = buildAppRedirect(appReturnTo, {
-      code,
-      state,
-      flowId,
-      nonce,
-    })
-    clearOauthStateCookie(response)
-    return response
   }
 
   let supabaseEnv
@@ -285,7 +275,43 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  if (!returnMode && code && flowId && state) {
+  if (isAppMode && appReturnTo) {
+    let accessToken: string | null = null
+    let refreshToken: string | null = null
+
+    const { data: appExchangeData, error: appExchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (appExchangeError) {
+      console.error('[AUTH CALLBACK] exchange app-mode falhou, seguindo com fallback por code', {
+        message: appExchangeError.message,
+        status: appExchangeError.status,
+        code: appExchangeError.code,
+      })
+    }
+
+    accessToken = appExchangeData?.session?.access_token ?? null
+    refreshToken = appExchangeData?.session?.refresh_token ?? null
+
+    if (!accessToken || !refreshToken) {
+      const { session: appSession } = await getSessionWithRetry(supabase)
+      accessToken = appSession?.access_token ?? null
+      refreshToken = appSession?.refresh_token ?? null
+    }
+
+    const response = buildAppRedirect(appReturnTo, {
+      code,
+      accessToken,
+      refreshToken,
+      state,
+      flowId,
+      nonce,
+    })
+    clearOauthStateCookie(response)
+    clearAppReturnToCookie(response)
+    return response
+  }
+
+  if (!isAppMode && !returnMode && code && flowId && state) {
     console.warn('[AUTH CALLBACK] callback replay sem return_mode; validando sessão antes de seguir', {
       hasFlowId: Boolean(flowId),
       hasState: Boolean(state),
