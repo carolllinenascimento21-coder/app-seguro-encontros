@@ -58,10 +58,18 @@ export default function OnboardingPage() {
           returnMode = 'app'
         }
 
+        if (!returnTo && returnMode === 'app') {
+          returnTo = 'confiamais://auth/callback'
+        }
+
+        if (!platform && returnMode === 'app') {
+          platform = isIOSWebView ? 'ios' : 'android'
+        }
+
         if (returnMode === 'app' && returnTo) {
           googleEntryUrl.searchParams.set('return_mode', 'app')
           googleEntryUrl.searchParams.set('return_to', returnTo)
-          googleEntryUrl.searchParams.set('platform', platform || 'android')
+          googleEntryUrl.searchParams.set('platform', platform)
           if (flowId) googleEntryUrl.searchParams.set('flow_id', flowId)
           if (state) googleEntryUrl.searchParams.set('state', state)
           if (nonce) googleEntryUrl.searchParams.set('nonce', nonce)
