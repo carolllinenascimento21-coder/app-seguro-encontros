@@ -9,13 +9,9 @@ const APP_RETURN_MODE = 'app'
 const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
 const MOBILE_CALLBACK_PATH = '/auth/callback'
 const OAUTH_STATE_COOKIE = 'confia_oauth_state'
+const APP_STATE_COOKIE = 'confia_oauth_app_state'
 const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
-const DEFAULT_APP_RETURN_TO = 'confiamais:///auth/callback'
-
-function normalizeMobileReturnTo(parsed: URL) {
-  const protocol = parsed.protocol.replace(':', '')
-  return `${protocol}://${MOBILE_CALLBACK_PATH}`
-}
+const DEFAULT_APP_RETURN_TO = 'confiamais://auth/callback'
 
 function isAllowedMobileCallbackPath(parsed: URL) {
   if (parsed.pathname === MOBILE_CALLBACK_PATH) return true
@@ -45,7 +41,7 @@ function getMobileRedirectTarget(redirectTo: string | null) {
       return null
     }
 
-    return normalizeMobileReturnTo(parsed)
+    return parsed.toString()
   } catch (err) {
     console.error('Erro redirect_to mobile:', err)
     return null
@@ -77,26 +73,26 @@ export async function GET(req: Request) {
 
   const requestUrl = new URL(req.url)
   console.log('[GOOGLE OAUTH START][v3] request', { url: requestUrl.toString() })
+
   let returnMode = getReturnMode(requestUrl.searchParams.get('return_mode'))
   const platform = requestUrl.searchParams.get('platform')
   const flowId = requestUrl.searchParams.get('flow_id')
   const nonce = requestUrl.searchParams.get('nonce')
   const appState = requestUrl.searchParams.get('state')
 
-  if (returnMode !== APP_RETURN_MODE && (flowId || nonce)) {
+  if (returnMode !== APP_RETURN_MODE && (flowId || nonce || appState)) {
     returnMode = APP_RETURN_MODE
   }
 
   const requestedMobileRedirectTo = getMobileRedirectTarget(
     requestUrl.searchParams.get('return_to') ?? requestUrl.searchParams.get('redirect_to')
   )
+
   const mobileRedirectTo =
     requestedMobileRedirectTo ??
     (returnMode === APP_RETURN_MODE ? DEFAULT_APP_RETURN_TO : null)
 
-  const nextPath = getSafeRedirectPath(
-    requestUrl.searchParams.get('next')
-  )
+  const nextPath = getSafeRedirectPath(requestUrl.searchParams.get('next'))
 
   const callbackUrl = new URL('/auth/callback', requestUrl.origin)
   callbackUrl.searchParams.set('next', nextPath)
@@ -105,8 +101,11 @@ export async function GET(req: Request) {
     callbackUrl.searchParams.set('return_mode', APP_RETURN_MODE)
     callbackUrl.searchParams.set('platform', platform || 'android')
     callbackUrl.searchParams.set('return_to', mobileRedirectTo)
+
     if (flowId) callbackUrl.searchParams.set('flow_id', flowId)
     if (nonce) callbackUrl.searchParams.set('nonce', nonce)
+
+    // app_state é interno do backend; o deep link final deve sair com state=appState
     if (appState) callbackUrl.searchParams.set('app_state', appState)
 
     console.log('[GOOGLE OAUTH START] fluxo app inicializado', {
@@ -171,13 +170,32 @@ export async function GET(req: Request) {
       oauthStateToPersist = oauthState
     }
   } catch (parseError) {
-    console.warn('[GOOGLE OAUTH START] não foi possível extrair state:', parseError)
+    console.warn('[GOOGLE OAUTH START] não foi possível extrair state do provider:', parseError)
   }
+
+  console.log('[ConfiaOAuth][v3] oauth_provider_url_ready', {
+    provider: 'google',
+    flowId,
+    appState,
+    expectedState: appState,
+    oauthState: oauthStateToPersist,
+    returnMode,
+  })
 
   const response = NextResponse.redirect(finalOAuthStartUrl)
 
   if (oauthStateToPersist) {
     response.cookies.set(OAUTH_STATE_COOKIE, oauthStateToPersist, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 10,
+    })
+  }
+
+  if (appState) {
+    response.cookies.set(APP_STATE_COOKIE, appState, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
