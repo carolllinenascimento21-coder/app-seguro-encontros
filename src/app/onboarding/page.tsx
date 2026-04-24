@@ -53,14 +53,8 @@ export default function OnboardingPage() {
         const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
         const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
 
-        const shouldForceAppMode = !returnMode && (
-          isAndroidWebView ||
-          isIOSWebView ||
-          isInAppBrowser ||
-          hasAppFlowHints
-        )
-
-        if (shouldForceAppMode) {
+        //if (!returnMode && (isEmbeddedWebView || hasAppFlowHints)) {
+        if (!returnMode && hasAppFlowHints) {
           returnMode = 'app'
         }
 
