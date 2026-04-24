@@ -47,14 +47,12 @@ export default function OnboardingPage() {
         const flowId = currentParams.get('flow_id')
         const state = currentParams.get('state')
         const nonce = currentParams.get('nonce')
+        const hasAppFlowHints = Boolean(flowId || nonce)
 
         const ua = window.navigator.userAgent || ''
         const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
 
-        // Em Android WebView, forçar return_mode=app pode quebrar a persistência da sessão
-        // (login aparenta sucesso, mas volta sem cookie válido).
-        // Agora só usamos fluxo app quando ele é explicitamente solicitado via querystring.
-        if (!returnMode && currentParams.get('force_app_oauth') === '1') {
+        if (!returnMode && (isEmbeddedWebView || hasAppFlowHints)) {
           returnMode = 'app'
         }
 

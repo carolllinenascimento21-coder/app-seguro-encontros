@@ -72,11 +72,15 @@ export async function GET(req: Request) {
 
   const requestUrl = new URL(req.url)
   console.log('[GOOGLE OAUTH START][v3] request', { url: requestUrl.toString() })
-  const returnMode = getReturnMode(requestUrl.searchParams.get('return_mode'))
+  let returnMode = getReturnMode(requestUrl.searchParams.get('return_mode'))
   const platform = requestUrl.searchParams.get('platform')
   const flowId = requestUrl.searchParams.get('flow_id')
   const nonce = requestUrl.searchParams.get('nonce')
   const appState = requestUrl.searchParams.get('state')
+
+  if (returnMode !== APP_RETURN_MODE && (flowId || nonce)) {
+    returnMode = APP_RETURN_MODE
+  }
 
   const requestedMobileRedirectTo = getMobileRedirectTarget(
     requestUrl.searchParams.get('return_to') ?? requestUrl.searchParams.get('redirect_to')
