@@ -10,7 +10,6 @@ const OAUTH_STATE_COOKIE = 'confia_oauth_state'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
-const DEFAULT_APP_RETURN_TO = 'confiamais://auth/callback'
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -160,8 +159,6 @@ export async function GET(request: NextRequest) {
   const returnMode = searchParams.get('return_mode')
   const appReturnTo = getSafeAppReturnTo(searchParams.get('return_to'))
   const isAppMode = returnMode === APP_RETURN_MODE && Boolean(appReturnTo)
-  const inferredAppMode = !isAppMode && Boolean(code && flowId && state)
-  const inferredAppReturnTo = inferredAppMode ? DEFAULT_APP_RETURN_TO : null
 
   if (!stateFromQuery && (stateFromAppStart || stateFromRedirectParam || stateFromCookie)) {
     console.log('[AUTH CALLBACK] state ausente na query; usando fallback persistido', {
@@ -209,16 +206,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(next, origin))
   }
 
-  if ((isAppMode && appReturnTo) || inferredAppReturnTo) {
-    const targetReturnTo = appReturnTo ?? inferredAppReturnTo!
+  if (isAppMode && appReturnTo) {
     console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
-      inferredAppMode,
       hasState: Boolean(state),
       hasFlowId: Boolean(flowId),
       hasNonce: Boolean(nonce),
     })
 
-    const response = buildAppRedirect(targetReturnTo, {
+    const response = buildAppRedirect(appReturnTo, {
       code,
       state,
       flowId,
