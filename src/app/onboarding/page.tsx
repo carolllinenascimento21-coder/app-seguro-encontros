@@ -48,6 +48,24 @@ export default function OnboardingPage() {
         const state = currentParams.get('state')
         const nonce = currentParams.get('nonce')
 
+        const ua = window.navigator.userAgent || ''
+        const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua)
+        const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
+        const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
+        const isEmbeddedWebView = isAndroidWebView || isIOSWebView || isInAppBrowser
+
+        if (!returnMode && isEmbeddedWebView) {
+          returnMode = 'app'
+        }
+
+        if (!returnTo && returnMode === 'app') {
+          returnTo = 'confiamais://auth/callback'
+        }
+
+        if (!platform && returnMode === 'app') {
+          platform = isIOSWebView ? 'ios' : 'android'
+        }
+
         if (returnMode === 'app' && returnTo) {
           googleEntryUrl.searchParams.set('return_mode', 'app')
           googleEntryUrl.searchParams.set('return_to', returnTo)
