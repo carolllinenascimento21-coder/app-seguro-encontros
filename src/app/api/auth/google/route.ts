@@ -10,7 +10,12 @@ const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
 const MOBILE_CALLBACK_PATH = '/auth/callback'
 const OAUTH_STATE_COOKIE = 'confia_oauth_state'
 const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
-const DEFAULT_APP_RETURN_TO = 'confiamais://auth/callback'
+const DEFAULT_APP_RETURN_TO = 'confiamais:///auth/callback'
+
+function normalizeMobileReturnTo(parsed: URL) {
+  const protocol = parsed.protocol.replace(':', '')
+  return `${protocol}://${MOBILE_CALLBACK_PATH}`
+}
 
 function isAllowedMobileCallbackPath(parsed: URL) {
   if (parsed.pathname === MOBILE_CALLBACK_PATH) return true
@@ -40,7 +45,7 @@ function getMobileRedirectTarget(redirectTo: string | null) {
       return null
     }
 
-    return parsed.toString()
+    return normalizeMobileReturnTo(parsed)
   } catch (err) {
     console.error('Erro redirect_to mobile:', err)
     return null
