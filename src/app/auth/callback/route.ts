@@ -233,6 +233,66 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(next, origin))
   }
 
+  if (isAppMode && appReturnTo) {
+    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
+      hasState: Boolean(state),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+
+    const response = buildAppRedirect(appReturnTo, {
+      code,
+      state,
+      flowId,
+      nonce,
+    })
+    clearOauthStateCookie(response)
+    return response
+  }
+
+  if (!returnMode && code && flowId && state) {
+    const userAgent = request.headers.get('user-agent') || ''
+    const looksLikeWebView = /\bwv\b|Version\/4\.0|; wv\)/i.test(userAgent)
+
+    console.warn('[AUTH CALLBACK] callback replay sem return_mode; ignorando exchange server', {
+      hasFlowId: Boolean(flowId),
+      hasState: Boolean(state),
+      hasNonce: Boolean(nonce),
+      looksLikeWebView,
+    })
+
+    if (looksLikeWebView) {
+      console.warn('[AUTH CALLBACK] callback replay em WebView; retornando deep link padrão para app')
+      const response = buildAppRedirect(DEFAULT_APP_RETURN_TO, {
+        code,
+        state,
+        flowId,
+        nonce,
+      })
+      clearOauthStateCookie(response)
+      return response
+    }
+
+    return NextResponse.redirect(new URL(next, origin))
+  }
+
+  if (isAppMode && appReturnTo) {
+    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
+      hasState: Boolean(state),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+
+    const response = buildAppRedirect(appReturnTo, {
+      code,
+      state,
+      flowId,
+      nonce,
+    })
+    clearOauthStateCookie(response)
+    return response
+  }
+
   let supabaseEnv
 
   try {
