@@ -71,6 +71,8 @@ function buildAppRedirect(
   appReturnTo: string,
   params: {
     code?: string | null
+    accessToken?: string | null
+    refreshToken?: string | null
     state?: string | null
     flowId?: string | null
     nonce?: string | null
@@ -82,6 +84,8 @@ function buildAppRedirect(
   const appUrl = new URL(appReturnTo)
 
   if (params.code) appUrl.searchParams.set('code', params.code)
+  if (params.accessToken) appUrl.searchParams.set('access_token', params.accessToken)
+  if (params.refreshToken) appUrl.searchParams.set('refresh_token', params.refreshToken)
   if (params.state) appUrl.searchParams.set('state', params.state)
   if (params.flowId) appUrl.searchParams.set('flow_id', params.flowId)
   if (params.nonce) appUrl.searchParams.set('nonce', params.nonce)
@@ -206,23 +210,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(next, origin))
   }
 
-  if (isAppMode && appReturnTo) {
-    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
-      hasState: Boolean(state),
-      hasFlowId: Boolean(flowId),
-      hasNonce: Boolean(nonce),
-    })
-
-    const response = buildAppRedirect(appReturnTo, {
-      code,
-      state,
-      flowId,
-      nonce,
-    })
-    clearOauthStateCookie(response)
-    return response
-  }
-
   if (!returnMode && code && flowId && state) {
     console.warn('[AUTH CALLBACK] callback replay sem return_mode; ignorando exchange server', {
       hasFlowId: Boolean(flowId),
@@ -231,23 +218,6 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.redirect(new URL(next, origin))
-  }
-
-  if (isAppMode && appReturnTo) {
-    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
-      hasState: Boolean(state),
-      hasFlowId: Boolean(flowId),
-      hasNonce: Boolean(nonce),
-    })
-
-    const response = buildAppRedirect(appReturnTo, {
-      code,
-      state,
-      flowId,
-      nonce,
-    })
-    clearOauthStateCookie(response)
-    return response
   }
 
   let supabaseEnv
@@ -284,6 +254,47 @@ export async function GET(request: NextRequest) {
       },
     }
   )
+
+  if (isAppMode && appReturnTo) {
+    const { error: appExchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (appExchangeError) {
+      console.error('[AUTH CALLBACK] exchange app-mode falhou:', {
+        message: appExchangeError.message,
+        status: appExchangeError.status,
+        code: appExchangeError.code,
+      })
+    }
+
+    const { session: appSession, error: appSessionError } = await getSessionWithRetry(supabase)
+
+    if (appSessionError) {
+      console.error('[AUTH CALLBACK] sessão app-mode indisponível:', {
+        message: appSessionError.message,
+        status: appSessionError.status,
+        code: appSessionError.code,
+      })
+    }
+
+    if (!appSession) {
+      return buildAppRedirect(appReturnTo, {
+        state,
+        flowId,
+        nonce,
+        error: 'auth_session_not_persisted',
+      })
+    }
+
+    const response = buildAppRedirect(appReturnTo, {
+      accessToken: appSession.access_token,
+      refreshToken: appSession.refresh_token,
+      state,
+      flowId,
+      nonce,
+    })
+    clearOauthStateCookie(response)
+    return response
+  }
 
   if (!returnMode && code && flowId && state) {
     console.warn('[AUTH CALLBACK] callback replay sem return_mode; validando sessão antes de seguir', {
