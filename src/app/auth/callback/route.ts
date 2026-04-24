@@ -233,6 +233,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(next, origin))
   }
 
+  if (isAppMode && appReturnTo) {
+    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
+      hasState: Boolean(state),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+
+    const response = buildAppRedirect(appReturnTo, {
+      code,
+      state,
+      flowId,
+      nonce,
+    })
+    clearOauthStateCookie(response)
+    return response
+  }
+
   let supabaseEnv
 
   try {
@@ -267,6 +284,33 @@ export async function GET(request: NextRequest) {
       },
     }
   )
+
+  if (!returnMode && code && flowId && state) {
+    console.warn('[AUTH CALLBACK] callback replay sem return_mode; validando sessão antes de seguir', {
+      hasFlowId: Boolean(flowId),
+      hasState: Boolean(state),
+      hasNonce: Boolean(nonce),
+    })
+
+    const { session: replaySession, error: replaySessionError } = await getSessionWithRetry(supabase)
+
+    if (replaySessionError) {
+      console.error('[AUTH CALLBACK] Erro ao validar sessão no replay:', {
+        message: replaySessionError.message,
+        status: replaySessionError.status,
+        code: replaySessionError.code,
+      })
+    }
+
+    if (replaySession) {
+      console.warn('[AUTH CALLBACK] Replay com sessão válida; finalizando com redirect seguro')
+      const response = buildSuccessRedirect(origin, next, code)
+      clearOauthStateCookie(response)
+      return response
+    }
+
+    console.warn('[AUTH CALLBACK] Replay sem sessão ativa; tentando exchange do code normalmente')
+  }
 
   // 🔒 CORREÇÃO PRINCIPAL:
   // só ignora code repetido se já houver sessão válida
