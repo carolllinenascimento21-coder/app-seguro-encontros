@@ -63,14 +63,21 @@ function normalizeUrlForComparison(url: string) {
   return url.replace(/\/+(\?|$)/, '$1')
 }
 
+function stripQueryAndHash(url: string) {
+  const [withoutHash] = url.split('#')
+  return withoutHash.split('?')[0] ?? withoutHash
+}
+
 function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedState: string | null) {
   if (!url) return false
 
   const normalizedUrl = normalizeUrlForComparison(url)
   const normalizedRedirectTo = normalizeUrlForComparison(redirectTo)
+  const callbackBaseUrl = normalizeUrlForComparison(stripQueryAndHash(normalizedUrl))
+  const redirectBaseUrl = normalizeUrlForComparison(stripQueryAndHash(normalizedRedirectTo))
 
-  if (!normalizedUrl.startsWith(normalizedRedirectTo)) return false
-  if (!normalizedUrl.includes('auth/callback')) return false
+  if (callbackBaseUrl !== redirectBaseUrl) return false
+  if (!callbackBaseUrl.includes('auth/callback')) return false
 
   const hasAuthPayload = Boolean(getQueryParam(normalizedUrl, 'code') || getQueryParam(normalizedUrl, 'error'))
   if (!hasAuthPayload) return false
