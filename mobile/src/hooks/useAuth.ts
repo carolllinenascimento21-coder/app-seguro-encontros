@@ -63,9 +63,27 @@ function normalizeUrlForComparison(url: string) {
   return url.replace(/\/+(\?|$)/, '$1')
 }
 
-function stripQueryAndHash(url: string) {
-  const [withoutHash] = url.split('#')
-  return withoutHash.split('?')[0] ?? withoutHash
+function getCanonicalCallbackTarget(url: string) {
+  try {
+    const parsed = new URL(url)
+    const scheme = parsed.protocol.replace(':', '')
+    const hostname = parsed.hostname.toLowerCase()
+    const pathname = parsed.pathname.replace(/\/+$/, '') || '/'
+
+    // Aceita os dois formatos válidos do deep link:
+    // - confiamais:///auth/callback  (hostname vazio, pathname /auth/callback)
+    // - confiamais://auth/callback   (hostname auth, pathname /callback)
+    const canonicalPath = hostname === 'auth' && pathname === '/callback'
+      ? '/auth/callback'
+      : pathname
+
+    return {
+      scheme,
+      canonicalPath,
+    }
+  } catch {
+    return null
+  }
 }
 
 function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedState: string | null) {
@@ -73,11 +91,13 @@ function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedStat
 
   const normalizedUrl = normalizeUrlForComparison(url)
   const normalizedRedirectTo = normalizeUrlForComparison(redirectTo)
-  const callbackBaseUrl = normalizeUrlForComparison(stripQueryAndHash(normalizedUrl))
-  const redirectBaseUrl = normalizeUrlForComparison(stripQueryAndHash(normalizedRedirectTo))
+  const callbackTarget = getCanonicalCallbackTarget(normalizedUrl)
+  const redirectTarget = getCanonicalCallbackTarget(normalizedRedirectTo)
 
-  if (callbackBaseUrl !== redirectBaseUrl) return false
-  if (!callbackBaseUrl.includes('auth/callback')) return false
+  if (!callbackTarget || !redirectTarget) return false
+  if (callbackTarget.scheme !== redirectTarget.scheme) return false
+  if (callbackTarget.canonicalPath !== redirectTarget.canonicalPath) return false
+  if (callbackTarget.canonicalPath !== '/auth/callback') return false
 
   const hasAuthPayload = Boolean(getQueryParam(normalizedUrl, 'code') || getQueryParam(normalizedUrl, 'error'))
   if (!hasAuthPayload) return false
