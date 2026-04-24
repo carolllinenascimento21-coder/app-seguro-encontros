@@ -78,19 +78,24 @@ function buildAppRedirect(
     state?: string | null
     flowId?: string | null
     nonce?: string | null
+    appState?: string | null
+    oauthState?: string | null
     error?: string | null
     errorDescription?: string | null
     errorCode?: string | null
   }
 ) {
   const appUrl = new URL(appReturnTo)
+  const resolvedState = params.state ?? params.oauthState ?? params.appState ?? params.flowId ?? null
 
   if (params.code) appUrl.searchParams.set('code', params.code)
   if (params.accessToken) appUrl.searchParams.set('access_token', params.accessToken)
   if (params.refreshToken) appUrl.searchParams.set('refresh_token', params.refreshToken)
-  if (params.state) appUrl.searchParams.set('state', params.state)
+  if (resolvedState) appUrl.searchParams.set('state', resolvedState)
   if (params.flowId) appUrl.searchParams.set('flow_id', params.flowId)
   if (params.nonce) appUrl.searchParams.set('nonce', params.nonce)
+  if (params.appState) appUrl.searchParams.set('app_state', params.appState)
+  if (params.oauthState) appUrl.searchParams.set('oauth_state', params.oauthState)
   if (params.error) appUrl.searchParams.set('error', params.error)
   if (params.errorDescription) appUrl.searchParams.set('error_description', params.errorDescription)
   if (params.errorCode) appUrl.searchParams.set('error_code', params.errorCode)
@@ -203,6 +208,8 @@ export async function GET(request: NextRequest) {
       console.warn('[AUTH CALLBACK] retorno app com erro de provider')
       const response = buildAppRedirect(appReturnTo, {
         state,
+        appState: stateFromAppStart,
+        oauthState: stateFromRedirectParam ?? stateFromCookie ?? stateFromQuery,
         flowId,
         nonce,
         error: providerError,
@@ -222,6 +229,8 @@ export async function GET(request: NextRequest) {
     if (isAppMode && appReturnTo) {
       const response = buildAppRedirect(appReturnTo, {
         state,
+        appState: stateFromAppStart,
+        oauthState: stateFromRedirectParam ?? stateFromCookie ?? stateFromQuery,
         flowId,
         nonce,
         error: 'missing_code',
@@ -306,6 +315,8 @@ export async function GET(request: NextRequest) {
       accessToken,
       refreshToken,
       state,
+      appState: stateFromAppStart,
+      oauthState: stateFromRedirectParam ?? stateFromCookie ?? stateFromQuery,
       flowId,
       nonce,
     })
@@ -389,6 +400,8 @@ export async function GET(request: NextRequest) {
       if (isAppMode && appReturnTo) {
         return buildAppRedirect(appReturnTo, {
           state,
+          appState: stateFromAppStart,
+          oauthState: stateFromRedirectParam ?? stateFromCookie ?? stateFromQuery,
           flowId,
           nonce,
           error: 'auth_exchange_failed',
@@ -417,6 +430,8 @@ export async function GET(request: NextRequest) {
     if (isAppMode && appReturnTo) {
       return buildAppRedirect(appReturnTo, {
         state,
+        appState: stateFromAppStart,
+        oauthState: stateFromRedirectParam ?? stateFromCookie ?? stateFromQuery,
         flowId,
         nonce,
         error: 'auth_session_not_persisted',
