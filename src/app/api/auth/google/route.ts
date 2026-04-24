@@ -105,7 +105,7 @@ export async function GET(req: Request) {
     if (flowId) callbackUrl.searchParams.set('flow_id', flowId)
     if (nonce) callbackUrl.searchParams.set('nonce', nonce)
 
-    // app_state é interno do backend; o deep link final deve sair com state=appState
+    // app_state é o state original do Android
     if (appState) callbackUrl.searchParams.set('app_state', appState)
 
     console.log('[GOOGLE OAUTH START] fluxo app inicializado', {
