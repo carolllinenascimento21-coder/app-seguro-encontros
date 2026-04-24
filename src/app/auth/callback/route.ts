@@ -71,6 +71,8 @@ function buildAppRedirect(
   appReturnTo: string,
   params: {
     code?: string | null
+    accessToken?: string | null
+    refreshToken?: string | null
     state?: string | null
     flowId?: string | null
     nonce?: string | null
@@ -82,6 +84,8 @@ function buildAppRedirect(
   const appUrl = new URL(appReturnTo)
 
   if (params.code) appUrl.searchParams.set('code', params.code)
+  if (params.accessToken) appUrl.searchParams.set('access_token', params.accessToken)
+  if (params.refreshToken) appUrl.searchParams.set('refresh_token', params.refreshToken)
   if (params.state) appUrl.searchParams.set('state', params.state)
   if (params.flowId) appUrl.searchParams.set('flow_id', params.flowId)
   if (params.nonce) appUrl.searchParams.set('nonce', params.nonce)
@@ -89,7 +93,47 @@ function buildAppRedirect(
   if (params.errorDescription) appUrl.searchParams.set('error_description', params.errorDescription)
   if (params.errorCode) appUrl.searchParams.set('error_code', params.errorCode)
 
-  return NextResponse.redirect(appUrl)
+  const appUrlString = appUrl.toString()
+  const escapedAppUrl = JSON.stringify(appUrlString)
+  const html = `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Voltando ao app…</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #050505; color: #f5f5f5; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 24px; }
+      .card { max-width: 480px; width: 100%; border: 1px solid #D4AF37; border-radius: 16px; padding: 20px; background: #111; }
+      a { color: #111; background: #D4AF37; padding: 10px 14px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block; }
+      p { color: #d4d4d4; line-height: 1.45; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Concluindo login…</h1>
+      <p>Estamos te redirecionando de volta para o app.</p>
+      <p>Se não abrir automaticamente, toque no botão abaixo.</p>
+      <p><a id="open-app" href=${escapedAppUrl}>Abrir app</a></p>
+    </main>
+    <script>
+      (function () {
+        var target = ${escapedAppUrl};
+        window.location.replace(target);
+        setTimeout(function () {
+          window.location.href = target;
+        }, 250);
+      })();
+    </script>
+  </body>
+</html>`
+
+  return new NextResponse(html, {
+    status: 200,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store, max-age=0',
+    },
+  })
 }
 
 function clearOauthStateCookie(response: NextResponse) {
@@ -253,6 +297,7 @@ export async function GET(request: NextRequest) {
 
   if (isAppMode && appReturnTo) {
     const response = buildAppRedirect(appReturnTo, {
+      code,
       state,
       flowId,
       nonce,
@@ -335,6 +380,7 @@ export async function GET(request: NextRequest) {
     if (!session) {
       if (isAppMode && appReturnTo) {
         return buildAppRedirect(appReturnTo, {
+          code,
           state,
           flowId,
           nonce,
