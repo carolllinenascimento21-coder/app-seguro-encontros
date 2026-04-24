@@ -198,6 +198,7 @@ export function useAuth() {
     try {
       const flowId = Platform.OS === 'web' ? null : createFlowId()
       const redirectTo = getRedirectUrl(flowId ?? undefined)
+      console.log('[ConfiaOAuth][v3] oauth_start', { provider, flowId, redirectTo, platform: Platform.OS })
 
       let authStartUrl: string
       let expectedState: string | null = null
@@ -215,6 +216,11 @@ export function useAuth() {
 
       authStartUrl = data.url
       expectedState = getQueryParam(data.url, 'state')
+      console.log('[ConfiaOAuth][v3] oauth_provider_url_ready', {
+        provider,
+        flowId,
+        expectedState,
+      })
 
       if (Platform.OS === 'web') {
         window.location.assign(authStartUrl)

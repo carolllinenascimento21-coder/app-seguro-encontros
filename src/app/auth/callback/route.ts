@@ -141,6 +141,7 @@ async function getSessionWithRetry(
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
+  console.log('[AUTH CALLBACK][v3] hit', { rawUrl: request.url })
   const cookieStore = await cookies()
 
   const code = searchParams.get('code')
