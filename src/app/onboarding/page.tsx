@@ -47,6 +47,7 @@ export default function OnboardingPage() {
         const flowId = currentParams.get('flow_id')
         const state = currentParams.get('state')
         const nonce = currentParams.get('nonce')
+        const hasAppFlowHints = Boolean(flowId || nonce)
 
         const ua = window.navigator.userAgent || ''
         const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua)
@@ -54,7 +55,7 @@ export default function OnboardingPage() {
         const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
         const isEmbeddedWebView = isAndroidWebView || isIOSWebView || isInAppBrowser
 
-        if (!returnMode && isEmbeddedWebView) {
+        if (!returnMode && (isEmbeddedWebView || hasAppFlowHints)) {
           returnMode = 'app'
         }
 
