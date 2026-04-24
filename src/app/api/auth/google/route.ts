@@ -9,6 +9,8 @@ const APP_RETURN_MODE = 'app'
 const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
 const MOBILE_CALLBACK_PATH = '/auth/callback'
 const OAUTH_STATE_COOKIE = 'confia_oauth_state'
+const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
+const DEFAULT_APP_RETURN_TO = 'confiamais://auth/callback'
 
 function isAllowedMobileCallbackPath(parsed: URL) {
   if (parsed.pathname === MOBILE_CALLBACK_PATH) return true
@@ -76,9 +78,12 @@ export async function GET(req: Request) {
   const nonce = requestUrl.searchParams.get('nonce')
   const appState = requestUrl.searchParams.get('state')
 
-  const mobileRedirectTo = getMobileRedirectTarget(
+  const requestedMobileRedirectTo = getMobileRedirectTarget(
     requestUrl.searchParams.get('return_to') ?? requestUrl.searchParams.get('redirect_to')
   )
+  const mobileRedirectTo =
+    requestedMobileRedirectTo ??
+    (returnMode === APP_RETURN_MODE ? DEFAULT_APP_RETURN_TO : null)
 
   const nextPath = getSafeRedirectPath(
     requestUrl.searchParams.get('next')
@@ -106,11 +111,8 @@ export async function GET(req: Request) {
 
   const redirectTo = callbackUrl.toString()
 
-  if (returnMode === APP_RETURN_MODE && !mobileRedirectTo) {
-    console.error('[GOOGLE OAUTH START] fluxo app sem return_to válido')
-    const loginUrl = new URL('/login', requestUrl.origin)
-    loginUrl.searchParams.set('error', 'google_app_return_to_invalid')
-    return NextResponse.redirect(loginUrl)
+  if (returnMode === APP_RETURN_MODE && !requestedMobileRedirectTo) {
+    console.warn('[GOOGLE OAUTH START] return_to ausente/inválido; usando fallback padrão de deep link')
   }
 
   const cookieStore = await cookies()
@@ -167,6 +169,16 @@ export async function GET(req: Request) {
 
   if (oauthStateToPersist) {
     response.cookies.set(OAUTH_STATE_COOKIE, oauthStateToPersist, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 10,
+    })
+  }
+
+  if (returnMode === APP_RETURN_MODE && mobileRedirectTo) {
+    response.cookies.set(APP_RETURN_TO_COOKIE, mobileRedirectTo, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
