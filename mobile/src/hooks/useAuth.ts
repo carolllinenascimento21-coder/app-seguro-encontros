@@ -48,29 +48,6 @@ function getRedirectUrl(flowId?: string) {
   return `${baseRedirectUrl}${separator}${FLOW_ID_QUERY_PARAM}=${encodeURIComponent(flowId)}`
 }
 
-function getGoogleAuthStartUrl(redirectTo: string, flowId: string | null, state: string | null) {
-  const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '')
-
-  if (!apiBaseUrl) {
-    throw new Error('Variável de ambiente ausente: EXPO_PUBLIC_API_BASE_URL.')
-  }
-
-  const startUrl = new URL('/api/auth/google', apiBaseUrl)
-  startUrl.searchParams.set('return_mode', 'app')
-  startUrl.searchParams.set('platform', 'android')
-  startUrl.searchParams.set('return_to', redirectTo)
-
-  if (flowId) {
-    startUrl.searchParams.set(FLOW_ID_QUERY_PARAM, flowId)
-  }
-
-  if (state) {
-    startUrl.searchParams.set('state', state)
-  }
-
-  return startUrl.toString()
-}
-
 function getQueryParam(rawUrl: string, key: string) {
   try {
     const parsed = new URL(rawUrl)
@@ -225,24 +202,19 @@ export function useAuth() {
       let authStartUrl: string
       let expectedState: string | null = null
 
-      if (provider === 'google' && Platform.OS !== 'web') {
-        expectedState = createFlowId()
-        authStartUrl = getGoogleAuthStartUrl(redirectTo, flowId, expectedState)
-      } else {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider,
-          options: {
-            redirectTo,
-            skipBrowserRedirect: true,
-          },
-        })
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      })
 
-        if (error) throw new Error(error.message)
-        if (!data?.url) throw new Error('OAuth sem URL')
+      if (error) throw new Error(error.message)
+      if (!data?.url) throw new Error('OAuth sem URL')
 
-        authStartUrl = data.url
-        expectedState = getQueryParam(data.url, 'state')
-      }
+      authStartUrl = data.url
+      expectedState = getQueryParam(data.url, 'state')
 
       if (Platform.OS === 'web') {
         window.location.assign(authStartUrl)
