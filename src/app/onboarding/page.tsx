@@ -49,12 +49,12 @@ export default function OnboardingPage() {
         const nonce = currentParams.get('nonce')
 
         const ua = window.navigator.userAgent || ''
-        const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua)
         const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
-        const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
-        const isEmbeddedWebView = isAndroidWebView || isIOSWebView || isInAppBrowser
 
-        if (!returnMode && isEmbeddedWebView) {
+        // Em Android WebView, forçar return_mode=app pode quebrar a persistência da sessão
+        // (login aparenta sucesso, mas volta sem cookie válido).
+        // Agora só usamos fluxo app quando ele é explicitamente solicitado via querystring.
+        if (!returnMode && currentParams.get('force_app_oauth') === '1') {
           returnMode = 'app'
         }
 
