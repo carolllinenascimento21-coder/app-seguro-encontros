@@ -30,7 +30,6 @@ export default function OnboardingPage() {
   }
 
   const startOAuth = async (provider: 'google' | 'apple') => {
-    if (!validatePreconditions()) return
     if (oauthInFlightRef.current) return
 
     oauthInFlightRef.current = true
@@ -40,6 +39,42 @@ export default function OnboardingPage() {
       if (provider === 'google') {
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
         googleEntryUrl.searchParams.set('next', '/login')
+
+        const currentParams = new URLSearchParams(window.location.search)
+        let returnMode = currentParams.get('return_mode')
+        let returnTo = currentParams.get('return_to')
+        let platform = currentParams.get('platform')
+        const flowId = currentParams.get('flow_id')
+        const state = currentParams.get('state')
+        const nonce = currentParams.get('nonce')
+
+        const ua = window.navigator.userAgent || ''
+        const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua)
+        const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
+        const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
+        const isEmbeddedWebView = isAndroidWebView || isIOSWebView || isInAppBrowser
+
+        if (!returnMode && isEmbeddedWebView) {
+          returnMode = 'app'
+        }
+
+        if (!returnTo && returnMode === 'app') {
+          returnTo = 'confiamais://auth/callback'
+        }
+
+        if (!platform && returnMode === 'app') {
+          platform = isIOSWebView ? 'ios' : 'android'
+        }
+
+        if (returnMode === 'app' && returnTo) {
+          googleEntryUrl.searchParams.set('return_mode', 'app')
+          googleEntryUrl.searchParams.set('return_to', returnTo)
+          googleEntryUrl.searchParams.set('platform', platform)
+          if (flowId) googleEntryUrl.searchParams.set('flow_id', flowId)
+          if (state) googleEntryUrl.searchParams.set('state', state)
+          if (nonce) googleEntryUrl.searchParams.set('nonce', nonce)
+        }
+
         window.location.assign(googleEntryUrl.toString())
         return
       }
@@ -169,7 +204,8 @@ export default function OnboardingPage() {
         {/* Google */}
         <button
           onClick={signInWithGoogle}
-          disabled={!agreed || !gender || oauthLoading !== null}
+          disabled={oauthLoading !== null}
+          data-oauth-version="unblocked-v2"
           className="btn-google w-full bg-[#D4AF37] text-black py-6 rounded-2xl font-medium disabled:opacity-50"
         >
           {oauthLoading === 'google' ? 'Conectando com Google...' : 'Continuar com Google'}
@@ -177,7 +213,7 @@ export default function OnboardingPage() {
 
         <button
           onClick={signInWithApple}
-          disabled={!agreed || !gender || oauthLoading !== null}
+          disabled={oauthLoading !== null}
           className="btn-apple w-full rounded-2xl border border-[#D4AF37] py-6 font-medium text-[#EFD9A7] disabled:opacity-50"
         >
           {oauthLoading === 'apple' ? 'Conectando com Apple...' : 'Continuar com Apple'}
