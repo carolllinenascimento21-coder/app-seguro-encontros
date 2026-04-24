@@ -15,8 +15,8 @@ type Credentials = {
 type OAuthProvider = 'google' | 'apple'
 
 const OAUTH_TIMEOUT_MS = 90_000
-const SESSION_RETRY_ATTEMPTS = 8
-const SESSION_RETRY_DELAY_MS = 250
+const SESSION_RETRY_ATTEMPTS = 20
+const SESSION_RETRY_DELAY_MS = 300
 const DEFAULT_APP_SCHEME = 'confiamais'
 const FLOW_ID_QUERY_PARAM = 'flow_id'
 
@@ -46,16 +46,6 @@ function getRedirectUrl(flowId?: string) {
 
   const separator = baseRedirectUrl.includes('?') ? '&' : '?'
   return `${baseRedirectUrl}${separator}${FLOW_ID_QUERY_PARAM}=${encodeURIComponent(flowId)}`
-}
-
-function getGoogleAuthStartUrl(redirectTo: string) {
-  const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '')
-
-  if (!apiBaseUrl) {
-    throw new Error('Variável de ambiente ausente: EXPO_PUBLIC_API_BASE_URL.')
-  }
-
-  return `${apiBaseUrl}/api/auth/google?redirect_to=${encodeURIComponent(redirectTo)}`
 }
 
 function getQueryParam(rawUrl: string, key: string) {
@@ -208,27 +198,29 @@ export function useAuth() {
     try {
       const flowId = Platform.OS === 'web' ? null : createFlowId()
       const redirectTo = getRedirectUrl(flowId ?? undefined)
+      console.log('[ConfiaOAuth][v3] oauth_start', { provider, flowId, redirectTo, platform: Platform.OS })
 
       let authStartUrl: string
       let expectedState: string | null = null
 
-      if (provider === 'google' && Platform.OS !== 'web') {
-        authStartUrl = getGoogleAuthStartUrl(redirectTo)
-      } else {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider,
-          options: {
-            redirectTo,
-            skipBrowserRedirect: true,
-          },
-        })
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      })
 
-        if (error) throw new Error(error.message)
-        if (!data?.url) throw new Error('OAuth sem URL')
+      if (error) throw new Error(error.message)
+      if (!data?.url) throw new Error('OAuth sem URL')
 
-        authStartUrl = data.url
-        expectedState = getQueryParam(data.url, 'state')
-      }
+      authStartUrl = data.url
+      expectedState = getQueryParam(data.url, 'state')
+      console.log('[ConfiaOAuth][v3] oauth_provider_url_ready', {
+        provider,
+        flowId,
+        expectedState,
+      })
 
       if (Platform.OS === 'web') {
         window.location.assign(authStartUrl)
@@ -300,6 +292,11 @@ export function useAuth() {
 
         const persistedSession = await waitForSessionToPersist()
         if (!persistedSession) {
+          console.error('OAuth Google sem sessão persistida após retries', {
+            provider,
+            flowId,
+            hasState: Boolean(expectedState),
+          })
           throw new Error('Sessão não persistida após autenticação social.')
         }
 
