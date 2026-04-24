@@ -99,7 +99,11 @@ function isExpectedOAuthUrl(url: string | null, redirectTo: string, expectedStat
   if (callbackTarget.canonicalPath !== redirectTarget.canonicalPath) return false
   if (callbackTarget.canonicalPath !== '/auth/callback') return false
 
-  const hasAuthPayload = Boolean(getQueryParam(normalizedUrl, 'code') || getQueryParam(normalizedUrl, 'error'))
+  const hasAuthPayload = Boolean(
+    getQueryParam(normalizedUrl, 'code') ||
+    getQueryParam(normalizedUrl, 'error') ||
+    getQueryParam(normalizedUrl, 'access_token')
+  )
   if (!hasAuthPayload) return false
 
   if (!expectedState) return true
@@ -287,6 +291,32 @@ export function useAuth() {
       const callbackError = getQueryParam(callbackUrl!, 'error')
       if (callbackError) {
         throw new Error('Falha no retorno da autenticação social.')
+      }
+
+      const accessToken = getQueryParam(callbackUrl!, 'access_token')
+      const refreshToken = getQueryParam(callbackUrl!, 'refresh_token')
+      if (accessToken && refreshToken) {
+        await waitAndAcquireResolutionLock(resolvingRef)
+
+        try {
+          const { error: setSessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+
+          if (setSessionError) {
+            throw new Error(setSessionError.message)
+          }
+
+          const persistedSession = await waitForSessionToPersist()
+          if (!persistedSession) {
+            throw new Error('Sessão não persistida após setSession.')
+          }
+        } finally {
+          resolvingRef.current = false
+        }
+
+        return { cancelled: false }
       }
 
       const code = getQueryParam(callbackUrl!, 'code')
