@@ -11,7 +11,12 @@ const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
-const DEFAULT_APP_RETURN_TO = 'confiamais://auth/callback'
+const DEFAULT_APP_RETURN_TO = 'confiamais:///auth/callback'
+
+function normalizeAppReturnTo(parsed: URL) {
+  const protocol = parsed.protocol.replace(':', '')
+  return `${protocol}://${APP_CALLBACK_PATH}`
+}
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -63,7 +68,7 @@ function getSafeAppReturnTo(returnTo: string | null) {
     if (!ALLOWED_APP_SCHEMES.has(protocol)) return null
     if (!isAllowedAppCallback(parsed)) return null
 
-    return parsed.toString()
+    return normalizeAppReturnTo(parsed)
   } catch {
     return null
   }
