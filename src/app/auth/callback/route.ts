@@ -380,6 +380,7 @@ export async function GET(request: NextRequest) {
     if (!session) {
       if (isAppMode && appReturnTo) {
         return buildAppRedirect(appReturnTo, {
+          code,
           state,
           flowId,
           nonce,
