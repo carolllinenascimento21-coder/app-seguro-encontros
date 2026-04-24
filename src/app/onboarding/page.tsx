@@ -50,7 +50,6 @@ export default function OnboardingPage() {
         const hasAppFlowHints = Boolean(flowId || nonce)
 
         const ua = window.navigator.userAgent || ''
-        const isAndroidWebView = /\bwv\b|; wv\)/i.test(ua)
         const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
         const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
 
