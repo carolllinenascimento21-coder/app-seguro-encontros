@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 
-const DEFAULT_NEXT_PATH = '/login'
+const DEFAULT_NEXT_PATH = '/home'
 const DEFAULT_RETURN_MODE = 'web'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_MOBILE_SCHEMES = new Set(['confiamais'])
