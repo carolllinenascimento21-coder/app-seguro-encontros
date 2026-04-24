@@ -164,7 +164,8 @@ export async function GET(request: NextRequest) {
   const stateFromQuery = searchParams.get('state')
   const stateFromRedirectParam = searchParams.get('oauth_state')
   const stateFromCookie = cookieStore.get(OAUTH_STATE_COOKIE)?.value ?? null
-  const state = stateFromAppStart ?? stateFromQuery ?? stateFromRedirectParam ?? stateFromCookie
+  // Prioriza o state OAuth real (query/cookie). app_state é apenas fallback legado.
+  const state = stateFromQuery ?? stateFromRedirectParam ?? stateFromCookie ?? stateFromAppStart
   const flowId = searchParams.get('flow_id')
   const nonce = searchParams.get('nonce')
   const providerError = searchParams.get('error')
