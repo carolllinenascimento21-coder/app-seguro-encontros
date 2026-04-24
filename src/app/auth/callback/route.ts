@@ -10,7 +10,6 @@ const OAUTH_STATE_COOKIE = 'confia_oauth_state'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
-const DEFAULT_APP_RETURN_TO = 'confiamais://auth/callback'
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -204,6 +203,33 @@ export async function GET(request: NextRequest) {
         error: 'missing_code',
       })
     }
+    return NextResponse.redirect(new URL(next, origin))
+  }
+
+  if (isAppMode && appReturnTo) {
+    console.log('[AUTH CALLBACK] modo app: retornando code para exchange no app', {
+      hasState: Boolean(state),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+
+    const response = buildAppRedirect(appReturnTo, {
+      code,
+      state,
+      flowId,
+      nonce,
+    })
+    clearOauthStateCookie(response)
+    return response
+  }
+
+  if (!returnMode && code && flowId && state) {
+    console.warn('[AUTH CALLBACK] callback replay sem return_mode; ignorando exchange server', {
+      hasFlowId: Boolean(flowId),
+      hasState: Boolean(state),
+      hasNonce: Boolean(nonce),
+    })
+
     return NextResponse.redirect(new URL(next, origin))
   }
 
