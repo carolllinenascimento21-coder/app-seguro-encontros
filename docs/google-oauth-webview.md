@@ -34,3 +34,11 @@ Isso é uma política do Google e **não é corrigido apenas com configuração 
 ## Importante
 
 Se o app continuar carregando a aplicação web dentro de WebView para autenticar Google, o bloqueio pode persistir mesmo com todos os redirects corretos.
+
+## Bridge web após login no app (opcional)
+
+Se o login for concluído no app nativo e você precisar abrir a experiência web já autenticada, use:
+
+`/auth/app/bridge?access_token=<token>&refresh_token=<token>&next=/home`
+
+Essa rota sincroniza a sessão web via `/api/auth/login` no contexto do navegador e redireciona para `next`.
