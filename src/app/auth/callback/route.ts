@@ -11,6 +11,7 @@ const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
+const DEFAULT_APP_RETURN_TO = 'confiamais://auth/callback'
 
 function getSafeRedirectPath(next: string | null) {
   if (!next) return DEFAULT_NEXT_PATH
@@ -173,10 +174,12 @@ export async function GET(request: NextRequest) {
   const providerErrorCode = searchParams.get('error_code')
   const next = getSafeRedirectPath(searchParams.get('next'))
   const returnMode = searchParams.get('return_mode')
-  const appReturnTo =
+  const appReturnTo = (
     getSafeAppReturnTo(searchParams.get('return_to')) ??
-    getSafeAppReturnTo(cookieStore.get(APP_RETURN_TO_COOKIE)?.value ?? null)
-  const isAppMode = Boolean(appReturnTo) || returnMode === APP_RETURN_MODE
+    getSafeAppReturnTo(cookieStore.get(APP_RETURN_TO_COOKIE)?.value ?? null) ??
+    (returnMode === APP_RETURN_MODE ? DEFAULT_APP_RETURN_TO : null)
+  )
+  const isAppMode = Boolean(appReturnTo)
 
   if (!stateFromQuery && (stateFromAppStart || stateFromRedirectParam || stateFromCookie)) {
     console.log('[AUTH CALLBACK] state ausente na query; usando fallback persistido', {
