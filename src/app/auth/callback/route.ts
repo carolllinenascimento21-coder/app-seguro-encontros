@@ -7,6 +7,7 @@ import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
 const DEFAULT_NEXT_PATH = '/home'
 const LAST_HANDLED_CODE_COOKIE = 'confia_last_oauth_code'
 const OAUTH_STATE_COOKIE = 'confia_oauth_state'
+const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
@@ -93,51 +94,21 @@ function buildAppRedirect(
   if (params.errorDescription) appUrl.searchParams.set('error_description', params.errorDescription)
   if (params.errorCode) appUrl.searchParams.set('error_code', params.errorCode)
 
-  const appUrlString = appUrl.toString()
-  const escapedAppUrl = JSON.stringify(appUrlString)
-  const html = `<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Voltando ao app…</title>
-    <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #050505; color: #f5f5f5; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 24px; }
-      .card { max-width: 480px; width: 100%; border: 1px solid #D4AF37; border-radius: 16px; padding: 20px; background: #111; }
-      a { color: #111; background: #D4AF37; padding: 10px 14px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block; }
-      p { color: #d4d4d4; line-height: 1.45; }
-    </style>
-  </head>
-  <body>
-    <main class="card">
-      <h1>Concluindo login…</h1>
-      <p>Estamos te redirecionando de volta para o app.</p>
-      <p>Se não abrir automaticamente, toque no botão abaixo.</p>
-      <p><a id="open-app" href=${escapedAppUrl}>Abrir app</a></p>
-    </main>
-    <script>
-      (function () {
-        var target = ${escapedAppUrl};
-        window.location.replace(target);
-        setTimeout(function () {
-          window.location.href = target;
-        }, 250);
-      })();
-    </script>
-  </body>
-</html>`
-
-  return new NextResponse(html, {
-    status: 200,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store, max-age=0',
-    },
-  })
+  return NextResponse.redirect(appUrl)
 }
 
 function clearOauthStateCookie(response: NextResponse) {
   response.cookies.set(OAUTH_STATE_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  })
+}
+
+function clearAppReturnToCookie(response: NextResponse) {
+  response.cookies.set(APP_RETURN_TO_COOKIE, '', {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
@@ -201,7 +172,9 @@ export async function GET(request: NextRequest) {
   const providerErrorCode = searchParams.get('error_code')
   const next = getSafeRedirectPath(searchParams.get('next'))
   const returnMode = searchParams.get('return_mode')
-  const appReturnTo = getSafeAppReturnTo(searchParams.get('return_to'))
+  const appReturnTo =
+    getSafeAppReturnTo(searchParams.get('return_to')) ??
+    getSafeAppReturnTo(cookieStore.get(APP_RETURN_TO_COOKIE)?.value ?? null)
   const isAppMode = Boolean(appReturnTo) || returnMode === APP_RETURN_MODE
 
   if (!stateFromQuery && (stateFromAppStart || stateFromRedirectParam || stateFromCookie)) {
@@ -224,7 +197,7 @@ export async function GET(request: NextRequest) {
 
     if (isAppMode && appReturnTo) {
       console.warn('[AUTH CALLBACK] retorno app com erro de provider')
-      return buildAppRedirect(appReturnTo, {
+      const response = buildAppRedirect(appReturnTo, {
         state,
         flowId,
         nonce,
@@ -232,6 +205,9 @@ export async function GET(request: NextRequest) {
         errorDescription: providerErrorDescription,
         errorCode: providerErrorCode,
       })
+      clearOauthStateCookie(response)
+      clearAppReturnToCookie(response)
+      return response
     }
 
     return buildError(origin, next, providerError, providerErrorDescription, providerErrorCode)
@@ -240,17 +216,20 @@ export async function GET(request: NextRequest) {
   if (!code) {
     console.warn('[AUTH CALLBACK] Sem code; redirecionando para:', next)
     if (isAppMode && appReturnTo) {
-      return buildAppRedirect(appReturnTo, {
+      const response = buildAppRedirect(appReturnTo, {
         state,
         flowId,
         nonce,
         error: 'missing_code',
       })
+      clearOauthStateCookie(response)
+      clearAppReturnToCookie(response)
+      return response
     }
     return NextResponse.redirect(new URL(next, origin))
   }
 
-  if (!returnMode && code && flowId && state) {
+  if (!isAppMode && !returnMode && code && flowId && state) {
     console.warn('[AUTH CALLBACK] callback replay sem return_mode; ignorando exchange server', {
       hasFlowId: Boolean(flowId),
       hasState: Boolean(state),
@@ -296,17 +275,42 @@ export async function GET(request: NextRequest) {
   )
 
   if (isAppMode && appReturnTo) {
+    let accessToken: string | null = null
+    let refreshToken: string | null = null
+
+    const { data: appExchangeData, error: appExchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (appExchangeError) {
+      console.error('[AUTH CALLBACK] exchange app-mode falhou, seguindo com fallback por code', {
+        message: appExchangeError.message,
+        status: appExchangeError.status,
+        code: appExchangeError.code,
+      })
+    }
+
+    accessToken = appExchangeData?.session?.access_token ?? null
+    refreshToken = appExchangeData?.session?.refresh_token ?? null
+
+    if (!accessToken || !refreshToken) {
+      const { session: appSession } = await getSessionWithRetry(supabase)
+      accessToken = appSession?.access_token ?? null
+      refreshToken = appSession?.refresh_token ?? null
+    }
+
     const response = buildAppRedirect(appReturnTo, {
       code,
+      accessToken,
+      refreshToken,
       state,
       flowId,
       nonce,
     })
     clearOauthStateCookie(response)
+    clearAppReturnToCookie(response)
     return response
   }
 
-  if (!returnMode && code && flowId && state) {
+  if (!isAppMode && !returnMode && code && flowId && state) {
     console.warn('[AUTH CALLBACK] callback replay sem return_mode; validando sessão antes de seguir', {
       hasFlowId: Boolean(flowId),
       hasState: Boolean(state),
@@ -380,7 +384,6 @@ export async function GET(request: NextRequest) {
     if (!session) {
       if (isAppMode && appReturnTo) {
         return buildAppRedirect(appReturnTo, {
-          code,
           state,
           flowId,
           nonce,
