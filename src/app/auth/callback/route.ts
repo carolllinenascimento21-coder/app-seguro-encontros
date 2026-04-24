@@ -33,13 +33,8 @@ function buildError(
   const url = new URL(isRecoveryFlow ? '/update-password' : '/login', origin)
   url.searchParams.set('error', error)
 
-  if (errorDescription) {
-    url.searchParams.set('error_description', errorDescription)
-  }
-
-  if (errorCode) {
-    url.searchParams.set('error_code', errorCode)
-  }
+  if (errorDescription) url.searchParams.set('error_description', errorDescription)
+  if (errorCode) url.searchParams.set('error_code', errorCode)
 
   if (!isRecoveryFlow) {
     url.searchParams.set('next', next)
@@ -87,7 +82,6 @@ function buildAppRedirect(
 ) {
   const appUrl = new URL(appReturnTo)
 
-  // Para o Android, o state correto é o appState original.
   const resolvedState = params.appState ?? params.oauthState ?? params.flowId ?? null
 
   if (params.code) appUrl.searchParams.set('code', params.code)
@@ -177,6 +171,8 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies()
 
   const code = searchParams.get('code')
+  const accessTokenFromQuery = searchParams.get('access_token')
+  const refreshTokenFromQuery = searchParams.get('refresh_token')
 
   const stateFromQuery = searchParams.get('state')
   const oauthStateFromQuery = searchParams.get('oauth_state')
@@ -241,8 +237,8 @@ export async function GET(request: NextRequest) {
     return buildError(origin, next, providerError, providerErrorDescription, providerErrorCode)
   }
 
-  if (!code) {
-    console.warn('[AUTH CALLBACK] Sem code; redirecionando para:', next)
+  if (!code && !(accessTokenFromQuery && refreshTokenFromQuery)) {
+    console.warn('[AUTH CALLBACK] Sem code e sem tokens; redirecionando para:', next)
 
     if (isAppMode && appReturnTo) {
       const response = buildAppRedirect(appReturnTo, {
@@ -296,11 +292,84 @@ export async function GET(request: NextRequest) {
     }
   )
 
+  // Se já vierem tokens no callback reaberto pelo app/webview, restaura a sessão diretamente.
+  if (accessTokenFromQuery && refreshTokenFromQuery) {
+    const { error: setSessionError } = await supabase.auth.setSession({
+      access_token: accessTokenFromQuery,
+      refresh_token: refreshTokenFromQuery,
+    })
+
+    if (setSessionError) {
+      console.error('[AUTH CALLBACK] setSession falhou:', {
+        message: setSessionError.message,
+        status: setSessionError.status,
+        code: setSessionError.code,
+      })
+
+      if (isAppMode && appReturnTo) {
+        const response = buildAppRedirect(appReturnTo, {
+          appState,
+          oauthState,
+          flowId,
+          nonce,
+          error: 'auth_set_session_failed',
+        })
+        clearOauthStateCookie(response)
+        clearAppStateCookie(response)
+        clearAppReturnToCookie(response)
+        return response
+      }
+
+      return buildError(origin, next, 'auth_set_session_failed')
+    }
+
+    const { session: restoredSession, error: restoredSessionError } = await getSessionWithRetry(supabase)
+
+    if (restoredSessionError) {
+      console.error('[AUTH CALLBACK] erro ao validar sessão após setSession:', {
+        message: restoredSessionError.message,
+        status: restoredSessionError.status,
+        code: restoredSessionError.code,
+      })
+    }
+
+    if (!restoredSession) {
+      console.error('[AUTH CALLBACK] OAuth Google sem sessão persistida após retries')
+
+      if (isAppMode && appReturnTo) {
+        const response = buildAppRedirect(appReturnTo, {
+          appState,
+          oauthState,
+          flowId,
+          nonce,
+          error: 'auth_session_not_persisted',
+        })
+        clearOauthStateCookie(response)
+        clearAppStateCookie(response)
+        clearAppReturnToCookie(response)
+        return response
+      }
+
+      return buildError(origin, next, 'auth_session_not_persisted')
+    }
+
+    console.log('[AUTH CALLBACK] sessão restaurada via tokens com sucesso', {
+      userId: restoredSession.user.id,
+      isAppMode,
+    })
+
+    const response = buildSuccessRedirect(origin, next, code ?? 'token-session')
+    clearOauthStateCookie(response)
+    clearAppStateCookie(response)
+    clearAppReturnToCookie(response)
+    return response
+  }
+
   if (isAppMode && appReturnTo) {
     let accessToken: string | null = null
     let refreshToken: string | null = null
 
-    const { data: appExchangeData, error: appExchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    const { data: appExchangeData, error: appExchangeError } = await supabase.auth.exchangeCodeForSession(code!)
 
     if (appExchangeError) {
       console.error('[AUTH CALLBACK] exchange app-mode falhou, seguindo com fallback por code', {
@@ -350,7 +419,7 @@ export async function GET(request: NextRequest) {
       console.warn('[AUTH CALLBACK] Code repetido com sessão válida; reaproveitando sessão', {
         userId: existingSession.user.id,
       })
-      const response = buildSuccessRedirect(origin, next, code)
+      const response = buildSuccessRedirect(origin, next, code!)
       clearOauthStateCookie(response)
       clearAppStateCookie(response)
       clearAppReturnToCookie(response)
@@ -360,7 +429,7 @@ export async function GET(request: NextRequest) {
     console.warn('[AUTH CALLBACK] Code repetido sem sessão válida; tentando exchange novamente')
   }
 
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code!)
 
   if (exchangeError) {
     console.error('[AUTH CALLBACK] exchangeCodeForSession falhou:', {
@@ -380,20 +449,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (!session) {
-      if (isAppMode && appReturnTo) {
-        const response = buildAppRedirect(appReturnTo, {
-          appState,
-          oauthState,
-          flowId,
-          nonce,
-          error: 'auth_exchange_failed',
-        })
-        clearOauthStateCookie(response)
-        clearAppStateCookie(response)
-        clearAppReturnToCookie(response)
-        return response
-      }
-
       return buildError(origin, next, 'auth_exchange_failed')
     }
 
@@ -412,21 +467,6 @@ export async function GET(request: NextRequest) {
 
   if (!persistedSession) {
     console.error('[AUTH CALLBACK] Sessão não persistida após callback')
-
-    if (isAppMode && appReturnTo) {
-      const response = buildAppRedirect(appReturnTo, {
-        appState,
-        oauthState,
-        flowId,
-        nonce,
-        error: 'auth_session_not_persisted',
-      })
-      clearOauthStateCookie(response)
-      clearAppStateCookie(response)
-      clearAppReturnToCookie(response)
-      return response
-    }
-
     return buildError(origin, next, 'auth_session_not_persisted')
   }
 
@@ -436,13 +476,9 @@ export async function GET(request: NextRequest) {
     hasFlowId: Boolean(flowId),
   })
 
-  if (returnMode === APP_RETURN_MODE && !isAppMode) {
-    console.error('[AUTH CALLBACK] return_mode=app sem return_to válido; fallback web')
-  }
-
   console.log('[AUTH CALLBACK] redirect final web', { next })
 
-  const response = buildSuccessRedirect(origin, next, code)
+  const response = buildSuccessRedirect(origin, next, code!)
   clearOauthStateCookie(response)
   clearAppStateCookie(response)
   clearAppReturnToCookie(response)
