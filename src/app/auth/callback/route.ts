@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
   const next = getSafeRedirectPath(searchParams.get('next'))
   const returnMode = searchParams.get('return_mode')
   const appReturnTo = getSafeAppReturnTo(searchParams.get('return_to'))
-  const isAppMode = returnMode === APP_RETURN_MODE && Boolean(appReturnTo)
+  const isAppMode = Boolean(appReturnTo) || returnMode === APP_RETURN_MODE
 
   if (!stateFromQuery && (stateFromAppStart || stateFromRedirectParam || stateFromCookie)) {
     console.log('[AUTH CALLBACK] state ausente na query; usando fallback persistido', {
