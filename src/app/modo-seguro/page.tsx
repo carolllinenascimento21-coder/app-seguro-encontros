@@ -137,10 +137,11 @@ export default function ModoSeguroPage() {
 
       const mapsGoogle = `https://maps.google.com/?q=${coords.lat},${coords.lng}`
       const mensagem =
-        `Oi ${primaryContact.nome}, preciso de ajuda agora.\n` +
+        `🚨 ALERTA DE EMERGÊNCIA 🚨\n` +
+        `Olá ${primaryContact.nome}, estou em perigo e preciso de ajuda.\n` +
+        `Acompanhe minha localização agora:\n` +
         `📍 ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}\n` +
-        `Mapa: ${mapsGoogle}\n` +
-        `https://www.confiamais.net/modo-seguro`
+        `Mapa: ${mapsGoogle}`
 
       const primaryPhone = primaryContact.phone
       const encodedText = encodeURIComponent(mensagem)
