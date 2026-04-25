@@ -136,16 +136,11 @@ export default function ModoSeguroPage() {
       const primaryContact = validPhones[0]!
 
       const mapsGoogle = `https://maps.google.com/?q=${coords.lat},${coords.lng}`
-      const mapsOpenStreetMap = `https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=18/${coords.lat}/${coords.lng}`
       const mensagem =
-        `Oi ${primaryContact.nome},\n\n` +
-        `🚨 ALERTA DE EMERGÊNCIA 🚨\n` +
-        `Estou em perigo e preciso de ajuda.\n` +
-        `Acompanhe minha localização agora:\n` +
-        `• Coordenadas: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}\n` +
-        `• Google Maps: ${mapsGoogle}\n` +
-        `• OpenStreetMap: ${mapsOpenStreetMap}\n` +
-        `• Painel seguro: https://www.confiamais.net/modo-seguro`
+        `Oi ${primaryContact.nome}, preciso de ajuda agora.\n` +
+        `📍 ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}\n` +
+        `Mapa: ${mapsGoogle}\n` +
+        `https://www.confiamais.net/modo-seguro`
 
       const primaryPhone = primaryContact.phone
       const encodedText = encodeURIComponent(mensagem)
@@ -233,11 +228,19 @@ export default function ModoSeguroPage() {
                 </div>
               )}
 
+              <a
+                href="tel:190"
+                className="w-full bg-red-600 text-center py-3 rounded-lg flex items-center justify-center gap-2 font-bold"
+              >
+                <PhoneCall size={16} />
+                Ligar 190 (Polícia)
+              </a>
+
               <button
                 type="button"
                 disabled={sendingAlert}
                 onClick={callEmergencyContact}
-                className="w-full bg-red-600 text-center py-3 rounded-lg flex items-center justify-center gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-[#172036] hover:bg-[#1d2945] text-white py-3 rounded-lg flex items-center justify-center gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PhoneCall size={16} />
                 Chamar contato de emergência (ligação)
