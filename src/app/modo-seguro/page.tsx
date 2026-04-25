@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, MessageCircle, PhoneCall, X } from 'lucide-react'
+import { AlertTriangle, PhoneCall, X } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase'
 
 const supabase = createSupabaseClient()
@@ -242,8 +242,7 @@ export default function ModoSeguroPage() {
                 onClick={callEmergencyContact}
                 className="w-full bg-[#172036] hover:bg-[#1d2945] text-white py-3 rounded-lg flex items-center justify-center gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <PhoneCall size={16} />
-                Chamar contato de emergência (ligação)
+                Ligar Contato Emergência
               </button>
 
               <button
@@ -251,8 +250,7 @@ export default function ModoSeguroPage() {
                 onClick={sendEmergencyAlert}
                 className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <MessageCircle size={16} />
-                {sendingAlert ? 'Abrindo WhatsApp...' : 'Chamar contato de emergência (WhatsApp)'}
+                {sendingAlert ? 'Abrindo WhatsApp...' : 'Mensagem Contato Emergência'}
               </button>
 
               <button
