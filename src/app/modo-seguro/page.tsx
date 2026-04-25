@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, PhoneCall, X } from 'lucide-react'
+import { AlertTriangle, MessageCircle, PhoneCall, X } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase'
 
 const supabase = createSupabaseClient()
@@ -17,6 +17,16 @@ function normalizePhoneForWhatsApp(phone: string | null | undefined) {
   if (!phone) return null
   const digits = phone.replace(/\D/g, '')
   return digits.length >= 10 ? digits : null
+}
+
+function getValidEmergencyTargets(contacts: EmergencyContact[]) {
+  return contacts
+    .map((contact) => ({
+      phone: normalizePhoneForWhatsApp(contact.telefone),
+      nome: contact.nome?.trim() || 'contato de confiança',
+    }))
+    .filter((contact): contact is { phone: string; nome: string } => Boolean(contact.phone))
+    .slice(0, 3)
 }
 
 export default function ModoSeguroPage() {
@@ -116,22 +126,19 @@ export default function ModoSeguroPage() {
         return
       }
 
-      const validPhones = contacts
-        .map((contact) => ({
-          phone: normalizePhoneForWhatsApp(contact.telefone),
-          nome: contact.nome?.trim() || 'contato de confiança',
-        }))
-        .filter((contact): contact is { phone: string; nome: string } => Boolean(contact.phone))
-        .slice(0, 3)
+      const validPhones = getValidEmergencyTargets(contacts)
 
       if (validPhones.length === 0) {
         setAlertError('Cadastre ao menos 1 contato com telefone válido no seu perfil.')
         return
       }
 
+      const primaryContact = validPhones[0]!
+
       const mapsGoogle = `https://maps.google.com/?q=${coords.lat},${coords.lng}`
       const mapsOpenStreetMap = `https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=18/${coords.lat}/${coords.lng}`
       const mensagem =
+        `Oi ${primaryContact.nome},\n\n` +
         `🚨 ALERTA DE EMERGÊNCIA 🚨\n` +
         `Estou em perigo e preciso de ajuda.\n` +
         `Acompanhe minha localização agora:\n` +
@@ -140,7 +147,7 @@ export default function ModoSeguroPage() {
         `• OpenStreetMap: ${mapsOpenStreetMap}\n` +
         `• Painel seguro: https://www.confiamais.net/modo-seguro`
 
-      const primaryPhone = validPhones[0]!.phone
+      const primaryPhone = primaryContact.phone
       const encodedText = encodeURIComponent(mensagem)
       const deepLink = `whatsapp://send?phone=${primaryPhone}&text=${encodedText}`
       const fallbackLink = `https://wa.me/${primaryPhone}?text=${encodedText}`
@@ -163,6 +170,16 @@ export default function ModoSeguroPage() {
     } finally {
       setSendingAlert(false)
     }
+  }
+
+  const callEmergencyContact = () => {
+    const validPhones = getValidEmergencyTargets(contacts)
+    if (validPhones.length === 0) {
+      setAlertError('Cadastre ao menos 1 contato com telefone válido no seu perfil.')
+      return
+    }
+
+    window.location.href = `tel:${validPhones[0]!.phone}`
   }
 
   return (
@@ -216,20 +233,23 @@ export default function ModoSeguroPage() {
                 </div>
               )}
 
-              <a
-                href="tel:190"
-                className="w-full bg-red-600 text-center py-3 rounded-lg flex items-center justify-center gap-2 font-bold"
+              <button
+                type="button"
+                disabled={sendingAlert}
+                onClick={callEmergencyContact}
+                className="w-full bg-red-600 text-center py-3 rounded-lg flex items-center justify-center gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PhoneCall size={16} />
-                Ligar 190 (Polícia)
-              </a>
+                Chamar contato de emergência (ligação)
+              </button>
 
               <button
                 disabled={sendingAlert}
                 onClick={sendEmergencyAlert}
-                className="w-full bg-yellow-400 text-black py-3 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {sendingAlert ? 'Enviando alerta...' : 'Tentar novamente'}
+                <MessageCircle size={16} />
+                {sendingAlert ? 'Abrindo WhatsApp...' : 'Chamar contato de emergência (WhatsApp)'}
               </button>
 
               <button
