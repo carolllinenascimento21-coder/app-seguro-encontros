@@ -16,6 +16,29 @@ type EmergencyContact = {
   telefone: string
 }
 
+const extractDigits = (value: string) => value.replace(/\D/g, '')
+
+const normalizePhoneForStorage = (value: string) => {
+  const digits = extractDigits(value)
+  if (!digits) return ''
+
+  if (digits.startsWith('55')) return digits.slice(0, 13)
+  if (digits.length <= 11) return `55${digits}`.slice(0, 13)
+
+  return digits.slice(0, 13)
+}
+
+const formatPhoneMask = (value: string) => {
+  const storageDigits = normalizePhoneForStorage(value)
+  const localDigits = storageDigits.startsWith('55') ? storageDigits.slice(2) : storageDigits
+  const limited = localDigits.slice(0, 11)
+
+  if (!limited) return ''
+  if (limited.length <= 2) return `(${limited}`
+  if (limited.length <= 6) return `(${limited.slice(0, 2)}) ${limited.slice(2)}`
+  return `(${limited.slice(0, 2)}) ${limited.slice(2, 7)}-${limited.slice(7)}`
+}
+
 const supabase = createSupabaseClient()
 
 function PlanLabel(plan?: string | null) {
@@ -137,7 +160,8 @@ export default function PerfilPage() {
   }
 
   const addContact = async () => {
-    if (!nome || !telefone) return
+    const telefoneNormalizado = normalizePhoneForStorage(telefone)
+    if (!nome || !telefoneNormalizado) return
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.user) return
 
@@ -161,7 +185,7 @@ export default function PerfilPage() {
       const { error: insertError } = await supabase.from('emergency_contacts').insert({
         user_id: session.user.id,
         nome,
-        telefone,
+        telefone: telefoneNormalizado,
       })
       if (insertError) throw insertError
 
@@ -319,7 +343,7 @@ export default function PerfilPage() {
             <div key={c.id} className="flex justify-between">
               <div>
                 <p>{c.nome}</p>
-                <p className="text-sm text-gray-400">{c.telefone}</p>
+                <p className="text-sm text-gray-400">{formatPhoneMask(c.telefone)}</p>
               </div>
               <button onClick={() => removeContact(c.id)} className="text-red-500">
                 <Trash2 size={18} />
@@ -334,9 +358,9 @@ export default function PerfilPage() {
             className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
           />
           <input
-            placeholder="Telefone"
-            value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
+            placeholder="Telefone (35) 98899-7162"
+            value={formatPhoneMask(telefone)}
+            onChange={(e) => setTelefone(normalizePhoneForStorage(e.target.value))}
             className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
           />
           <button
