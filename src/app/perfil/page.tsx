@@ -16,6 +16,29 @@ type EmergencyContact = {
   telefone: string
 }
 
+const extractDigits = (value: string) => value.replace(/\D/g, '')
+
+const normalizePhoneForStorage = (value: string) => {
+  const digits = extractDigits(value)
+  if (!digits) return ''
+
+  if (digits.startsWith('55')) return digits.slice(0, 13)
+  if (digits.length <= 11) return `55${digits}`.slice(0, 13)
+
+  return digits.slice(0, 13)
+}
+
+const formatPhoneMask = (value: string) => {
+  const storageDigits = normalizePhoneForStorage(value)
+  const localDigits = storageDigits.startsWith('55') ? storageDigits.slice(2) : storageDigits
+  const limited = localDigits.slice(0, 11)
+
+  if (!limited) return ''
+  if (limited.length <= 2) return `(${limited}`
+  if (limited.length <= 6) return `(${limited.slice(0, 2)}) ${limited.slice(2)}`
+  return `(${limited.slice(0, 2)}) ${limited.slice(2, 7)}-${limited.slice(7)}`
+}
+
 const supabase = createSupabaseClient()
 
 function PlanLabel(plan?: string | null) {
@@ -35,6 +58,7 @@ export default function PerfilPage() {
   const [contacts, setContacts] = useState<EmergencyContact[]>([])
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [savingContact, setSavingContact] = useState(false)
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
@@ -136,26 +160,52 @@ export default function PerfilPage() {
   }
 
   const addContact = async () => {
-    if (!nome || !telefone) return
+    const telefoneNormalizado = normalizePhoneForStorage(telefone)
+    if (!nome || !telefoneNormalizado) return
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.user) return
 
-    await supabase.from('emergency_contacts').insert({
-      user_id: session.user.id,
-      nome,
-      telefone,
-    })
+    const hasExistingContact = contacts.length > 0
+    if (hasExistingContact) {
+      const shouldReplace = window.confirm(
+        'Você já tem um contato de emergência cadastrado. Deseja substituir o contato atual por este novo contato?'
+      )
+      if (!shouldReplace) return
+    }
 
-    setNome('')
-    setTelefone('')
+    setSavingContact(true)
+    setError(null)
 
-    const { data } = await supabase
-      .from('emergency_contacts')
-      .select('id, nome, telefone')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: false })
+    try {
+      if (hasExistingContact) {
+        const { error: deleteError } = await supabase.from('emergency_contacts').delete().eq('user_id', session.user.id)
+        if (deleteError) throw deleteError
+      }
 
-    setContacts(data || [])
+      const { error: insertError } = await supabase.from('emergency_contacts').insert({
+        user_id: session.user.id,
+        nome,
+        telefone: telefoneNormalizado,
+      })
+      if (insertError) throw insertError
+
+      setNome('')
+      setTelefone('')
+
+      const { data, error: fetchError } = await supabase
+        .from('emergency_contacts')
+        .select('id, nome, telefone')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+
+      if (fetchError) throw fetchError
+      setContacts(data || [])
+    } catch (contactError) {
+      console.error(contactError)
+      setError('Não foi possível salvar o contato de emergência.')
+    } finally {
+      setSavingContact(false)
+    }
   }
 
   const removeContact = async (id: string) => {
@@ -293,7 +343,7 @@ export default function PerfilPage() {
             <div key={c.id} className="flex justify-between">
               <div>
                 <p>{c.nome}</p>
-                <p className="text-sm text-gray-400">{c.telefone}</p>
+                <p className="text-sm text-gray-400">{formatPhoneMask(c.telefone)}</p>
               </div>
               <button onClick={() => removeContact(c.id)} className="text-red-500">
                 <Trash2 size={18} />
@@ -308,16 +358,17 @@ export default function PerfilPage() {
             className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
           />
           <input
-            placeholder="Telefone"
-            value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
+            placeholder="Telefone (35) 98899-7162"
+            value={formatPhoneMask(telefone)}
+            onChange={(e) => setTelefone(normalizePhoneForStorage(e.target.value))}
             className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2"
           />
           <button
             onClick={addContact}
+            disabled={savingContact}
             className="w-full bg-green-600 text-black py-2 rounded-lg flex justify-center gap-2"
           >
-            <Plus size={16} /> Adicionar contato
+            <Plus size={16} /> {savingContact ? 'Salvando...' : contacts.length > 0 ? 'Substituir contato' : 'Adicionar contato'}
           </button>
         </div>
 
