@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, PhoneCall, X } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase'
+import Navbar from '@/components/custom/navbar'
 
 const supabase = createSupabaseClient()
 
@@ -179,7 +180,7 @@ export default function ModoSeguroPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-4 text-white">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-4 pb-24 text-white">
       <div className="max-w-md w-full space-y-4">
         <div className="border border-green-600 rounded-xl p-4 text-center">
           <h1 className="text-green-500 font-bold text-lg">Modo Encontro Seguro</h1>
@@ -266,6 +267,7 @@ export default function ModoSeguroPage() {
           </div>
         )}
       </div>
+      <Navbar />
     </div>
   )
 }

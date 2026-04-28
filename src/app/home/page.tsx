@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Eye, Lock, Shield, AlertTriangle, Star, Search } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import { createServerClient } from '@/lib/supabase/server'
 
 export const revalidate = 60
 export const preferredRegion = 'home'
@@ -311,6 +313,15 @@ export default async function HomePage({
       : Array.isArray(rawSearch)
         ? (rawSearch[0] ?? '')
         : ''
+
+  const supabase = await createServerClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session?.user) {
+    redirect('/login')
+  }
 
   const { perfis, stats } = await getHomeData(search)
 
