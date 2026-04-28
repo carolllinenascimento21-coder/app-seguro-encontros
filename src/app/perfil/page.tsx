@@ -35,6 +35,7 @@ export default function PerfilPage() {
   const [contacts, setContacts] = useState<EmergencyContact[]>([])
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [savingContact, setSavingContact] = useState(false)
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
@@ -140,22 +141,47 @@ export default function PerfilPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.user) return
 
-    await supabase.from('emergency_contacts').insert({
-      user_id: session.user.id,
-      nome,
-      telefone,
-    })
+    const hasExistingContact = contacts.length > 0
+    if (hasExistingContact) {
+      const shouldReplace = window.confirm(
+        'Você já tem um contato de emergência cadastrado. Deseja substituir o contato atual por este novo contato?'
+      )
+      if (!shouldReplace) return
+    }
 
-    setNome('')
-    setTelefone('')
+    setSavingContact(true)
+    setError(null)
 
-    const { data } = await supabase
-      .from('emergency_contacts')
-      .select('id, nome, telefone')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: false })
+    try {
+      if (hasExistingContact) {
+        const { error: deleteError } = await supabase.from('emergency_contacts').delete().eq('user_id', session.user.id)
+        if (deleteError) throw deleteError
+      }
 
-    setContacts(data || [])
+      const { error: insertError } = await supabase.from('emergency_contacts').insert({
+        user_id: session.user.id,
+        nome,
+        telefone,
+      })
+      if (insertError) throw insertError
+
+      setNome('')
+      setTelefone('')
+
+      const { data, error: fetchError } = await supabase
+        .from('emergency_contacts')
+        .select('id, nome, telefone')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+
+      if (fetchError) throw fetchError
+      setContacts(data || [])
+    } catch (contactError) {
+      console.error(contactError)
+      setError('Não foi possível salvar o contato de emergência.')
+    } finally {
+      setSavingContact(false)
+    }
   }
 
   const removeContact = async (id: string) => {
@@ -315,9 +341,10 @@ export default function PerfilPage() {
           />
           <button
             onClick={addContact}
+            disabled={savingContact}
             className="w-full bg-green-600 text-black py-2 rounded-lg flex justify-center gap-2"
           >
-            <Plus size={16} /> Adicionar contato
+            <Plus size={16} /> {savingContact ? 'Salvando...' : contacts.length > 0 ? 'Substituir contato' : 'Adicionar contato'}
           </button>
         </div>
 
