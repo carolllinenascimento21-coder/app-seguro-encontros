@@ -8,6 +8,7 @@ import { User, LogOut, Plus, Trash2, Shield, Pencil, Crown, X, Camera } from 'lu
 import { clearRememberedLoginEmail } from '@/lib/auth-remember'
 import { createSupabaseClient } from '@/lib/supabase'
 import { ensureProfileForUser, getProfileErrorInfo, type ProfileRecord } from '@/lib/profile-utils'
+import Navbar from '@/components/custom/navbar'
 
 type EmergencyContact = {
   id: string
@@ -221,7 +222,7 @@ export default function PerfilPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black px-4 py-10 text-white">
+    <div className="min-h-screen bg-black px-4 py-10 pb-24 text-white">
       <div className="max-w-md mx-auto space-y-6">
 
         {error && (
@@ -391,6 +392,7 @@ export default function PerfilPage() {
         </div>
 
       </div>
+      <Navbar />
     </div>
   )
 }
