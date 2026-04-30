@@ -64,6 +64,7 @@ export async function middleware(req: NextRequest) {
   if (isProtected && !user) {
     const redirectUrl = new URL('/login', req.url)
     redirectUrl.searchParams.set('next', pathname)
+    redirectUrl.searchParams.set('sg_reason', 'no_session')
     return NextResponse.redirect(redirectUrl)
   }
 
@@ -76,6 +77,7 @@ export async function middleware(req: NextRequest) {
 
     if (profileError) {
       console.error('Falha ao validar gate de selfie no middleware:', profileError)
+      res.headers.set('x-selfie-gate', 'profile_error_allow')
     } else {
       const mustCompleteSelfie =
         !profile || profile.selfie_verified !== true || profile.onboarding_completed !== true
@@ -91,9 +93,14 @@ export async function middleware(req: NextRequest) {
       if (mustCompleteSelfie) {
         const redirectUrl = new URL('/onboarding/selfie', req.url)
         redirectUrl.searchParams.set('next', pathname)
+        redirectUrl.searchParams.set('sg_reason', 'missing_selfie_or_onboarding')
         return NextResponse.redirect(redirectUrl)
       }
+
+      res.headers.set('x-selfie-gate', 'ok')
     }
+  } else if (user) {
+    res.headers.set('x-selfie-gate', 'skip_selfie_route')
   }
 
   return res
