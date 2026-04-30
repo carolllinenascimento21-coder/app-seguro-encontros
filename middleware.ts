@@ -64,7 +64,43 @@ export async function middleware(req: NextRequest) {
   if (isProtected && !user) {
     const redirectUrl = new URL('/login', req.url)
     redirectUrl.searchParams.set('next', pathname)
+    redirectUrl.searchParams.set('sg_reason', 'no_session')
     return NextResponse.redirect(redirectUrl)
+  }
+
+  if (user && pathMatches(pathname, '/onboarding/selfie') === false) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('selfie_verified,onboarding_completed')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Falha ao validar gate de selfie no middleware:', profileError)
+      res.headers.set('x-selfie-gate', 'profile_error_allow')
+    } else {
+      const mustCompleteSelfie =
+        !profile || profile.selfie_verified !== true || profile.onboarding_completed !== true
+
+      console.log('[SelfieGate][middleware] gate_decision', {
+        userId: user.id,
+        pathname,
+        selfie_verified: profile?.selfie_verified ?? null,
+        onboarding_completed: profile?.onboarding_completed ?? null,
+        mustCompleteSelfie,
+      })
+
+      if (mustCompleteSelfie) {
+        const redirectUrl = new URL('/onboarding/selfie', req.url)
+        redirectUrl.searchParams.set('next', pathname)
+        redirectUrl.searchParams.set('sg_reason', 'missing_selfie_or_onboarding')
+        return NextResponse.redirect(redirectUrl)
+      }
+
+      res.headers.set('x-selfie-gate', 'ok')
+    }
+  } else if (user) {
+    res.headers.set('x-selfie-gate', 'skip_selfie_route')
   }
 
   return res
