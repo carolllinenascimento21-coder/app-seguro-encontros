@@ -92,7 +92,11 @@ export default function LoginPage() {
         }
 
         router.refresh()
-        if (profile.onboarding_completed === false) {
+
+        const needsSelfieOnboarding =
+          profile.onboarding_completed !== true || profile.selfie_verified !== true
+
+        if (needsSelfieOnboarding) {
           router.replace('/onboarding/selfie')
           return
         }
