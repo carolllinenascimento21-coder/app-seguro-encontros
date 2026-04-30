@@ -323,6 +323,26 @@ export default async function HomePage({
     redirect('/login')
   }
 
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('selfie_verified,onboarding_completed')
+    .eq('id', session.user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    console.error('Falha ao validar selfie no /home:', profileError)
+  }
+
+  const mustCompleteSelfie =
+    Boolean(profileError) ||
+    !profile ||
+    profile.selfie_verified !== true ||
+    profile.onboarding_completed !== true
+
+  if (mustCompleteSelfie) {
+    redirect('/onboarding/selfie?next=/home&sg_reason=home_guard')
+  }
+
   const { perfis, stats } = await getHomeData(search)
 
   return (
