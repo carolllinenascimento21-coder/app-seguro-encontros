@@ -67,6 +67,27 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
+  if (user && pathMatches(pathname, '/onboarding/selfie') === false) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('selfie_verified,onboarding_completed')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Falha ao validar gate de selfie no middleware:', profileError)
+    } else {
+      const mustCompleteSelfie =
+        !profile || profile.selfie_verified !== true || profile.onboarding_completed !== true
+
+      if (mustCompleteSelfie) {
+        const redirectUrl = new URL('/onboarding/selfie', req.url)
+        redirectUrl.searchParams.set('next', pathname)
+        return NextResponse.redirect(redirectUrl)
+      }
+    }
+  }
+
   return res
 }
 
