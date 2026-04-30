@@ -80,6 +80,14 @@ export async function middleware(req: NextRequest) {
       const mustCompleteSelfie =
         !profile || profile.selfie_verified !== true || profile.onboarding_completed !== true
 
+      console.log('[SelfieGate][middleware] gate_decision', {
+        userId: user.id,
+        pathname,
+        selfie_verified: profile?.selfie_verified ?? null,
+        onboarding_completed: profile?.onboarding_completed ?? null,
+        mustCompleteSelfie,
+      })
+
       if (mustCompleteSelfie) {
         const redirectUrl = new URL('/onboarding/selfie', req.url)
         redirectUrl.searchParams.set('next', pathname)

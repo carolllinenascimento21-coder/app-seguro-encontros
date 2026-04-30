@@ -27,6 +27,13 @@ export function HomeScreen() {
           .eq('id', user.id)
           .maybeSingle()
 
+        console.log('[SelfieGate][HomeScreen] profile_check_result', {
+          userId: user.id,
+          hasError: Boolean(error),
+          selfie_verified: data?.selfie_verified ?? null,
+          onboarding_completed: data?.onboarding_completed ?? null,
+        })
+
         if (!active) return
 
         const mustRedirect =

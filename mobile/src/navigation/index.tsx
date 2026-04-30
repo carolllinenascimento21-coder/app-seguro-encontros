@@ -73,11 +73,18 @@ export function RootNavigation() {
         .eq('id', user.id)
         .maybeSingle()
 
+      console.log('[SelfieGate][RootNavigation] profile_check_result', {
+        userId: user.id,
+        hasError: Boolean(error),
+        selfie_verified: data?.selfie_verified ?? null,
+        onboarding_completed: data?.onboarding_completed ?? null,
+      })
+
       if (!active) return
 
       if (error) {
         console.error('Falha ao validar gate de selfie no app:', error)
-        setMustCompleteSelfie(false)
+        setMustCompleteSelfie(true)
         setProfileGateLoading(false)
         return
       }
