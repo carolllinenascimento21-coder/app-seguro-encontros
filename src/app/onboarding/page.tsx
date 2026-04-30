@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -14,6 +14,21 @@ export default function OnboardingPage() {
   const [gender, setGender] = useState('')
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
   const oauthInFlightRef = useRef(false)
+
+  useEffect(() => {
+    const resetOAuthState = () => {
+      oauthInFlightRef.current = false
+      setOauthLoading(null)
+    }
+
+    window.addEventListener('pageshow', resetOAuthState)
+    window.addEventListener('focus', resetOAuthState)
+
+    return () => {
+      window.removeEventListener('pageshow', resetOAuthState)
+      window.removeEventListener('focus', resetOAuthState)
+    }
+  }, [])
 
   const validatePreconditions = () => {
     if (!agreed) {
@@ -30,6 +45,8 @@ export default function OnboardingPage() {
   }
 
   const startOAuth = async (provider: 'google' | 'apple') => {
+    if (!validatePreconditions()) return
+
     if (oauthInFlightRef.current) return
 
     oauthInFlightRef.current = true

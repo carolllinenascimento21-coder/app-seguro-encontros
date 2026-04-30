@@ -1,11 +1,12 @@
-import { createContext, useContext } from 'react'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { User } from '@supabase/supabase-js'
 
 import { useAuth } from '../hooks/useAuth'
+import { supabase } from '../services/supabase'
 import { AvaliarScreen } from '../screens/AvaliarScreen'
 import { HomeScreen } from '../screens/HomeScreen'
 import { LoginScreen } from '../screens/LoginScreen'
@@ -48,8 +49,56 @@ function MainTabs() {
 
 export function RootNavigation() {
   const { isAuthenticated, loading, signIn, signInWithApple, signInWithGoogle, signOut, user } = useAuth()
+  const [profileGateLoading, setProfileGateLoading] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    const syncProfileGate = async () => {
+      if (!isAuthenticated || !user?.id) {
+        if (active) {
+          setProfileGateLoading(false)
+        }
+        return
+      }
+
+      if (active) setProfileGateLoading(true)
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('selfie_verified,onboarding_completed')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (!active) return
+
+      const mustGate = Boolean(error) || !data || data.selfie_verified !== true || data.onboarding_completed !== true
+
+      if (mustGate) {
+        Linking.openURL('https://app.confiamais.com.br/onboarding/selfie').catch((openError) => {
+          console.error('Falha ao abrir /onboarding/selfie no app:', openError)
+        })
+      }
+
+      setProfileGateLoading(false)
+    }
+
+    void syncProfileGate()
+
+    return () => {
+      active = false
+    }
+  }, [isAuthenticated, user?.id])
 
   if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1f6feb" />
+      </View>
+    )
+  }
+
+  if (profileGateLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#1f6feb" />
