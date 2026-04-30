@@ -1,12 +1,11 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { User } from '@supabase/supabase-js'
 
 import { useAuth } from '../hooks/useAuth'
-import { Button } from '../components/Button'
 import { supabase } from '../services/supabase'
 import { AvaliarScreen } from '../screens/AvaliarScreen'
 import { HomeScreen } from '../screens/HomeScreen'
@@ -51,7 +50,6 @@ function MainTabs() {
 export function RootNavigation() {
   const { isAuthenticated, loading, signIn, signInWithApple, signInWithGoogle, signOut, user } = useAuth()
   const [profileGateLoading, setProfileGateLoading] = useState(false)
-  const [mustCompleteSelfie, setMustCompleteSelfie] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -59,7 +57,6 @@ export function RootNavigation() {
     const syncProfileGate = async () => {
       if (!isAuthenticated || !user?.id) {
         if (active) {
-          setMustCompleteSelfie(false)
           setProfileGateLoading(false)
         }
         return
@@ -73,24 +70,16 @@ export function RootNavigation() {
         .eq('id', user.id)
         .maybeSingle()
 
-      console.log('[SelfieGate][RootNavigation] profile_check_result', {
-        userId: user.id,
-        hasError: Boolean(error),
-        selfie_verified: data?.selfie_verified ?? null,
-        onboarding_completed: data?.onboarding_completed ?? null,
-      })
-
       if (!active) return
 
-      if (error) {
-        console.error('Falha ao validar gate de selfie no app:', error)
-        setMustCompleteSelfie(true)
-        setProfileGateLoading(false)
-        return
+      const mustGate = Boolean(error) || !data || data.selfie_verified !== true || data.onboarding_completed !== true
+
+      if (mustGate) {
+        Linking.openURL('https://app.confiamais.com.br/onboarding/selfie').catch((openError) => {
+          console.error('Falha ao abrir /onboarding/selfie no app:', openError)
+        })
       }
 
-      const mustGate = !data || data.selfie_verified !== true || data.onboarding_completed !== true
-      setMustCompleteSelfie(mustGate)
       setProfileGateLoading(false)
     }
 
@@ -113,22 +102,6 @@ export function RootNavigation() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#1f6feb" />
-      </View>
-    )
-  }
-
-  if (isAuthenticated && mustCompleteSelfie) {
-    return (
-      <View style={styles.gateContainer}>
-        <Text style={styles.gateTitle}>Finalize seu cadastro</Text>
-        <Text style={styles.gateText}>
-          Para acessar o aplicativo, é obrigatório concluir a verificação de selfie.
-        </Text>
-        <Button
-          title="Fazer selfie agora"
-          onPress={() => Linking.openURL('https://app.confiamais.com.br/onboarding/selfie')}
-        />
-        <Button title="Sair" variant="secondary" onPress={() => void signOut()} />
       </View>
     )
   }
