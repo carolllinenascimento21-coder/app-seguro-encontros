@@ -1,8 +1,24 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import {
+  canUseFreeReputationQuery,
+  getFreeReputationQueriesUsed,
+  hasPaidReputationAccess,
+} from '@/lib/reputation/access-control'
 
 const MAX_TERM_LENGTH = 80
+
+type ProfileAccessRow = {
+  plan: string | null
+  has_active_plan: boolean | null
+  current_plan_id: string | null
+  subscription_status: string | null
+  free_queries_used: number | null
+}
+
+const PROFILE_ACCESS_FIELDS =
+  'plan, has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 function normalize(value: string | null) {
   return (value ?? '')
@@ -39,15 +55,22 @@ export async function GET(req: Request) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('current_plan_id')
+      .select(PROFILE_ACCESS_FIELDS)
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle<ProfileAccessRow>()
 
     if (profileError) {
       throw new Error(profileError.message)
     }
 
-    const isPremiumUser = (profile?.current_plan_id ?? 'free') !== 'free'
+    if (!profile) {
+      return NextResponse.json(
+        { success: false, message: 'Perfil não encontrado' },
+        { status: 404 }
+      )
+    }
+
+    const isPremiumUser = hasPaidReputationAccess(profile)
 
     const { searchParams } = new URL(req.url)
 
@@ -72,6 +95,48 @@ export async function GET(req: Request) {
         { success: false, message: 'Informe um termo para busca' },
         { status: 400 }
       )
+    }
+
+    let freeQueriesUsed = getFreeReputationQueriesUsed(profile)
+
+    if (!isPremiumUser) {
+      if (!canUseFreeReputationQuery(profile)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Limite de 3 consultas gratuitas atingido',
+            reason: 'PAYWALL',
+            free_queries_used: freeQueriesUsed,
+          },
+          { status: 403 }
+        )
+      }
+
+      const { data: consumedState, error: consumeError } = await supabaseAdmin.rpc(
+        'consume_query',
+        { user_uuid: user.id }
+      )
+
+      if (consumeError) {
+        const message = consumeError.message ?? ''
+
+        if (message.includes('PAYWALL')) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'Limite de 3 consultas gratuitas atingido',
+              reason: 'PAYWALL',
+              free_queries_used: freeQueriesUsed,
+            },
+            { status: 403 }
+          )
+        }
+
+        throw new Error(consumeError.message)
+      }
+
+      const state = Array.isArray(consumedState) ? consumedState[0] : consumedState
+      freeQueriesUsed = getFreeReputationQueriesUsed(state ?? profile)
     }
 
     let profilesQuery = supabaseAdmin
@@ -133,16 +198,6 @@ export async function GET(req: Request) {
       const summary = summaryMap.get(profileItem.id)
       const hasData = Number(summary?.total_reviews ?? 0) > 0 || Number(summary?.alert_count ?? 0) > 0
 
-      if (!isPremiumUser) {
-        return {
-          male_profile_id: profileItem.id,
-          name: profileItem.display_name ?? 'Sem nome',
-          city: profileItem.city ?? null,
-          has_data: hasData,
-          locked: true,
-        }
-      }
-
       return {
         male_profile_id: profileItem.id,
         name: profileItem.display_name ?? 'Sem nome',
@@ -160,6 +215,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       is_premium_user: isPremiumUser,
+      free_queries_used: freeQueriesUsed,
       results,
     })
   } catch (err: any) {

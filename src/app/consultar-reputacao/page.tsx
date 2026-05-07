@@ -51,7 +51,6 @@ export default function ConsultarReputacao() {
   const [results, setResults] = useState<PerfilResultado[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isPremiumUser, setIsPremiumUser] = useState<boolean | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
 
   const buscar = async () => {
@@ -91,7 +90,6 @@ export default function ConsultarReputacao() {
       }
 
       setResults(data.results ?? [])
-      setIsPremiumUser(Boolean(data.is_premium_user))
     } catch (err: any) {
       console.error('Erro na busca:', err)
       setError(err.message)
@@ -101,8 +99,8 @@ export default function ConsultarReputacao() {
     }
   }
 
-  const premiumResults = results.filter((r): r is PerfilPremiumResultado => !r.locked)
-  const freeTeaserResults = results.filter((r) => r.has_data)
+  const unlockedResults = results.filter((r): r is PerfilPremiumResultado => !r.locked)
+  const freeTeaserResults = results.filter((r) => r.locked && r.has_data)
 
   const handleResultClick = (result: PerfilPremiumResultado) => {
     router.push(`/consultar-reputacao/${result.male_profile_id}`)
@@ -142,20 +140,20 @@ export default function ConsultarReputacao() {
 
         <div className="space-y-4">
           {!loading && hasSearched && !error && (
-            (isPremiumUser === false
-              ? freeTeaserResults.length === 0
-              : premiumResults.length === 0) &&
+            (freeTeaserResults.length > 0
+              ? false
+              : unlockedResults.length === 0) &&
             <p className="text-gray-500 text-center text-sm">Nenhum resultado encontrado</p>
           )}
 
-          {isPremiumUser === false
+          {freeTeaserResults.length > 0
             ? freeTeaserResults.map((r) => (
                 <PremiumTeaserCard
                   key={r.male_profile_id}
                   subtitle={`Há dados disponíveis para ${r.name}. Desbloqueie reputação, alertas e relatos.`}
                 />
               ))
-            : premiumResults.map((r) => (
+            : unlockedResults.map((r) => (
                 <div
                   key={r.male_profile_id}
                   onClick={() => handleResultClick(r)}

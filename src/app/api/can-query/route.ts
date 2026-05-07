@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 
+import { canUseFreeReputationQuery, hasPaidReputationAccess } from '@/lib/reputation/access-control'
+
 type ProfileAccessRow = {
+  plan: string | null
   has_active_plan: boolean | null
   current_plan_id: string | null
   subscription_status: string | null
@@ -10,39 +13,27 @@ type ProfileAccessRow = {
 }
 
 const PROFILE_ACCESS_FIELDS =
-  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
-
-const hasPaidSubscription = (profile: ProfileAccessRow) => {
-  if (profile.has_active_plan === true) return true
-
-  const subscriptionStatus = profile.subscription_status?.toLowerCase()
-
-  if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
-    return true
-  }
-
-  return Boolean(profile.current_plan_id && profile.current_plan_id !== 'free')
-}
+  'plan, has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 export async function POST() {
   try {
     const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+            } catch {}
+          },
         },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
-          } catch {}
-        },
-      },
-    }
-  )
+      }
+    )
 
     const {
       data: { user },
@@ -78,14 +69,12 @@ export async function POST() {
     }
 
     // Usuário com plano pago pode consultar ilimitado
-    if (hasPaidSubscription(profile)) {
+    if (hasPaidReputationAccess(profile)) {
       return NextResponse.json({ allowed: true, profile })
     }
 
-    const freeQueriesUsed = profile.free_queries_used ?? 0
-
     // Plano free permite até 3 consultas
-    if (freeQueriesUsed < 3) {
+    if (canUseFreeReputationQuery(profile)) {
       return NextResponse.json({ allowed: true, profile })
     }
 
