@@ -1,85 +1,130 @@
-import { createServerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 
-const moderatorIds = (process.env.MODERATOR_IDS || '').split(',')
+const ADMIN_EMAILS = ['privacidade@confiamais.net']
+const MODERATOR_IDS = (process.env.MODERATOR_IDS || '')
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean)
+
+type ModerationAction = 'approve' | 'remove'
+
+type ModerationActionPayload = {
+  reportId?: string
+  avaliacaoId?: string
+  action?: ModerationAction
+}
+
+function normalizeEmail(email?: string | null) {
+  return (email || '').trim().toLowerCase()
+}
+
+function isAllowedModerator(userId?: string | null, email?: string | null) {
+  if (userId && MODERATOR_IDS.includes(userId)) return true
+  return ADMIN_EMAILS.includes(normalizeEmail(email))
+}
+
+function isModerationAction(value: unknown): value is ModerationAction {
+  return value === 'approve' || value === 'remove'
+}
 
 export async function POST(req: Request) {
   try {
-    // 🔐 autenticação do usuário
-    const supabaseAuth = createServerClient({ cookies })
+    const supabaseAuth = await createServerClient()
 
     const {
       data: { user },
+      error: userError,
     } = await supabaseAuth.auth.getUser()
 
-    // 🚫 não logado
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (userError || !user) {
+      return NextResponse.json({ success: false, message: 'Não autenticado.' }, { status: 401 })
     }
 
-    // 🚫 não é moderador
-    if (!moderatorIds.includes(user.id)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!isAllowedModerator(user.id, user.email)) {
+      return NextResponse.json({ success: false, message: 'Acesso negado.' }, { status: 403 })
     }
 
-    // 🔥 client admin (apenas depois da validação)
     const supabase = getSupabaseAdminClient()
 
-    const body = await req.json()
-    const { reportId, avaliacaoId, action } = body
-
-    if (!reportId || !action) {
+    if (!supabase) {
       return NextResponse.json(
-        { success: false, message: 'Dados inválidos' },
-        { status: 400 }
+        { success: false, message: 'Serviço administrativo indisponível.' },
+        { status: 500 }
       )
     }
 
-    // ✅ APROVAR
+    const body = (await req.json().catch(() => null)) as ModerationActionPayload | null
+    const reportId = body?.reportId?.trim()
+    const avaliacaoId = body?.avaliacaoId?.trim()
+    const action = body?.action
+
+    if (!reportId || !isModerationAction(action)) {
+      return NextResponse.json({ success: false, message: 'Dados inválidos.' }, { status: 400 })
+    }
+
+    const now = new Date().toISOString()
+
     if (action === 'approve') {
-      await supabase
+      const { error: reportError } = await supabase
         .from('reportes_ugc')
         .update({
           status: 'resolvido',
-          resolved_at: new Date().toISOString(),
+          resolved_at: now,
+          resolved_by: user.id,
+          admin_note: 'Conteúdo aprovado pela moderação.',
         })
         .eq('id', reportId)
 
-      return NextResponse.json({ success: true })
-    }
-
-    // 🗑️ REMOVER
-    if (action === 'remove') {
-      if (!avaliacaoId) {
+      if (reportError) {
         return NextResponse.json(
-          { success: false, message: 'Avaliação inválida' },
-          { status: 400 }
+          { success: false, message: `Erro ao aprovar denúncia: ${reportError.message}` },
+          { status: 500 }
         )
       }
 
-      await supabase.from('avaliacoes').delete().eq('id', avaliacaoId)
-
-      await supabase
-        .from('reportes_ugc')
-        .update({
-          status: 'resolvido',
-          resolved_at: new Date().toISOString(),
-        })
-        .eq('id', reportId)
-
       return NextResponse.json({ success: true })
     }
 
-    return NextResponse.json(
-      { success: false, message: 'Ação inválida' },
-      { status: 400 }
-    )
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, message: error.message },
-      { status: 500 }
-    )
+    if (!avaliacaoId) {
+      return NextResponse.json({ success: false, message: 'Avaliação inválida.' }, { status: 400 })
+    }
+
+    const { error: reviewError } = await supabase
+      .from('avaliacoes')
+      .update({
+        relato: '[REMOVIDO PELA MODERAÇÃO]',
+      })
+      .eq('id', avaliacaoId)
+
+    if (reviewError) {
+      return NextResponse.json(
+        { success: false, message: `Erro ao remover avaliação: ${reviewError.message}` },
+        { status: 500 }
+      )
+    }
+
+    const { error: reportError } = await supabase
+      .from('reportes_ugc')
+      .update({
+        status: 'removido',
+        resolved_at: now,
+        resolved_by: user.id,
+        admin_note: 'Avaliação removida pela moderação.',
+      })
+      .eq('id', reportId)
+
+    if (reportError) {
+      return NextResponse.json(
+        { success: false, message: `Erro ao atualizar denúncia: ${reportError.message}` },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro inesperado ao executar moderação.'
+    return NextResponse.json({ success: false, message }, { status: 500 })
   }
 }
