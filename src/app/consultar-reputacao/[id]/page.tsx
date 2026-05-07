@@ -6,9 +6,9 @@ import { ReportReviewButton } from '@/components/ReportReviewButton'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
 import { PremiumDetailLock } from '@/components/paywall/PremiumDetailLock'
-import { ConsumeReputationQueryOnView } from '@/components/reputation/ConsumeReputationQueryOnView'
 import {
   canUseFreeReputationQuery,
+  getFreeReputationQueriesUsed,
   hasPaidReputationAccess,
 } from '@/lib/reputation/access-control'
 
@@ -98,8 +98,7 @@ export default async function Page({
   }
 
   const isPremiumUser = hasPaidReputationAccess(me)
-  const canUseFreeQuery = canUseFreeReputationQuery(me)
-  const canViewFullReputation = isPremiumUser || canUseFreeQuery
+  let canViewFullReputation = isPremiumUser
 
   const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
     .from('male_profiles')
@@ -109,6 +108,29 @@ export default async function Page({
 
   if (maleProfileError || !maleProfile) {
     return <div className="text-white p-10">Perfil não encontrado</div>
+  }
+
+  if (!isPremiumUser && canUseFreeReputationQuery(me)) {
+    const nextFreeQueriesUsed = getFreeReputationQueriesUsed(me) + 1
+    const { error: consumeError } = await supabaseAdmin
+      .from('profiles')
+      .update({ free_queries_used: nextFreeQueriesUsed })
+      .eq('id', user.id)
+
+    if (consumeError) {
+      console.error('Erro ao consumir consulta gratuita de reputação', consumeError)
+      return <div className="text-white p-10">Erro ao validar acesso</div>
+    }
+
+    const { error: consultaError } = await supabaseAdmin
+      .from('consultas')
+      .insert({ user_id: user.id })
+
+    if (consultaError) {
+      console.error('Erro ao registrar consulta gratuita de reputação', consultaError)
+    }
+
+    canViewFullReputation = true
   }
 
   if (!canViewFullReputation) {
@@ -177,7 +199,6 @@ export default async function Page({
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
-      {!isPremiumUser && canUseFreeQuery && <ConsumeReputationQueryOnView userId={user.id} />}
       <div className="max-w-md mx-auto px-4 pt-6">
         <Link href="/consultar-reputacao" className="text-gray-400 text-sm">
           ← Voltar

@@ -5,6 +5,7 @@ import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
 import {
   canUseFreeReputationQuery,
+  getFreeReputationQueriesUsed,
   hasPaidReputationAccess,
 } from '@/lib/reputation/access-control'
 
@@ -85,6 +86,28 @@ export async function GET(
     let canViewFullReputation = isPremiumUser
 
     if (!isPremiumUser && canUseFreeReputationQuery(profile)) {
+      const nextFreeQueriesUsed = getFreeReputationQueriesUsed(profile) + 1
+      const { error: consumeError } = await supabaseAdmin
+        .from('profiles')
+        .update({ free_queries_used: nextFreeQueriesUsed })
+        .eq('id', user.id)
+
+      if (consumeError) {
+        console.error('Erro ao consumir consulta gratuita de reputação', consumeError)
+        return NextResponse.json(
+          { error: 'Erro ao validar acesso', allowed: false },
+          { status: 500 }
+        )
+      }
+
+      const { error: consultaError } = await supabaseAdmin
+        .from('consultas')
+        .insert({ user_id: user.id })
+
+      if (consultaError) {
+        console.error('Erro ao registrar consulta gratuita de reputação', consultaError)
+      }
+
       canViewFullReputation = true
     }
 
