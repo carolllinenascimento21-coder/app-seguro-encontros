@@ -67,20 +67,6 @@ export async function POST(req: Request) {
     const now = new Date().toISOString()
 
     if (action === 'approve') {
-      if (avaliacaoId) {
-        const { error: reviewError } = await supabase
-          .from('avaliacoes')
-          .update({ status: 'public' })
-          .eq('id', avaliacaoId)
-
-        if (reviewError) {
-          return NextResponse.json(
-            { success: false, message: `Erro ao manter avaliação aprovada: ${reviewError.message}` },
-            { status: 500 }
-          )
-        }
-      }
-
       const { error: reportError } = await supabase
         .from('reportes_ugc')
         .update({
@@ -108,7 +94,6 @@ export async function POST(req: Request) {
     const { error: reviewError } = await supabase
       .from('avaliacoes')
       .update({
-        status: 'removed',
         relato: '[REMOVIDO PELA MODERAÇÃO]',
       })
       .eq('id', avaliacaoId)
