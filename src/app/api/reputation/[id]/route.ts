@@ -9,7 +9,6 @@ import {
 } from '@/lib/reputation/access-control'
 
 type ProfileAccessRow = {
-  plan: string | null
   has_active_plan: boolean | null
   current_plan_id: string | null
   subscription_status: string | null
@@ -17,7 +16,7 @@ type ProfileAccessRow = {
 }
 
 const PROFILE_ACCESS_FIELDS =
-  'plan, has_active_plan, current_plan_id, subscription_status, free_queries_used'
+  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 export async function GET(
   _req: Request,
@@ -86,19 +85,7 @@ export async function GET(
     let canViewFullReputation = isPremiumUser
 
     if (!isPremiumUser && canUseFreeReputationQuery(profile)) {
-      const { error: consumeError } = await supabaseAdmin.rpc('consume_query', {
-        user_uuid: user.id,
-      })
-
-      if (!consumeError) {
-        canViewFullReputation = true
-      } else if (!consumeError.message?.includes('PAYWALL')) {
-        console.error('Erro ao consumir consulta gratuita de reputação', consumeError)
-        return NextResponse.json(
-          { error: 'Erro ao validar acesso', allowed: false },
-          { status: 500 }
-        )
-      }
+      canViewFullReputation = true
     }
 
     // 🔒 USUÁRIO FREE SEM CONSULTAS DISPONÍVEIS

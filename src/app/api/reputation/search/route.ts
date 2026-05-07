@@ -9,7 +9,6 @@ import {
 const MAX_TERM_LENGTH = 80
 
 type ProfileAccessRow = {
-  plan: string | null
   has_active_plan: boolean | null
   current_plan_id: string | null
   subscription_status: string | null
@@ -17,7 +16,7 @@ type ProfileAccessRow = {
 }
 
 const PROFILE_ACCESS_FIELDS =
-  'plan, has_active_plan, current_plan_id, subscription_status, free_queries_used'
+  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 function normalize(value: string | null) {
   return (value ?? '')

@@ -4,6 +4,18 @@ import { createServerClient } from '@supabase/ssr'
 
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getMissingSupabaseEnvDetails, getSupabasePublicEnv } from '@/lib/env'
+import { hasPaidReputationAccess } from '@/lib/reputation/access-control'
+
+type ProfileAccessRow = {
+  has_active_plan: boolean | null
+  current_plan_id: string | null
+  subscription_status: string | null
+  free_queries_used: number | null
+  credits: number | null
+}
+
+const PROFILE_ACCESS_FIELDS =
+  'has_active_plan, current_plan_id, subscription_status, free_queries_used, credits'
 
 export async function POST(req: Request) {
   let supabaseEnv
@@ -96,16 +108,57 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Usuária inválida' }, { status: 403 })
   }
 
-  const { data, error } = await supabaseAdmin.rpc('consume_query', { user_uuid: body.userId })
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select(PROFILE_ACCESS_FIELDS)
+    .eq('id', body.userId)
+    .maybeSingle<ProfileAccessRow>()
 
-  if (error) {
-    const message = error?.message ?? ''
-    console.error('Erro ao consumir consulta', error)
-    if (message.includes('PAYWALL')) {
-      return NextResponse.json({ success: false, reason: 'PAYWALL' }, { status: 200 })
+  if (profileError || !profile) {
+    if (profileError) {
+      console.error('Erro ao carregar perfil para consumo de consulta', profileError)
     }
-    return NextResponse.json({ error: 'Erro ao consumir consulta' }, { status: 500 })
+
+    return NextResponse.json({ error: 'Perfil não encontrado' }, { status: 404 })
   }
 
-  return NextResponse.json({ success: true, state: data })
+  let freeQueriesUsed = Math.max(0, Number(profile.free_queries_used ?? 0))
+  const credits = Math.max(0, Number(profile.credits ?? 0))
+
+  if (!hasPaidReputationAccess(profile)) {
+    if (freeQueriesUsed >= 3) {
+      return NextResponse.json({ success: false, reason: 'PAYWALL' }, { status: 200 })
+    }
+
+    freeQueriesUsed += 1
+
+    const { error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ free_queries_used: freeQueriesUsed })
+      .eq('id', body.userId)
+
+    if (updateError) {
+      console.error('Erro ao atualizar consumo de consulta', updateError)
+      return NextResponse.json({ error: 'Erro ao consumir consulta' }, { status: 500 })
+    }
+  }
+
+  const { error: consultaError } = await supabaseAdmin
+    .from('consultas')
+    .insert({ user_id: body.userId })
+
+  if (consultaError) {
+    console.error('Erro ao registrar consulta', consultaError)
+  }
+
+  return NextResponse.json({
+    success: true,
+    state: [
+      {
+        plan: profile.current_plan_id ?? 'free',
+        free_queries_used: freeQueriesUsed,
+        credits,
+      },
+    ],
+  })
 }
