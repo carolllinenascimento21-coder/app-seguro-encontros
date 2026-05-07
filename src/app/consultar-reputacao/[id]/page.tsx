@@ -6,6 +6,7 @@ import { ReportReviewButton } from '@/components/ReportReviewButton'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
 import { PremiumDetailLock } from '@/components/paywall/PremiumDetailLock'
+import { ConsumeReputationQueryOnView } from '@/components/reputation/ConsumeReputationQueryOnView'
 import {
   canUseFreeReputationQuery,
   hasPaidReputationAccess,
@@ -98,7 +99,8 @@ export default async function Page({
   }
 
   const isPremiumUser = hasPaidReputationAccess(me)
-  let canViewFullReputation = isPremiumUser
+  const canUseFreeQuery = canUseFreeReputationQuery(me)
+  const canViewFullReputation = isPremiumUser || canUseFreeQuery
 
   const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
     .from('male_profiles')
@@ -108,19 +110,6 @@ export default async function Page({
 
   if (maleProfileError || !maleProfile) {
     return <div className="text-white p-10">Perfil não encontrado</div>
-  }
-
-  if (!isPremiumUser && canUseFreeReputationQuery(me)) {
-    const { error: consumeError } = await supabaseAdmin.rpc('consume_query', {
-      user_uuid: user.id,
-    })
-
-    if (!consumeError) {
-      canViewFullReputation = true
-    } else if (!consumeError.message?.includes('PAYWALL')) {
-      console.error('Erro ao consumir consulta gratuita de reputação', consumeError)
-      return <div className="text-white p-10">Erro ao validar acesso</div>
-    }
   }
 
   if (!canViewFullReputation) {
@@ -189,6 +178,7 @@ export default async function Page({
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
+      {!isPremiumUser && canUseFreeQuery && <ConsumeReputationQueryOnView userId={user.id} />}
       <div className="max-w-md mx-auto px-4 pt-6">
         <Link href="/consultar-reputacao" className="text-gray-400 text-sm">
           ← Voltar
