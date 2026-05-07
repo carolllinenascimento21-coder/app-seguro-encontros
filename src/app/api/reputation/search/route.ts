@@ -3,7 +3,6 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import {
   canUseFreeReputationQuery,
-  getFreeReputationQueriesUsed,
   hasPaidReputationAccess,
 } from '@/lib/reputation/access-control'
 
@@ -97,46 +96,16 @@ export async function GET(req: Request) {
       )
     }
 
-    let freeQueriesUsed = getFreeReputationQueriesUsed(profile)
-
-    if (!isPremiumUser) {
-      if (!canUseFreeReputationQuery(profile)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'Limite de 3 consultas gratuitas atingido',
-            reason: 'PAYWALL',
-            free_queries_used: freeQueriesUsed,
-          },
-          { status: 403 }
-        )
-      }
-
-      const { data: consumedState, error: consumeError } = await supabaseAdmin.rpc(
-        'consume_query',
-        { user_uuid: user.id }
+    if (!isPremiumUser && !canUseFreeReputationQuery(profile)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Limite de 3 consultas gratuitas atingido',
+          reason: 'PAYWALL',
+          free_queries_used: profile.free_queries_used ?? 0,
+        },
+        { status: 403 }
       )
-
-      if (consumeError) {
-        const message = consumeError.message ?? ''
-
-        if (message.includes('PAYWALL')) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: 'Limite de 3 consultas gratuitas atingido',
-              reason: 'PAYWALL',
-              free_queries_used: freeQueriesUsed,
-            },
-            { status: 403 }
-          )
-        }
-
-        throw new Error(consumeError.message)
-      }
-
-      const state = Array.isArray(consumedState) ? consumedState[0] : consumedState
-      freeQueriesUsed = getFreeReputationQueriesUsed(state ?? profile)
     }
 
     let profilesQuery = supabaseAdmin
@@ -215,7 +184,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       is_premium_user: isPremiumUser,
-      free_queries_used: freeQueriesUsed,
+      free_queries_used: profile.free_queries_used ?? 0,
       results,
     })
   } catch (err: any) {
