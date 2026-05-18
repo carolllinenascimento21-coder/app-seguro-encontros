@@ -9,6 +9,8 @@ const LAST_HANDLED_CODE_COOKIE = 'confia_last_oauth_code'
 const OAUTH_STATE_COOKIE = 'confia_oauth_state'
 const APP_STATE_COOKIE = 'confia_oauth_app_state'
 const APP_RETURN_TO_COOKIE = 'confia_oauth_app_return_to'
+const APP_FLOW_ID_COOKIE = 'confia_oauth_app_flow_id'
+const APP_NONCE_COOKIE = 'confia_oauth_app_nonce'
 const APP_RETURN_MODE = 'app'
 const ALLOWED_APP_SCHEMES = new Set(['confiamais'])
 const APP_CALLBACK_PATH = '/auth/callback'
@@ -127,6 +129,25 @@ function clearAppReturnToCookie(response: NextResponse) {
   })
 }
 
+function clearAppFlowCookies(response: NextResponse) {
+  for (const cookieName of [APP_FLOW_ID_COOKIE, APP_NONCE_COOKIE]) {
+    response.cookies.set(cookieName, '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 0,
+    })
+  }
+}
+
+function clearAppContextCookies(response: NextResponse) {
+  clearOauthStateCookie(response)
+  clearAppStateCookie(response)
+  clearAppReturnToCookie(response)
+  clearAppFlowCookies(response)
+}
+
 function buildSuccessRedirect(origin: string, next: string, code: string) {
   const response = NextResponse.redirect(new URL(next, origin))
 
@@ -166,7 +187,7 @@ async function getSessionWithRetry(
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
-  console.log('[AUTH CALLBACK][v3] hit', { rawUrl: request.url })
+  console.log('[AUTH CALLBACK][v4] hit', { rawUrl: request.url })
 
   const cookieStore = await cookies()
 
@@ -184,8 +205,8 @@ export async function GET(request: NextRequest) {
   const oauthState = stateFromQuery ?? oauthStateFromQuery ?? oauthStateFromCookie
   const appState = appStateFromQuery ?? appStateFromCookie
 
-  const flowId = searchParams.get('flow_id')
-  const nonce = searchParams.get('nonce')
+  const flowId = searchParams.get('flow_id') ?? cookieStore.get(APP_FLOW_ID_COOKIE)?.value ?? null
+  const nonce = searchParams.get('nonce') ?? cookieStore.get(APP_NONCE_COOKIE)?.value ?? null
   const providerError = searchParams.get('error')
   const providerErrorDescription = searchParams.get('error_description')
   const providerErrorCode = searchParams.get('error_code')
@@ -198,6 +219,17 @@ export async function GET(request: NextRequest) {
     (returnMode === APP_RETURN_MODE ? DEFAULT_APP_RETURN_TO : null)
 
   const isAppMode = Boolean(appReturnTo)
+
+  console.log('[AUTH CALLBACK][v4] contexto resolvido', {
+    isAppMode,
+    hasFlowId: Boolean(flowId),
+    hasNonce: Boolean(nonce),
+    returnMode,
+    appReturnTo,
+    hasAppReturnToCookie: Boolean(cookieStore.get(APP_RETURN_TO_COOKIE)?.value),
+    hasFlowIdCookie: Boolean(cookieStore.get(APP_FLOW_ID_COOKIE)?.value),
+    hasNonceCookie: Boolean(cookieStore.get(APP_NONCE_COOKIE)?.value),
+  })
 
   if (!stateFromQuery && isAppMode && appState) {
     console.log('[AUTH CALLBACK] state ausente na query; usando fallback persistido', {
@@ -228,9 +260,7 @@ export async function GET(request: NextRequest) {
         errorDescription: providerErrorDescription,
         errorCode: providerErrorCode,
       })
-      clearOauthStateCookie(response)
-      clearAppStateCookie(response)
-      clearAppReturnToCookie(response)
+      clearAppContextCookies(response)
       return response
     }
 
@@ -248,9 +278,7 @@ export async function GET(request: NextRequest) {
         nonce,
         error: 'missing_code',
       })
-      clearOauthStateCookie(response)
-      clearAppStateCookie(response)
-      clearAppReturnToCookie(response)
+      clearAppContextCookies(response)
       return response
     }
 
@@ -314,9 +342,7 @@ export async function GET(request: NextRequest) {
           nonce,
           error: 'auth_set_session_failed',
         })
-        clearOauthStateCookie(response)
-        clearAppStateCookie(response)
-        clearAppReturnToCookie(response)
+        clearAppContextCookies(response)
         return response
       }
 
@@ -344,9 +370,7 @@ export async function GET(request: NextRequest) {
           nonce,
           error: 'auth_session_not_persisted',
         })
-        clearOauthStateCookie(response)
-        clearAppStateCookie(response)
-        clearAppReturnToCookie(response)
+        clearAppContextCookies(response)
         return response
       }
 
@@ -359,9 +383,7 @@ export async function GET(request: NextRequest) {
     })
 
     const response = buildSuccessRedirect(origin, next, code ?? 'token-session')
-    clearOauthStateCookie(response)
-    clearAppStateCookie(response)
-    clearAppReturnToCookie(response)
+    clearAppContextCookies(response)
     return response
   }
 
@@ -388,6 +410,15 @@ export async function GET(request: NextRequest) {
       refreshToken = appSession?.refresh_token ?? null
     }
 
+    console.log('[AUTH CALLBACK][v4] redirect final app', {
+      appReturnTo,
+      hasCode: Boolean(code),
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+
     const response = buildAppRedirect(appReturnTo, {
       code,
       accessToken,
@@ -398,9 +429,7 @@ export async function GET(request: NextRequest) {
       nonce,
     })
 
-    clearOauthStateCookie(response)
-    clearAppStateCookie(response)
-    clearAppReturnToCookie(response)
+    clearAppContextCookies(response)
     return response
   }
 
@@ -420,9 +449,7 @@ export async function GET(request: NextRequest) {
         userId: existingSession.user.id,
       })
       const response = buildSuccessRedirect(origin, next, code!)
-      clearOauthStateCookie(response)
-      clearAppStateCookie(response)
-      clearAppReturnToCookie(response)
+      clearAppContextCookies(response)
       return response
     }
 
@@ -476,12 +503,10 @@ export async function GET(request: NextRequest) {
     hasFlowId: Boolean(flowId),
   })
 
-  console.log('[AUTH CALLBACK] redirect final web', { next })
+  console.log('[AUTH CALLBACK][v4] redirect final web', { next })
 
   const response = buildSuccessRedirect(origin, next, code!)
-  clearOauthStateCookie(response)
-  clearAppStateCookie(response)
-  clearAppReturnToCookie(response)
+  clearAppContextCookies(response)
 
   return response
 }

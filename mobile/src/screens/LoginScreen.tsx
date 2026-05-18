@@ -35,6 +35,7 @@ export function LoginScreen() {
 
     try {
       setSocialLoading(provider)
+      console.log('[ConfiaOAuth][v4] login_button_press', { provider, platform: Platform.OS })
       const result = provider === 'google' ? await signInWithGoogle() : await signInWithApple()
 
       if (result.cancelled) {

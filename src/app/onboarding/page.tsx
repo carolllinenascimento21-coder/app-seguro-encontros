@@ -53,44 +53,79 @@ export default function OnboardingPage() {
     setOauthLoading(provider)
 
     try {
+      const currentParams = new URLSearchParams(window.location.search)
+      let returnMode = currentParams.get('return_mode')
+      let returnTo = currentParams.get('return_to') ?? currentParams.get('redirect_to')
+      let platform = currentParams.get('platform')
+      let flowId = currentParams.get('flow_id')
+      let state = currentParams.get('state')
+      let nonce = currentParams.get('nonce')
+      const hasAppFlowHints = Boolean(flowId || nonce || state)
+
+      const ua = window.navigator.userAgent || ''
+      const isIOS = /iPhone|iPad|iPod/i.test(ua)
+      const isIOSWebView = isIOS && !/Safari/i.test(ua)
+      const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
+      const shouldForceAppleAppMode = provider === 'apple' && isIOS
+
+      if (!returnMode && (hasAppFlowHints || isIOSWebView || isInAppBrowser || shouldForceAppleAppMode)) {
+        returnMode = 'app'
+      }
+
+      if (!returnTo && returnMode === 'app') {
+        returnTo = 'confiamais://auth/callback'
+      }
+
+      if (returnMode === 'app' && !flowId) {
+        flowId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      }
+
+      if (returnMode === 'app' && !state) {
+        state = flowId
+      }
+
+      if (returnMode === 'app' && !nonce) {
+        nonce = flowId
+      }
+
+      if (!platform && returnMode === 'app') {
+        platform = isIOS ? 'ios' : 'android'
+      }
+
+      if (returnMode === 'app') {
+        const oauthEntryUrl = new URL(`/api/auth/${provider}`, window.location.origin)
+        oauthEntryUrl.searchParams.set('next', '/login')
+        oauthEntryUrl.searchParams.set('return_mode', 'app')
+        oauthEntryUrl.searchParams.set('return_to', returnTo ?? 'confiamais://auth/callback')
+        oauthEntryUrl.searchParams.set('redirect_to', returnTo ?? 'confiamais://auth/callback')
+        oauthEntryUrl.searchParams.set('platform', platform ?? 'android')
+        if (flowId) oauthEntryUrl.searchParams.set('flow_id', flowId)
+        if (state) oauthEntryUrl.searchParams.set('state', state)
+        if (nonce) oauthEntryUrl.searchParams.set('nonce', nonce)
+
+        console.log('[ConfiaOAuth][v4] onboarding_oauth_start_url', {
+          provider,
+          returnMode,
+          returnTo,
+          platform,
+          flowId,
+          hasState: Boolean(state),
+          hasNonce: Boolean(nonce),
+          oauthEntryUrl: oauthEntryUrl.toString(),
+        })
+
+        window.location.assign(oauthEntryUrl.toString())
+        return
+      }
+
       if (provider === 'google') {
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
         googleEntryUrl.searchParams.set('next', '/login')
-
-        const currentParams = new URLSearchParams(window.location.search)
-        let returnMode = currentParams.get('return_mode')
-        let returnTo = currentParams.get('return_to')
-        let platform = currentParams.get('platform')
-        const flowId = currentParams.get('flow_id')
-        const state = currentParams.get('state')
-        const nonce = currentParams.get('nonce')
-        const hasAppFlowHints = Boolean(flowId || nonce)
-
-        const ua = window.navigator.userAgent || ''
-        const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
-        const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
-
-        //if (!returnMode && (isEmbeddedWebView || hasAppFlowHints)) {
-        if (!returnMode && hasAppFlowHints) {
-          returnMode = 'app'
-        }
-
-        if (!returnTo && returnMode === 'app') {
-          returnTo = 'confiamais://auth/callback'
-        }
-
-        if (!platform && returnMode === 'app') {
-          platform = isIOSWebView ? 'ios' : 'android'
-        }
-
-        if (returnMode === 'app' && returnTo) {
-          googleEntryUrl.searchParams.set('return_mode', 'app')
-          googleEntryUrl.searchParams.set('return_to', returnTo)
-          googleEntryUrl.searchParams.set('platform', platform)
-          if (flowId) googleEntryUrl.searchParams.set('flow_id', flowId)
-          if (state) googleEntryUrl.searchParams.set('state', state)
-          if (nonce) googleEntryUrl.searchParams.set('nonce', nonce)
-        }
+        console.log('[ConfiaOAuth][v4] onboarding_oauth_start_url', {
+          provider,
+          returnMode: 'web',
+          oauthEntryUrl: googleEntryUrl.toString(),
+        })
 
         window.location.assign(googleEntryUrl.toString())
         return
@@ -130,6 +165,13 @@ export default function OnboardingPage() {
         setOauthLoading(null)
         return
       }
+
+      console.log('[ConfiaOAuth][v4] onboarding_oauth_start_url', {
+        provider,
+        returnMode: 'web-client',
+        redirectTo,
+        oauthEntryUrl: data.url,
+      })
 
       window.location.assign(data.url)
     } catch (error) {
