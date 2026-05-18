@@ -74,7 +74,7 @@ export async function GET(req: Request) {
   }
 
   const requestUrl = new URL(req.url)
-  console.log('[APPLE OAUTH START][v3] request', { url: requestUrl.toString() })
+  console.log('[APPLE OAUTH START][v4] request', { url: requestUrl.toString() })
 
   let returnMode = getReturnMode(requestUrl.searchParams.get('return_mode'))
   const platform = requestUrl.searchParams.get('platform')
@@ -110,7 +110,7 @@ export async function GET(req: Request) {
     // app_state é o state original enviado pelo app.
     if (appState) callbackUrl.searchParams.set('app_state', appState)
 
-    console.log('[APPLE OAUTH START] fluxo app inicializado', {
+    console.log('[APPLE OAUTH START][v4] fluxo app inicializado', {
       platform: platform || 'android',
       hasFlowId: Boolean(flowId),
       hasNonce: Boolean(nonce),
@@ -121,8 +121,19 @@ export async function GET(req: Request) {
 
   const redirectTo = callbackUrl.toString()
 
+  console.log('[APPLE OAUTH START][v4] callback redirect_to preparado', {
+    returnMode,
+    redirectTo,
+    requestedReturnTo: requestUrl.searchParams.get('return_to'),
+    requestedRedirectTo: requestUrl.searchParams.get('redirect_to'),
+    mobileRedirectTo,
+    hasFlowId: Boolean(flowId),
+    hasNonce: Boolean(nonce),
+    hasAppState: Boolean(appState),
+  })
+
   if (returnMode === APP_RETURN_MODE && !requestedMobileRedirectTo) {
-    console.warn('[APPLE OAUTH START] return_to ausente/inválido; usando fallback padrão de deep link')
+    console.warn('[APPLE OAUTH START][v4] return_to ausente/inválido; usando fallback padrão de deep link')
   }
 
   const cookieStore = await cookies()
@@ -172,21 +183,24 @@ export async function GET(req: Request) {
       oauthStateToPersist = oauthState
     }
   } catch (parseError) {
-    console.warn('[APPLE OAUTH START] não foi possível extrair state do provider:', parseError)
+    console.warn('[APPLE OAUTH START][v4] não foi possível extrair state do provider:', parseError)
   }
 
-  console.log('[ConfiaOAuth][v3] oauth_provider_url_ready', {
+  console.log('[ConfiaOAuth][v4] oauth_provider_url_ready', {
     provider: 'apple',
     flowId,
     appState,
     expectedState: appState,
     oauthState: oauthStateToPersist,
     returnMode,
+    finalOAuthStartUrl,
+    redirectTo,
   })
 
   const response = NextResponse.redirect(finalOAuthStartUrl)
 
   if (oauthStateToPersist) {
+    console.log('[APPLE OAUTH START][v4] gravando cookie oauth_state', { hasValue: true })
     response.cookies.set(OAUTH_STATE_COOKIE, oauthStateToPersist, {
       httpOnly: true,
       sameSite: 'lax',
@@ -197,6 +211,7 @@ export async function GET(req: Request) {
   }
 
   if (appState) {
+    console.log('[APPLE OAUTH START][v4] gravando cookie app_state', { hasValue: true })
     response.cookies.set(APP_STATE_COOKIE, appState, {
       httpOnly: true,
       sameSite: 'lax',
@@ -207,6 +222,7 @@ export async function GET(req: Request) {
   }
 
   if (returnMode === APP_RETURN_MODE && mobileRedirectTo) {
+    console.log('[APPLE OAUTH START][v4] gravando cookie app_return_to', { hasValue: true, value: mobileRedirectTo })
     response.cookies.set(APP_RETURN_TO_COOKIE, mobileRedirectTo, {
       httpOnly: true,
       sameSite: 'lax',
@@ -217,6 +233,7 @@ export async function GET(req: Request) {
   }
 
   if (returnMode === APP_RETURN_MODE && flowId) {
+    console.log('[APPLE OAUTH START][v4] gravando cookie app_flow_id', { hasValue: true, flowId })
     response.cookies.set(APP_FLOW_ID_COOKIE, flowId, {
       httpOnly: true,
       sameSite: 'lax',
@@ -227,6 +244,7 @@ export async function GET(req: Request) {
   }
 
   if (returnMode === APP_RETURN_MODE && nonce) {
+    console.log('[APPLE OAUTH START][v4] gravando cookie app_nonce', { hasValue: true })
     response.cookies.set(APP_NONCE_COOKIE, nonce, {
       httpOnly: true,
       sameSite: 'lax',

@@ -1,6 +1,5 @@
 import { MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { Linking as ReactNativeLinking, Platform } from 'react-native'
-import * as ExpoLinking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
 import Constants from 'expo-constants'
 import { Session, User } from '@supabase/supabase-js'
@@ -18,6 +17,7 @@ const OAUTH_TIMEOUT_MS = 90_000
 const SESSION_RETRY_ATTEMPTS = 20
 const SESSION_RETRY_DELAY_MS = 300
 const DEFAULT_APP_SCHEME = 'confiamais'
+const DEFAULT_API_BASE_URL = 'https://confiamais.net'
 const FLOW_ID_QUERY_PARAM = 'flow_id'
 
 WebBrowser.maybeCompleteAuthSession()
@@ -34,13 +34,18 @@ function getConfiguredScheme() {
   return configuredScheme || DEFAULT_APP_SCHEME
 }
 
+function getApiBaseUrl() {
+  const configuredBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim()
+  return (configuredBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '')
+}
+
 function getRedirectUrl(flowId?: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `${window.location.origin}/auth/callback`
   }
 
   const scheme = getConfiguredScheme()
-  const baseRedirectUrl = ExpoLinking.createURL('auth/callback', { scheme })
+  const baseRedirectUrl = `${scheme}://auth/callback`
 
   if (!flowId) return baseRedirectUrl
 
@@ -246,35 +251,60 @@ export function useAuth() {
 
     try {
       const flowId = Platform.OS === 'web' ? null : createFlowId()
-      const redirectTo = getRedirectUrl(flowId ?? undefined)
-      console.log('[ConfiaOAuth][v3] oauth_start', { provider, flowId, redirectTo, platform: Platform.OS })
+      const redirectTo = getRedirectUrl()
+      console.log('[ConfiaOAuth][v4] oauth_start', { provider, flowId, redirectTo, platform: Platform.OS })
 
       let authStartUrl: string
       let expectedState: string | null = null
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      })
-
-      if (error) throw new Error(error.message)
-      if (!data?.url) throw new Error('OAuth sem URL')
-
-      authStartUrl = data.url
-      expectedState = getQueryParam(data.url, 'state')
-      console.log('[ConfiaOAuth][v3] oauth_provider_url_ready', {
-        provider,
-        flowId,
-        expectedState,
-      })
-
       if (Platform.OS === 'web') {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo,
+            skipBrowserRedirect: true,
+          },
+        })
+
+        if (error) throw new Error(error.message)
+        if (!data?.url) throw new Error('OAuth sem URL')
+
+        authStartUrl = data.url
+        expectedState = getQueryParam(data.url, 'state')
+        console.log('[ConfiaOAuth][v4] oauth_provider_url_ready', {
+          provider,
+          flowId,
+          expectedState,
+          startMode: 'client',
+          authStartUrl,
+        })
+
         window.location.assign(authStartUrl)
         return { cancelled: false }
       }
+
+      const authStartUrlBuilder = new URL(`/api/auth/${provider}`, getApiBaseUrl())
+      authStartUrlBuilder.searchParams.set('next', '/login')
+      authStartUrlBuilder.searchParams.set('return_mode', 'app')
+      authStartUrlBuilder.searchParams.set('return_to', redirectTo)
+      authStartUrlBuilder.searchParams.set('redirect_to', redirectTo)
+      authStartUrlBuilder.searchParams.set('platform', Platform.OS)
+      if (flowId) {
+        authStartUrlBuilder.searchParams.set('flow_id', flowId)
+        authStartUrlBuilder.searchParams.set('state', flowId)
+        authStartUrlBuilder.searchParams.set('nonce', flowId)
+      }
+
+      authStartUrl = authStartUrlBuilder.toString()
+      expectedState = flowId
+
+      console.log('[ConfiaOAuth][v4] oauth_mobile_server_start_url', {
+        provider,
+        flowId,
+        expectedState,
+        redirectTo,
+        authStartUrl,
+      })
 
       const pendingRedirect = waitForAuthRedirect(
         redirectTo,

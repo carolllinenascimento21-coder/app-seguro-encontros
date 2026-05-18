@@ -187,7 +187,7 @@ async function getSessionWithRetry(
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
-  console.log('[AUTH CALLBACK][v3] hit', { rawUrl: request.url })
+  console.log('[AUTH CALLBACK][v4] hit', { rawUrl: request.url })
 
   const cookieStore = await cookies()
 
@@ -219,6 +219,17 @@ export async function GET(request: NextRequest) {
     (returnMode === APP_RETURN_MODE ? DEFAULT_APP_RETURN_TO : null)
 
   const isAppMode = Boolean(appReturnTo)
+
+  console.log('[AUTH CALLBACK][v4] contexto resolvido', {
+    isAppMode,
+    hasFlowId: Boolean(flowId),
+    hasNonce: Boolean(nonce),
+    returnMode,
+    appReturnTo,
+    hasAppReturnToCookie: Boolean(cookieStore.get(APP_RETURN_TO_COOKIE)?.value),
+    hasFlowIdCookie: Boolean(cookieStore.get(APP_FLOW_ID_COOKIE)?.value),
+    hasNonceCookie: Boolean(cookieStore.get(APP_NONCE_COOKIE)?.value),
+  })
 
   if (!stateFromQuery && isAppMode && appState) {
     console.log('[AUTH CALLBACK] state ausente na query; usando fallback persistido', {
@@ -399,6 +410,15 @@ export async function GET(request: NextRequest) {
       refreshToken = appSession?.refresh_token ?? null
     }
 
+    console.log('[AUTH CALLBACK][v4] redirect final app', {
+      appReturnTo,
+      hasCode: Boolean(code),
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasFlowId: Boolean(flowId),
+      hasNonce: Boolean(nonce),
+    })
+
     const response = buildAppRedirect(appReturnTo, {
       code,
       accessToken,
@@ -483,7 +503,7 @@ export async function GET(request: NextRequest) {
     hasFlowId: Boolean(flowId),
   })
 
-  console.log('[AUTH CALLBACK] redirect final web', { next })
+  console.log('[AUTH CALLBACK][v4] redirect final web', { next })
 
   const response = buildSuccessRedirect(origin, next, code!)
   clearAppContextCookies(response)
