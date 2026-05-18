@@ -1,8 +1,22 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
+import {
+  canUseFreeReputationQuery,
+  hasPaidReputationAccess,
+} from '@/lib/reputation/access-control'
 
 const MAX_TERM_LENGTH = 80
+
+type ProfileAccessRow = {
+  has_active_plan: boolean | null
+  current_plan_id: string | null
+  subscription_status: string | null
+  free_queries_used: number | null
+}
+
+const PROFILE_ACCESS_FIELDS =
+  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 function normalize(value: string | null) {
   return (value ?? '')
@@ -39,15 +53,22 @@ export async function GET(req: Request) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('current_plan_id')
+      .select(PROFILE_ACCESS_FIELDS)
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle<ProfileAccessRow>()
 
     if (profileError) {
       throw new Error(profileError.message)
     }
 
-    const isPremiumUser = (profile?.current_plan_id ?? 'free') !== 'free'
+    if (!profile) {
+      return NextResponse.json(
+        { success: false, message: 'Perfil não encontrado' },
+        { status: 404 }
+      )
+    }
+
+    const isPremiumUser = hasPaidReputationAccess(profile)
 
     const { searchParams } = new URL(req.url)
 
@@ -71,6 +92,18 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { success: false, message: 'Informe um termo para busca' },
         { status: 400 }
+      )
+    }
+
+    if (!isPremiumUser && !canUseFreeReputationQuery(profile)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Limite de 3 consultas gratuitas atingido',
+          reason: 'PAYWALL',
+          free_queries_used: profile.free_queries_used ?? 0,
+        },
+        { status: 403 }
       )
     }
 
@@ -133,16 +166,6 @@ export async function GET(req: Request) {
       const summary = summaryMap.get(profileItem.id)
       const hasData = Number(summary?.total_reviews ?? 0) > 0 || Number(summary?.alert_count ?? 0) > 0
 
-      if (!isPremiumUser) {
-        return {
-          male_profile_id: profileItem.id,
-          name: profileItem.display_name ?? 'Sem nome',
-          city: profileItem.city ?? null,
-          has_data: hasData,
-          locked: true,
-        }
-      }
-
       return {
         male_profile_id: profileItem.id,
         name: profileItem.display_name ?? 'Sem nome',
@@ -160,6 +183,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       is_premium_user: isPremiumUser,
+      free_queries_used: profile.free_queries_used ?? 0,
       results,
     })
   } catch (err: any) {

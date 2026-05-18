@@ -22,7 +22,7 @@ const getSupabaseServerEnv = () => {
 
 export async function createServerClient() {
   const cookieStore = await cookies()
-  const headerStore = headers()
+  const headerStore = await headers()
   const { url, anonKey } = getSupabaseServerEnv()
 
   const authHeader = headerStore.get('authorization')

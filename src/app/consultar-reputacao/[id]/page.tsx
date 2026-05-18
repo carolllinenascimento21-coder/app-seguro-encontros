@@ -6,8 +6,23 @@ import { ReportReviewButton } from '@/components/ReportReviewButton'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
 import { PremiumDetailLock } from '@/components/paywall/PremiumDetailLock'
+import {
+  canUseFreeReputationQuery,
+  getFreeReputationQueriesUsed,
+  hasPaidReputationAccess,
+} from '@/lib/reputation/access-control'
 
 export const dynamic = 'force-dynamic'
+
+type ProfileAccessRow = {
+  has_active_plan: boolean | null
+  current_plan_id: string | null
+  subscription_status: string | null
+  free_queries_used: number | null
+}
+
+const PROFILE_ACCESS_FIELDS =
+  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 const categorias = [
   { key: 'comportamento', label: 'Comportamento' },
@@ -71,13 +86,19 @@ export default async function Page({
 
   const jaAvaliei = Boolean(minhaAvaliacao?.id)
 
-  const { data: me } = await supabase
+  const { data: me, error: profileError } = await supabase
     .from('profiles')
-    .select('current_plan_id')
+    .select(PROFILE_ACCESS_FIELDS)
     .eq('id', user.id)
-    .maybeSingle()
+    .maybeSingle<ProfileAccessRow>()
 
-  const isPremiumUser = (me?.current_plan_id ?? 'free') !== 'free'
+  if (profileError) {
+    console.error('Erro ao validar acesso no detalhe de reputação', profileError)
+    return <div className="text-white p-10">Erro ao validar acesso</div>
+  }
+
+  const isPremiumUser = hasPaidReputationAccess(me)
+  let canViewFullReputation = isPremiumUser
 
   const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
     .from('male_profiles')
@@ -89,7 +110,30 @@ export default async function Page({
     return <div className="text-white p-10">Perfil não encontrado</div>
   }
 
-  if (!isPremiumUser) {
+  if (!isPremiumUser && canUseFreeReputationQuery(me)) {
+    const nextFreeQueriesUsed = getFreeReputationQueriesUsed(me) + 1
+    const { error: consumeError } = await supabaseAdmin
+      .from('profiles')
+      .update({ free_queries_used: nextFreeQueriesUsed })
+      .eq('id', user.id)
+
+    if (consumeError) {
+      console.error('Erro ao consumir consulta gratuita de reputação', consumeError)
+      return <div className="text-white p-10">Erro ao validar acesso</div>
+    }
+
+    const { error: consultaError } = await supabaseAdmin
+      .from('consultas')
+      .insert({ user_id: user.id })
+
+    if (consultaError) {
+      console.error('Erro ao registrar consulta gratuita de reputação', consultaError)
+    }
+
+    canViewFullReputation = true
+  }
+
+  if (!canViewFullReputation) {
     const { data: summary } = await supabaseAdmin
       .from('male_profile_reputation_summary')
       .select('total_reviews, alert_count')

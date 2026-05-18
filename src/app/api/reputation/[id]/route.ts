@@ -3,6 +3,21 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
+import {
+  canUseFreeReputationQuery,
+  getFreeReputationQueriesUsed,
+  hasPaidReputationAccess,
+} from '@/lib/reputation/access-control'
+
+type ProfileAccessRow = {
+  has_active_plan: boolean | null
+  current_plan_id: string | null
+  subscription_status: string | null
+  free_queries_used: number | null
+}
+
+const PROFILE_ACCESS_FIELDS =
+  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 export async function GET(
   _req: Request,
@@ -42,9 +57,9 @@ export async function GET(
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('current_plan_id')
+      .select(PROFILE_ACCESS_FIELDS)
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle<ProfileAccessRow>()
 
     if (profileError) {
       console.error('Erro ao validar plano do perfil', profileError)
@@ -54,10 +69,50 @@ export async function GET(
       )
     }
 
-    const isPremiumUser = (profile?.current_plan_id ?? 'free') !== 'free'
+    const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
+      .from('male_profiles')
+      .select('id')
+      .eq('id', maleProfileId)
+      .maybeSingle()
 
-    // 🔒 USUÁRIO FREE
-    if (!isPremiumUser) {
+    if (maleProfileError || !maleProfile) {
+      return NextResponse.json(
+        { error: 'Perfil não encontrado', allowed: false },
+        { status: 404 }
+      )
+    }
+
+    const isPremiumUser = hasPaidReputationAccess(profile)
+    let canViewFullReputation = isPremiumUser
+
+    if (!isPremiumUser && canUseFreeReputationQuery(profile)) {
+      const nextFreeQueriesUsed = getFreeReputationQueriesUsed(profile) + 1
+      const { error: consumeError } = await supabaseAdmin
+        .from('profiles')
+        .update({ free_queries_used: nextFreeQueriesUsed })
+        .eq('id', user.id)
+
+      if (consumeError) {
+        console.error('Erro ao consumir consulta gratuita de reputação', consumeError)
+        return NextResponse.json(
+          { error: 'Erro ao validar acesso', allowed: false },
+          { status: 500 }
+        )
+      }
+
+      const { error: consultaError } = await supabaseAdmin
+        .from('consultas')
+        .insert({ user_id: user.id })
+
+      if (consultaError) {
+        console.error('Erro ao registrar consulta gratuita de reputação', consultaError)
+      }
+
+      canViewFullReputation = true
+    }
+
+    // 🔒 USUÁRIO FREE SEM CONSULTAS DISPONÍVEIS
+    if (!canViewFullReputation) {
       const { data: summary, error: summaryError } = await supabaseAdmin
         .from('male_profile_reputation_summary')
         .select('total_reviews, alert_count')
