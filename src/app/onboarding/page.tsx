@@ -53,45 +53,48 @@ export default function OnboardingPage() {
     setOauthLoading(provider)
 
     try {
+      const currentParams = new URLSearchParams(window.location.search)
+      let returnMode = currentParams.get('return_mode')
+      let returnTo = currentParams.get('return_to') ?? currentParams.get('redirect_to')
+      let platform = currentParams.get('platform')
+      const flowId = currentParams.get('flow_id')
+      const state = currentParams.get('state')
+      const nonce = currentParams.get('nonce')
+      const hasAppFlowHints = Boolean(flowId || nonce || state)
+
+      const ua = window.navigator.userAgent || ''
+      const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
+
+      if (!returnMode && hasAppFlowHints) {
+        returnMode = 'app'
+      }
+
+      if (!returnTo && returnMode === 'app') {
+        returnTo = 'confiamais://auth/callback'
+      }
+
+      if (!platform && returnMode === 'app') {
+        platform = isIOSWebView ? 'ios' : 'android'
+      }
+
+      if (returnMode === 'app') {
+        const oauthEntryUrl = new URL(`/api/auth/${provider}`, window.location.origin)
+        oauthEntryUrl.searchParams.set('next', '/login')
+        oauthEntryUrl.searchParams.set('return_mode', 'app')
+        oauthEntryUrl.searchParams.set('return_to', returnTo ?? 'confiamais://auth/callback')
+        oauthEntryUrl.searchParams.set('redirect_to', returnTo ?? 'confiamais://auth/callback')
+        oauthEntryUrl.searchParams.set('platform', platform ?? 'android')
+        if (flowId) oauthEntryUrl.searchParams.set('flow_id', flowId)
+        if (state) oauthEntryUrl.searchParams.set('state', state)
+        if (nonce) oauthEntryUrl.searchParams.set('nonce', nonce)
+
+        window.location.assign(oauthEntryUrl.toString())
+        return
+      }
+
       if (provider === 'google') {
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
         googleEntryUrl.searchParams.set('next', '/login')
-
-        const currentParams = new URLSearchParams(window.location.search)
-        let returnMode = currentParams.get('return_mode')
-        let returnTo = currentParams.get('return_to')
-        let platform = currentParams.get('platform')
-        const flowId = currentParams.get('flow_id')
-        const state = currentParams.get('state')
-        const nonce = currentParams.get('nonce')
-        const hasAppFlowHints = Boolean(flowId || nonce)
-
-        const ua = window.navigator.userAgent || ''
-        const isIOSWebView = /iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)
-        const isInAppBrowser = /(FBAN|FBAV|Instagram|Line|TikTok|MicroMessenger)/i.test(ua)
-
-        //if (!returnMode && (isEmbeddedWebView || hasAppFlowHints)) {
-        if (!returnMode && hasAppFlowHints) {
-          returnMode = 'app'
-        }
-
-        if (!returnTo && returnMode === 'app') {
-          returnTo = 'confiamais://auth/callback'
-        }
-
-        if (!platform && returnMode === 'app') {
-          platform = isIOSWebView ? 'ios' : 'android'
-        }
-
-        if (returnMode === 'app' && returnTo) {
-          googleEntryUrl.searchParams.set('return_mode', 'app')
-          googleEntryUrl.searchParams.set('return_to', returnTo)
-          googleEntryUrl.searchParams.set('platform', platform)
-          if (flowId) googleEntryUrl.searchParams.set('flow_id', flowId)
-          if (state) googleEntryUrl.searchParams.set('state', state)
-          if (nonce) googleEntryUrl.searchParams.set('nonce', nonce)
-        }
-
         window.location.assign(googleEntryUrl.toString())
         return
       }

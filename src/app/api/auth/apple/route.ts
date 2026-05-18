@@ -59,7 +59,7 @@ export async function GET(req: Request) {
   let supabaseEnv
 
   try {
-    supabaseEnv = getSupabasePublicEnv('api/auth/google')
+    supabaseEnv = getSupabasePublicEnv('api/auth/apple')
   } catch (error) {
     const envError = getMissingSupabaseEnvDetails(error)
     if (envError) {
@@ -74,7 +74,7 @@ export async function GET(req: Request) {
   }
 
   const requestUrl = new URL(req.url)
-  console.log('[GOOGLE OAUTH START][v3] request', { url: requestUrl.toString() })
+  console.log('[APPLE OAUTH START][v3] request', { url: requestUrl.toString() })
 
   let returnMode = getReturnMode(requestUrl.searchParams.get('return_mode'))
   const platform = requestUrl.searchParams.get('platform')
@@ -110,7 +110,7 @@ export async function GET(req: Request) {
     // app_state é o state original enviado pelo app.
     if (appState) callbackUrl.searchParams.set('app_state', appState)
 
-    console.log('[GOOGLE OAUTH START] fluxo app inicializado', {
+    console.log('[APPLE OAUTH START] fluxo app inicializado', {
       platform: platform || 'android',
       hasFlowId: Boolean(flowId),
       hasNonce: Boolean(nonce),
@@ -122,7 +122,7 @@ export async function GET(req: Request) {
   const redirectTo = callbackUrl.toString()
 
   if (returnMode === APP_RETURN_MODE && !requestedMobileRedirectTo) {
-    console.warn('[GOOGLE OAUTH START] return_to ausente/inválido; usando fallback padrão de deep link')
+    console.warn('[APPLE OAUTH START] return_to ausente/inválido; usando fallback padrão de deep link')
   }
 
   const cookieStore = await cookies()
@@ -143,7 +143,7 @@ export async function GET(req: Request) {
   )
 
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
+    provider: 'apple',
     options: {
       redirectTo,
       skipBrowserRedirect: true,
@@ -151,9 +151,9 @@ export async function GET(req: Request) {
   })
 
   if (error || !data?.url) {
-    console.error('OAuth Google erro:', error)
+    console.error('OAuth Apple erro:', error)
     return NextResponse.redirect(
-      new URL('/login?error=google_oauth_start', requestUrl.origin)
+      new URL('/login?error=apple_oauth_start', requestUrl.origin)
     )
   }
 
@@ -172,11 +172,11 @@ export async function GET(req: Request) {
       oauthStateToPersist = oauthState
     }
   } catch (parseError) {
-    console.warn('[GOOGLE OAUTH START] não foi possível extrair state do provider:', parseError)
+    console.warn('[APPLE OAUTH START] não foi possível extrair state do provider:', parseError)
   }
 
   console.log('[ConfiaOAuth][v3] oauth_provider_url_ready', {
-    provider: 'google',
+    provider: 'apple',
     flowId,
     appState,
     expectedState: appState,
