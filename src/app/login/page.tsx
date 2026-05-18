@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
+  const [redirectingAfterLogin, setRedirectingAfterLogin] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const loginInFlightRef = useRef(false)
   const oauthInFlightRef = useRef(false)
@@ -56,8 +57,11 @@ export default function LoginPage() {
             continue
           }
 
+          setRedirectingAfterLogin(false)
           return
         }
+
+        setRedirectingAfterLogin(true)
 
         const {
           data: { user },
@@ -74,6 +78,7 @@ export default function LoginPage() {
             continue
           }
 
+          setRedirectingAfterLogin(false)
           return
         }
 
@@ -90,6 +95,7 @@ export default function LoginPage() {
           }
 
           console.warn('Perfil ainda indisponível após tentativas de sincronização pós-login.')
+          setRedirectingAfterLogin(false)
           setError('Estamos finalizando seu acesso. Tente novamente em alguns segundos.')
           return
         }
@@ -170,7 +176,7 @@ export default function LoginPage() {
   }, [])
 
   const startOAuth = (provider: 'google' | 'apple') => {
-    if (loading || oauthInFlightRef.current) return
+    if (loading || redirectingAfterLogin || oauthInFlightRef.current) return
 
     oauthInFlightRef.current = true
     setOauthLoading(provider)
@@ -215,7 +221,7 @@ export default function LoginPage() {
   const signInWithApple = () => startOAuth('apple')
 
   const handleLogin = async () => {
-    if (loading || oauthInFlightRef.current || loginInFlightRef.current) return
+    if (loading || redirectingAfterLogin || oauthInFlightRef.current || loginInFlightRef.current) return
 
     loginInFlightRef.current = true
     setLoading(true)
@@ -304,8 +310,28 @@ export default function LoginPage() {
     }
   }
 
+  const isFormDisabled = loading || oauthLoading !== null || redirectingAfterLogin
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-black px-4">
+      {redirectingAfterLogin && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 px-6 text-center backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="space-y-4 rounded-2xl border border-[#D4AF37] bg-black p-8 text-white shadow-2xl">
+            <div
+              className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#D4AF37]/30 border-t-[#D4AF37]"
+              aria-hidden="true"
+            />
+            <div className="space-y-1">
+              <p className="font-semibold text-[#D4AF37]">Carregando sua conta...</p>
+              <p className="text-sm text-gray-300">Estamos abrindo a Home com seus dados.</p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="w-full max-w-sm space-y-6 rounded-2xl border border-[#D4AF37] p-8">
         <h1 className="text-2xl font-bold text-center text-white">Entrar</h1>
 
@@ -319,7 +345,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={signInWithApple}
-            disabled={loading || oauthLoading !== null}
+            disabled={isFormDisabled}
             className="flex w-full items-center justify-center gap-3 rounded-xl border border-white bg-white py-3 font-semibold text-black transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Continuar com Apple"
           >
@@ -330,7 +356,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={signInWithGoogle}
-            disabled={loading || oauthLoading !== null}
+            disabled={isFormDisabled}
             className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#D4AF37] bg-transparent py-3 font-semibold text-white transition hover:bg-[#D4AF37]/10 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Continuar com Google"
           >
@@ -355,7 +381,8 @@ export default function LoginPage() {
           placeholder="E-mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none"
+          disabled={isFormDisabled}
+          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
 
         <input
@@ -363,7 +390,8 @@ export default function LoginPage() {
           placeholder="Senha"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none"
+          disabled={isFormDisabled}
+          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
 
         <div className="-mt-2 flex items-center justify-between">
@@ -372,7 +400,8 @@ export default function LoginPage() {
               type="checkbox"
               checked={rememberMe}
               onChange={(event) => setRememberMe(event.target.checked)}
-              className="h-4 w-4 rounded border border-[#D4AF37] bg-transparent accent-[#D4AF37]"
+              disabled={isFormDisabled}
+              className="h-4 w-4 rounded border border-[#D4AF37] bg-transparent accent-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-50"
             />
             Lembrar meu e-mail
           </label>
@@ -384,7 +413,7 @@ export default function LoginPage() {
 
         <button
           onClick={handleLogin}
-          disabled={loading || oauthLoading !== null}
+          disabled={isFormDisabled}
           className="w-full rounded-xl bg-[#D4AF37] py-3 font-semibold text-black transition hover:bg-[#c9a634] disabled:opacity-50"
         >
           {loading ? 'Entrando...' : 'Entrar'}
