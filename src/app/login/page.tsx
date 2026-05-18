@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Apple } from 'lucide-react'
 import Link from 'next/link'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
@@ -19,8 +20,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const loginInFlightRef = useRef(false)
+  const oauthInFlightRef = useRef(false)
   const oauthCheckRanRef = useRef(false)
   const resolvingRouteRef = useRef(false)
   const shouldRetryRef = useRef(false)
@@ -151,8 +154,68 @@ export default function LoginPage() {
     }
   }, [resolvePostLoginRoute])
 
+  useEffect(() => {
+    const resetOAuthState = () => {
+      oauthInFlightRef.current = false
+      setOauthLoading(null)
+    }
+
+    window.addEventListener('pageshow', resetOAuthState)
+    window.addEventListener('focus', resetOAuthState)
+
+    return () => {
+      window.removeEventListener('pageshow', resetOAuthState)
+      window.removeEventListener('focus', resetOAuthState)
+    }
+  }, [])
+
+  const startOAuth = (provider: 'google' | 'apple') => {
+    if (loading || oauthInFlightRef.current) return
+
+    oauthInFlightRef.current = true
+    setOauthLoading(provider)
+    setError(null)
+
+    try {
+      const currentParams = new URLSearchParams(window.location.search)
+      const nextPath = currentParams.get('next') || '/login'
+      const oauthEntryUrl = new URL(`/api/auth/${provider}`, window.location.origin)
+
+      oauthEntryUrl.searchParams.set('next', nextPath)
+
+      const passthroughParams = [
+        'return_mode',
+        'return_to',
+        'redirect_to',
+        'platform',
+        'flow_id',
+        'state',
+        'nonce',
+      ]
+
+      for (const param of passthroughParams) {
+        const value = currentParams.get(param)
+
+        if (value) {
+          oauthEntryUrl.searchParams.set(param, value)
+        }
+      }
+
+      window.location.assign(oauthEntryUrl.toString())
+    } catch (err) {
+      console.error(`Erro ao iniciar login com ${provider}:`, err)
+      oauthInFlightRef.current = false
+      setOauthLoading(null)
+      setError('Não foi possível iniciar o login social. Tente novamente.')
+    }
+  }
+
+  const signInWithGoogle = () => startOAuth('google')
+
+  const signInWithApple = () => startOAuth('apple')
+
   const handleLogin = async () => {
-    if (loading || loginInFlightRef.current) return
+    if (loading || oauthInFlightRef.current || loginInFlightRef.current) return
 
     loginInFlightRef.current = true
     setLoading(true)
@@ -252,6 +315,41 @@ export default function LoginPage() {
           </div>
         )}
 
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={signInWithApple}
+            disabled={loading || oauthLoading !== null}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-white bg-white py-3 font-semibold text-black transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Continuar com Apple"
+          >
+            <Apple className="h-5 w-5" aria-hidden="true" />
+            {oauthLoading === 'apple' ? 'Conectando com Apple...' : 'Continuar com Apple'}
+          </button>
+
+          <button
+            type="button"
+            onClick={signInWithGoogle}
+            disabled={loading || oauthLoading !== null}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#D4AF37] bg-transparent py-3 font-semibold text-white transition hover:bg-[#D4AF37]/10 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Continuar com Google"
+          >
+            <span
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-sm font-bold text-[#4285F4]"
+              aria-hidden="true"
+            >
+              G
+            </span>
+            {oauthLoading === 'google' ? 'Conectando com Google...' : 'Continuar com Google'}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-gray-500">
+          <span className="h-px flex-1 bg-[#D4AF37]/40" />
+          ou entre com e-mail
+          <span className="h-px flex-1 bg-[#D4AF37]/40" />
+        </div>
+
         <input
           type="email"
           placeholder="E-mail"
@@ -286,7 +384,7 @@ export default function LoginPage() {
 
         <button
           onClick={handleLogin}
-          disabled={loading}
+          disabled={loading || oauthLoading !== null}
           className="w-full rounded-xl bg-[#D4AF37] py-3 font-semibold text-black transition hover:bg-[#c9a634] disabled:opacity-50"
         >
           {loading ? 'Entrando...' : 'Entrar'}
