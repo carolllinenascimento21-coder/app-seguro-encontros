@@ -315,9 +315,16 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-black px-4">
       {redirectingAfterLogin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 px-6 text-center backdrop-blur-sm" role="status" aria-live="polite">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 px-6 text-center backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
           <div className="space-y-4 rounded-2xl border border-[#D4AF37] bg-black p-8 text-white shadow-2xl">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#D4AF37]/30 border-t-[#D4AF37]" aria-hidden="true" />
+            <div
+              className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#D4AF37]/30 border-t-[#D4AF37]"
+              aria-hidden="true"
+            />
             <div className="space-y-1">
               <p className="font-semibold text-[#D4AF37]">Carregando sua conta...</p>
               <p className="text-sm text-gray-300">Estamos abrindo a Home com seus dados.</p>
@@ -374,7 +381,8 @@ export default function LoginPage() {
           placeholder="E-mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none"
+          disabled={isFormDisabled}
+          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
 
         <input
@@ -382,7 +390,8 @@ export default function LoginPage() {
           placeholder="Senha"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none"
+          disabled={isFormDisabled}
+          className="w-full rounded-lg border border-[#D4AF37] bg-transparent px-3 py-2 text-white placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
 
         <div className="-mt-2 flex items-center justify-between">
@@ -391,7 +400,8 @@ export default function LoginPage() {
               type="checkbox"
               checked={rememberMe}
               onChange={(event) => setRememberMe(event.target.checked)}
-              className="h-4 w-4 rounded border border-[#D4AF37] bg-transparent accent-[#D4AF37]"
+              disabled={isFormDisabled}
+              className="h-4 w-4 rounded border border-[#D4AF37] bg-transparent accent-[#D4AF37] disabled:cursor-not-allowed disabled:opacity-50"
             />
             Lembrar meu e-mail
           </label>
