@@ -26,6 +26,10 @@ function normalize(value: string | null) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+function compact(value: string) {
+  return value.replace(/[^a-z0-9]/g, '')
+}
+
 export async function GET(req: Request) {
   try {
     const supabase = await createServerClient()
@@ -112,11 +116,21 @@ export async function GET(req: Request) {
       .select('id, display_name, city')
 
     if (nome) {
-      profilesQuery = profilesQuery.ilike('normalized_name', `%${nome}%`)
+      const nomeCompact = compact(nome)
+      const nomeFilters = [`normalized_name.ilike.%${nome}%`]
+      if (nomeCompact && nomeCompact !== nome) {
+        nomeFilters.push(`normalized_name.ilike.%${nomeCompact}%`)
+      }
+      profilesQuery = profilesQuery.or(nomeFilters.join(','))
     }
 
     if (cidade) {
-      profilesQuery = profilesQuery.ilike('normalized_city', `%${cidade}%`)
+      const cidadeCompact = compact(cidade)
+      const cidadeFilters = [`normalized_city.ilike.%${cidade}%`]
+      if (cidadeCompact && cidadeCompact !== cidade) {
+        cidadeFilters.push(`normalized_city.ilike.%${cidadeCompact}%`)
+      }
+      profilesQuery = profilesQuery.or(cidadeFilters.join(','))
     }
 
     const { data: maleProfiles, error: maleProfilesError } = await profilesQuery.limit(30)
