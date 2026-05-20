@@ -26,6 +26,10 @@ function normalize(value: string | null) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+function compact(value: string) {
+  return value.replace(/[^a-z0-9]/g, '')
+}
+
 export async function GET(req: Request) {
   try {
     const supabase = await createServerClient()
