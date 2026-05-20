@@ -112,11 +112,11 @@ export async function GET(req: Request) {
       .select('id, display_name, city')
 
     if (nome) {
-      profilesQuery = profilesQuery.ilike('display_name', `%${nome}%`)
+      profilesQuery = profilesQuery.ilike('normalized_name', `%${nome}%`)
     }
 
     if (cidade) {
-      profilesQuery = profilesQuery.ilike('city', `%${cidade}%`)
+      profilesQuery = profilesQuery.ilike('normalized_city', `%${cidade}%`)
     }
 
     const { data: maleProfiles, error: maleProfilesError } = await profilesQuery.limit(30)
