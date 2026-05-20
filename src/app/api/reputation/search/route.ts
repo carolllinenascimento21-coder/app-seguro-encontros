@@ -111,22 +111,42 @@ export async function GET(req: Request) {
       )
     }
 
-    let profilesQuery = supabaseAdmin
-      .from('male_profiles')
-      .select('id, display_name, city')
+    const nomeRawTrimmed = (nomeRaw ?? '').trim()
+    const cidadeRawTrimmed = (cidadeRaw ?? '').trim()
 
-    if (nome) {
-      profilesQuery = profilesQuery.ilike('normalized_name', `%${nome}%`)
+    const runSearch = async (nameColumn: 'normalized_name' | 'display_name', cityColumn: 'normalized_city' | 'city') => {
+      let query = supabaseAdmin
+        .from('male_profiles')
+        .select('id, display_name, city')
+
+      if (nome) {
+        query = query.ilike(nameColumn, `%${nameColumn === 'normalized_name' ? nome : nomeRawTrimmed}%`)
+      }
+
+      if (cidade) {
+        query = query.ilike(cityColumn, `%${cityColumn === 'normalized_city' ? cidade : cidadeRawTrimmed}%`)
+      }
+
+      return query.limit(30)
     }
 
-    if (cidade) {
-      profilesQuery = profilesQuery.ilike('normalized_city', `%${cidade}%`)
+    const { data: normalizedProfiles, error: normalizedProfilesError } = await runSearch(
+      'normalized_name',
+      'normalized_city'
+    )
+
+    if (normalizedProfilesError) {
+      throw new Error(normalizedProfilesError.message)
     }
 
-    const { data: maleProfiles, error: maleProfilesError } = await profilesQuery.limit(30)
+    const shouldFallbackToRaw = (normalizedProfiles?.length ?? 0) === 0
 
-    if (maleProfilesError) {
-      throw new Error(maleProfilesError.message)
+    const { data: maleProfiles, error: rawProfilesError } = shouldFallbackToRaw
+      ? await runSearch('display_name', 'city')
+      : { data: normalizedProfiles, error: null }
+
+    if (rawProfilesError) {
+      throw new Error(rawProfilesError.message)
     }
 
     const profileIds = (maleProfiles ?? []).map((p) => p.id)
