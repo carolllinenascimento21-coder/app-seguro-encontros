@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
+import Navbar from '@/components/custom/navbar'
+import { ArrowLeft } from 'lucide-react'
 import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags'
 
 type Notas = {
@@ -225,8 +227,18 @@ export default function AvaliarClient() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] px-4 py-10 md:py-14">
-      <div className="mx-auto w-full max-w-3xl space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 text-white shadow-[0_30px_70px_rgba(0,0,0,0.5)] backdrop-blur-xl md:p-8">
+    <div className="min-h-screen bg-[#0A0A0A] px-4 py-8 pb-24 md:py-12">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-white/90 transition hover:border-[#D4AF37]/40 hover:text-[#D4AF37]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </button>
+
+        <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 text-white shadow-[0_30px_70px_rgba(0,0,0,0.5)] backdrop-blur-xl md:p-8">
         <header className="space-y-2 pb-2">
           <p className="text-xs uppercase tracking-[0.25em] text-[#D4AF37]/85">Confia+ premium review</p>
           <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">Nova avaliação</h1>
@@ -389,7 +401,9 @@ export default function AvaliarClient() {
         >
           {loading ? 'Publicando...' : 'Publicar avaliação'}
         </button>
+        </div>
       </div>
+      <Navbar />
     </div>
   )
 }
