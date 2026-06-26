@@ -1,4 +1,4 @@
-export const FREE_REPUTATION_QUERY_LIMIT = 3
+export const FREE_REPUTATION_QUERY_LIMIT = 999
 
 export type ReputationAccessProfile = {
   plan?: string | null
