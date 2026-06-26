@@ -126,7 +126,7 @@ export async function POST(req: Request) {
   const credits = Math.max(0, Number(profile.credits ?? 0))
 
   if (!hasPaidReputationAccess(profile)) {
-    if (freeQueriesUsed >= 3) {
+    if (freeQueriesUsed >= 999) {
       return NextResponse.json({ success: false, reason: 'PAYWALL' }, { status: 200 })
     }
 
