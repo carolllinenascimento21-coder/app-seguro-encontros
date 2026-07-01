@@ -374,20 +374,17 @@ export default async function HomePage({
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gradient-to-br from-[#D4AF37]/10 to-transparent border border-[#D4AF37]/20 rounded-xl p-4 text-center">
               <Shield className="w-6 h-6 text-[#D4AF37] mx-auto mb-2" />
-              <p className="text-2xl font-bold text-white">{stats.total_profiles}</p>
-              <p className="text-xs text-gray-400">Perfis</p>
+              <p className="text-sm font-semibold text-white">Ambiente seguro</p>
             </div>
 
             <div className="bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/20 rounded-xl p-4 text-center">
               <Star className="w-6 h-6 text-green-500 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-white">{stats.total_reviews}</p>
-              <p className="text-xs text-gray-400">Avaliações</p>
+              <p className="text-sm font-semibold text-white">Avaliações moderadas</p>
             </div>
 
             <div className="bg-gradient-to-br from-red-500/10 to-transparent border border-red-500/20 rounded-xl p-4 text-center">
               <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-white">{stats.total_alerts}</p>
-              <p className="text-xs text-gray-400">Alertas</p>
+              <p className="text-sm font-semibold text-white">Comunidade em crescimento</p>
             </div>
           </div>
         </div>
