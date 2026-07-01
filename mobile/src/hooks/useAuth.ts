@@ -242,6 +242,11 @@ export function useAuth() {
     if (error) throw new Error(error.message)
   }, [])
 
+  const signInAnonymously = useCallback(async () => {
+    const { error } = await supabase.auth.signInAnonymously()
+    if (error) throw new Error(error.message)
+  }, [])
+
   const signInWithOAuth = useCallback(async (provider: OAuthProvider) => {
     if (oauthInFlightRef.current) {
       return { cancelled: true }
@@ -440,6 +445,7 @@ export function useAuth() {
     user,
     isAuthenticated: Boolean(session?.user),
     signIn,
+    signInAnonymously,
     signInWithGoogle,
     signInWithApple,
     signOut,

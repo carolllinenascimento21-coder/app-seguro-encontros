@@ -7,6 +7,7 @@ import { User } from '@supabase/supabase-js'
 
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../services/supabase'
+import { isAnonymousUser } from '../utils/authState'
 import { AvaliarScreen } from '../screens/AvaliarScreen'
 import { HomeScreen } from '../screens/HomeScreen'
 import { LoginScreen } from '../screens/LoginScreen'
@@ -17,6 +18,7 @@ type AuthContextValue = {
   user: User | null
   signIn: (credentials: { email: string; password: string }) => Promise<void>
   signInWithGoogle: () => Promise<{ cancelled: boolean }>
+  signInAnonymously: () => Promise<void>
   signInWithApple: () => Promise<{ cancelled: boolean }>
   signOut: () => Promise<void>
 }
@@ -48,14 +50,14 @@ function MainTabs() {
 }
 
 export function RootNavigation() {
-  const { isAuthenticated, loading, signIn, signInWithApple, signInWithGoogle, signOut, user } = useAuth()
+  const { isAuthenticated, loading, signIn, signInAnonymously, signInWithApple, signInWithGoogle, signOut, user } = useAuth()
   const [profileGateLoading, setProfileGateLoading] = useState(false)
 
   useEffect(() => {
     let active = true
 
     const syncProfileGate = async () => {
-      if (!isAuthenticated || !user?.id) {
+      if (!isAuthenticated || !user?.id || isAnonymousUser(user)) {
         if (active) {
           setProfileGateLoading(false)
         }
@@ -107,7 +109,7 @@ export function RootNavigation() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, signIn, signInWithApple, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, signIn, signInAnonymously, signInWithApple, signInWithGoogle, signOut }}>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {isAuthenticated ? (

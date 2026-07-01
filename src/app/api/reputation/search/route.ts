@@ -5,6 +5,7 @@ import {
   canUseFreeReputationQuery,
   hasPaidReputationAccess,
 } from '@/lib/reputation/access-control'
+import { isAnonymousUser } from '@/lib/auth-state'
 
 const MAX_TERM_LENGTH = 80
 
@@ -55,24 +56,27 @@ export async function GET(req: Request) {
       )
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select(PROFILE_ACCESS_FIELDS)
-      .eq('id', user.id)
-      .maybeSingle<ProfileAccessRow>()
+    const isAnonymous = isAnonymousUser(user)
+    const { data: profile, error: profileError } = isAnonymous
+      ? { data: null, error: null }
+      : await supabase
+          .from('profiles')
+          .select(PROFILE_ACCESS_FIELDS)
+          .eq('id', user.id)
+          .maybeSingle<ProfileAccessRow>()
 
     if (profileError) {
       throw new Error(profileError.message)
     }
 
-    if (!profile) {
+    if (!isAnonymous && !profile) {
       return NextResponse.json(
         { success: false, message: 'Perfil não encontrado' },
         { status: 404 }
       )
     }
 
-    const isPremiumUser = hasPaidReputationAccess(profile)
+    const isPremiumUser = !isAnonymous && hasPaidReputationAccess(profile)
 
     const { searchParams } = new URL(req.url)
 
@@ -99,13 +103,13 @@ export async function GET(req: Request) {
       )
     }
 
-    if (!isPremiumUser && !canUseFreeReputationQuery(profile)) {
+    if (!isAnonymous && !isPremiumUser && !canUseFreeReputationQuery(profile)) {
       return NextResponse.json(
         {
           success: false,
           message: 'Limite de 3 consultas gratuitas atingido',
           reason: 'PAYWALL',
-          free_queries_used: profile.free_queries_used ?? 0,
+          free_queries_used: profile?.free_queries_used ?? 0,
         },
         { status: 403 }
       )
@@ -207,7 +211,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       is_premium_user: isPremiumUser,
-      free_queries_used: profile.free_queries_used ?? 0,
+      free_queries_used: profile?.free_queries_used ?? 0,
       results,
     })
   } catch (err: any) {

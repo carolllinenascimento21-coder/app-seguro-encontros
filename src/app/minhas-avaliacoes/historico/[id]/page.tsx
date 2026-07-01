@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, History, Star, Clock, Loader2 } from 'lucide-react';
 import Navbar from '@/components/custom/navbar';
-import { createSupabaseClient } from '@/lib/supabase';
+import { createSupabaseClient } from '@/lib/supabase'
+import { isAnonymousUser, PERMANENT_ACCOUNT_REQUIRED_MESSAGE } from '@/lib/auth-state';
 
 const supabase = createSupabaseClient();
 
@@ -72,6 +73,12 @@ export default function HistoricoAvaliacao() {
 
       if (userError?.code === 'AuthSessionMissingError' || !user) {
         router.push('/login');
+        return;
+      }
+
+      if (isAnonymousUser(user)) {
+        alert(PERMANENT_ACCOUNT_REQUIRED_MESSAGE);
+        router.push('/signup');
         return;
       }
 

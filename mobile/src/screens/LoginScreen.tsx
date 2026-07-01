@@ -7,11 +7,11 @@ import { useAuthContext } from '../navigation'
 type SocialProvider = 'google' | 'apple'
 
 export function LoginScreen() {
-  const { signIn, signInWithApple, signInWithGoogle } = useAuthContext()
+  const { signIn, signInAnonymously, signInWithApple, signInWithGoogle } = useAuthContext()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null)
+  const [socialLoading, setSocialLoading] = useState<SocialProvider | 'anonymous' | null>(null)
 
   async function handleLogin() {
     if (!email || !password) {
@@ -27,6 +27,21 @@ export function LoginScreen() {
       Alert.alert('Falha no login', message)
     } finally {
       setLoading(false)
+    }
+  }
+
+
+  async function handleAnonymousLogin() {
+    if (socialLoading !== null || loading) return
+
+    try {
+      setSocialLoading('anonymous')
+      await signInAnonymously()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível entrar sem cadastro.'
+      Alert.alert('Falha no acesso', message)
+    } finally {
+      setSocialLoading(null)
     }
   }
 
@@ -79,6 +94,13 @@ export function LoginScreen() {
         />
 
         <Button title="Entrar" onPress={handleLogin} loading={loading} disabled={socialLoading !== null} />
+        <Button
+          title="Entrar sem cadastro"
+          onPress={handleAnonymousLogin}
+          loading={socialLoading === 'anonymous'}
+          variant="secondary"
+          disabled={loading || (socialLoading !== null && socialLoading !== 'anonymous')}
+        />
 
         <View style={styles.socialButtons}>
           <Button

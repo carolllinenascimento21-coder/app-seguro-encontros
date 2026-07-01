@@ -8,6 +8,7 @@ import {
   getFreeReputationQueriesUsed,
   hasPaidReputationAccess,
 } from '@/lib/reputation/access-control'
+import { isAnonymousUser } from '@/lib/auth-state'
 
 type ProfileAccessRow = {
   has_active_plan: boolean | null
@@ -55,11 +56,14 @@ export async function GET(
       )
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select(PROFILE_ACCESS_FIELDS)
-      .eq('id', user.id)
-      .maybeSingle<ProfileAccessRow>()
+    const isAnonymous = isAnonymousUser(user)
+    const { data: profile, error: profileError } = isAnonymous
+      ? { data: null, error: null }
+      : await supabase
+          .from('profiles')
+          .select(PROFILE_ACCESS_FIELDS)
+          .eq('id', user.id)
+          .maybeSingle<ProfileAccessRow>()
 
     if (profileError) {
       console.error('Erro ao validar plano do perfil', profileError)
@@ -82,10 +86,10 @@ export async function GET(
       )
     }
 
-    const isPremiumUser = hasPaidReputationAccess(profile)
-    let canViewFullReputation = isPremiumUser
+    const isPremiumUser = !isAnonymous && hasPaidReputationAccess(profile)
+    let canViewFullReputation = isAnonymous || isPremiumUser
 
-    if (!isPremiumUser && canUseFreeReputationQuery(profile)) {
+    if (!isAnonymous && !isPremiumUser && canUseFreeReputationQuery(profile)) {
       const nextFreeQueriesUsed = getFreeReputationQueriesUsed(profile) + 1
       const { error: consumeError } = await supabaseAdmin
         .from('profiles')

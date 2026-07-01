@@ -12,6 +12,7 @@ import {
   rememberLoginEmail,
 } from '@/lib/auth-remember'
 import { ensureProfileForUser } from '@/lib/profile-utils'
+import { isAnonymousUser } from '@/lib/auth-state'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -20,7 +21,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | 'anonymous' | null>(null)
   const [redirectingAfterLogin, setRedirectingAfterLogin] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const loginInFlightRef = useRef(false)
@@ -79,6 +80,12 @@ export default function LoginPage() {
           }
 
           setRedirectingAfterLogin(false)
+          return
+        }
+
+        if (isAnonymousUser(user)) {
+          router.refresh()
+          router.replace('/home')
           return
         }
 
@@ -310,6 +317,64 @@ export default function LoginPage() {
     }
   }
 
+
+  const handleAnonymousLogin = async () => {
+    if (loading || redirectingAfterLogin || oauthInFlightRef.current || loginInFlightRef.current) return
+
+    loginInFlightRef.current = true
+    setOauthLoading('anonymous')
+    setError(null)
+
+    const supabase = createSupabaseClient()
+
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously()
+
+      if (error) {
+        console.error('Erro no login anônimo:', error)
+        setError('Não foi possível entrar sem cadastro. Tente novamente.')
+        return
+      }
+
+      if (!data.session?.access_token || !data.session.refresh_token) {
+        setError('Não foi possível iniciar sua sessão. Tente novamente.')
+        return
+      }
+
+      const syncResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }),
+      })
+
+      if (!syncResponse.ok) {
+        const syncResult = await syncResponse.json().catch(() => ({ error: 'unknown_error' }))
+        console.error('Falha ao sincronizar sessão anônima:', syncResult)
+        await supabase.auth.signOut()
+        setError('Falha ao persistir sessão. Tente novamente.')
+        return
+      }
+
+      router.refresh()
+      router.replace('/home')
+    } catch (err) {
+      console.error('Erro inesperado no login anônimo:', err)
+      try {
+        await supabase.auth.signOut()
+      } catch {}
+      setError('Erro inesperado. Tente novamente.')
+    } finally {
+      loginInFlightRef.current = false
+      setOauthLoading(null)
+    }
+  }
+
   const isFormDisabled = loading || oauthLoading !== null || redirectingAfterLogin
 
   return (
@@ -342,6 +407,16 @@ export default function LoginPage() {
         )}
 
         <div className="space-y-3">
+
+          <button
+            type="button"
+            onClick={handleAnonymousLogin}
+            disabled={isFormDisabled}
+            className="flex w-full items-center justify-center rounded-xl border border-[#D4AF37] bg-[#D4AF37] py-3 font-semibold text-black transition hover:bg-[#c9a634] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {oauthLoading === 'anonymous' ? 'Entrando sem cadastro...' : 'Entrar sem cadastro'}
+          </button>
+
           <button
             type="button"
             onClick={signInWithApple}
