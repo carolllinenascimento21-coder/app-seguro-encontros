@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { isAnonymousUser } from './src/lib/auth-state'
 
 const PROTECTED_PATHS = [
   '/home',
@@ -68,7 +69,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  if (user && pathMatches(pathname, '/onboarding/selfie') === false) {
+  if (user && !isAnonymousUser(user) && pathMatches(pathname, '/onboarding/selfie') === false) {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('selfie_verified,onboarding_completed')
@@ -100,7 +101,7 @@ export async function middleware(req: NextRequest) {
       res.headers.set('x-selfie-gate', 'ok')
     }
   } else if (user) {
-    res.headers.set('x-selfie-gate', 'skip_selfie_route')
+    res.headers.set('x-selfie-gate', isAnonymousUser(user) ? 'skip_anonymous_user' : 'skip_selfie_route')
   }
 
   return res
