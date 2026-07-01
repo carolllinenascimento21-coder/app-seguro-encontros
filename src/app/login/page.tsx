@@ -157,7 +157,7 @@ export default function LoginPage() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event: string) => {
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' && !loginInFlightRef.current) {
         void resolvePostLoginRoute()
       }
     })
@@ -244,6 +244,14 @@ export default function LoginPage() {
     const supabase = createSupabaseClient()
 
     try {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser()
+
+      if (isAnonymousUser(currentUser)) {
+        await supabase.auth.signOut()
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
@@ -492,6 +500,15 @@ export default function LoginPage() {
           className="w-full rounded-xl bg-[#D4AF37] py-3 font-semibold text-black transition hover:bg-[#c9a634] disabled:opacity-50"
         >
           {loading ? 'Entrando...' : 'Entrar'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleAnonymousLogin}
+          disabled={isFormDisabled}
+          className="w-full rounded-xl border border-[#D4AF37] py-3 font-semibold text-[#D4AF37] transition hover:bg-[#D4AF37]/10 disabled:opacity-50"
+        >
+          {oauthLoading === 'anonymous' ? 'Entrando sem cadastro...' : 'Entrar sem cadastro'}
         </button>
 
         <p className="text-center text-sm text-gray-400">

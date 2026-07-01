@@ -8,8 +8,7 @@ export const PERMANENT_ACCOUNT_REQUIRED_MESSAGE =
 export function isAnonymousUser(user: User | null | undefined) {
   return Boolean(
     user?.is_anonymous === true ||
-      user?.app_metadata?.provider === 'anonymous' ||
-      user?.aud === 'authenticated' && !user?.email
+      user?.app_metadata?.provider === 'anonymous'
   )
 }
 
