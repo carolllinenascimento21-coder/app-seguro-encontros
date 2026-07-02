@@ -6,6 +6,7 @@ import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { useAuthContext } from '../navigation'
 import { supabase } from '../services/supabase'
+import { isAnonymousUser } from '../utils/authState'
 
 export function HomeScreen() {
   const { user } = useAuthContext()
@@ -17,7 +18,11 @@ export function HomeScreen() {
       let active = true
 
       const validateSelfie = async () => {
-        if (!user?.id) return
+        if (!user?.id || isAnonymousUser(user)) {
+          setSelfiePending(false)
+          setCheckingSelfie(false)
+          return
+        }
 
         setCheckingSelfie(true)
 

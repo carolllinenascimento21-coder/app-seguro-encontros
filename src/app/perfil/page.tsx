@@ -8,6 +8,7 @@ import { User, LogOut, Plus, Trash2, Shield, Pencil, Crown, X, Camera } from 'lu
 import { clearRememberedLoginEmail } from '@/lib/auth-remember'
 import { createSupabaseClient } from '@/lib/supabase'
 import { ensureProfileForUser, getProfileErrorInfo, type ProfileRecord } from '@/lib/profile-utils'
+import { isAnonymousUser, PERMANENT_ACCOUNT_REQUIRED_MESSAGE } from '@/lib/auth-state'
 import Navbar from '@/components/custom/navbar'
 
 type EmergencyContact = {
@@ -87,6 +88,12 @@ export default function PerfilPage() {
 
       const user = session.user
 
+      if (isAnonymousUser(user)) {
+        alert(PERMANENT_ACCOUNT_REQUIRED_MESSAGE)
+        router.replace('/signup')
+        return
+      }
+
       // garante profile
       const ensured = await ensureProfileForUser(supabase, user)
       if (ensured.error) {
@@ -125,6 +132,13 @@ export default function PerfilPage() {
   }, [router])
 
   const uploadAvatar = async (file: File) => {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (isAnonymousUser(session?.user)) {
+      setError(PERMANENT_ACCOUNT_REQUIRED_MESSAGE)
+      return
+    }
+
     if (!profile?.id) return
 
     if (file.size > 2 * 1024 * 1024) {

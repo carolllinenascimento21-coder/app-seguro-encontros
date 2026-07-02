@@ -4,6 +4,7 @@ import { Eye, Lock, Shield, AlertTriangle, Star, Search } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { createServerClient } from '@/lib/supabase/server'
+import { isAnonymousUser } from '@/lib/auth-state'
 
 export const revalidate = 60
 export const preferredRegion = 'home'
@@ -323,24 +324,26 @@ export default async function HomePage({
     redirect('/login')
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('selfie_verified,onboarding_completed')
-    .eq('id', session.user.id)
-    .maybeSingle()
+  if (!isAnonymousUser(session.user)) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('selfie_verified,onboarding_completed')
+      .eq('id', session.user.id)
+      .maybeSingle()
 
-  if (profileError) {
-    console.error('Falha ao validar selfie no /home:', profileError)
-  }
+    if (profileError) {
+      console.error('Falha ao validar selfie no /home:', profileError)
+    }
 
-  const mustCompleteSelfie =
-    Boolean(profileError) ||
-    !profile ||
-    profile.selfie_verified !== true ||
-    profile.onboarding_completed !== true
+    const mustCompleteSelfie =
+      Boolean(profileError) ||
+      !profile ||
+      profile.selfie_verified !== true ||
+      profile.onboarding_completed !== true
 
-  if (mustCompleteSelfie) {
-    redirect('/onboarding/selfie?next=/home&sg_reason=home_guard')
+    if (mustCompleteSelfie) {
+      redirect('/onboarding/selfie?next=/home&sg_reason=home_guard')
+    }
   }
 
   const { perfis, stats } = await getHomeData(search)
