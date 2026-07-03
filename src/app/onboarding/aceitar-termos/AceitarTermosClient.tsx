@@ -1,10 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { createSupabaseClient } from '@/lib/supabase/browser'
+import { isAnonymousUser } from '@/lib/auth-state'
 
 const DEFAULT_NEXT_PATH = '/signup'
 
@@ -27,6 +29,23 @@ export default function AceitarTermosClient() {
   const [termos, setTermos] = useState(false)
   const [privacidade, setPrivacidade] = useState(false)
   const [error, setError] = useState('')
+
+
+  useEffect(() => {
+    const supabase = createSupabaseClient()
+
+    const redirectAnonymousUser = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (isAnonymousUser(session?.user)) {
+        router.replace('/home')
+      }
+    }
+
+    void redirectAnonymousUser()
+  }, [router])
 
   const handleContinue = () => {
     if (!termos || !privacidade) {

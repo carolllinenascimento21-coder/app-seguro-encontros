@@ -194,6 +194,24 @@ export default function OnboardingPage() {
     oauthInFlightRef.current = true
     setOauthLoading('anonymous')
 
+    localStorage.setItem(
+      'confia_termos_aceite',
+      JSON.stringify({
+        termosAceitos: true,
+        privacidadeAceita: true,
+        acceptedAt: new Date().toISOString(),
+        source: 'anonymous_onboarding',
+      })
+    )
+
+    localStorage.setItem(
+      'pre_onboarding',
+      JSON.stringify({
+        agreed: true,
+        gender: 'female',
+      })
+    )
+
     const supabase = createSupabaseClient()
 
     try {
