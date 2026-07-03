@@ -39,18 +39,8 @@ export default function AceitarTermosClient() {
         data: { session },
       } = await supabase.auth.getSession()
 
-      const stored = localStorage.getItem('confia_termos_aceite')
-      const anonymousEntryActive = sessionStorage.getItem('confia_anonymous_entry_active') === 'true'
-
-      try {
-        const aceite = stored ? JSON.parse(stored) : null
-        if (isAnonymousUser(session?.user) || anonymousEntryActive || aceite?.source === 'anonymous_onboarding') {
-          router.replace('/home')
-        }
-      } catch {
-        if (isAnonymousUser(session?.user) || anonymousEntryActive) {
-          router.replace('/home')
-        }
+      if (isAnonymousUser(session?.user)) {
+        router.replace('/home')
       }
     }
 

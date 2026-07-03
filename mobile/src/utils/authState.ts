@@ -30,8 +30,7 @@ export function isAnonymousUser(user: User | null | undefined) {
     user.is_anonymous === true ||
       user.app_metadata?.provider === 'anonymous' ||
       providers.includes('anonymous') ||
-      hasAnonymousIdentity(user) ||
-      (!user.email && !user.phone)
+      hasAnonymousIdentity(user)
   )
 }
 

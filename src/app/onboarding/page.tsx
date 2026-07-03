@@ -194,8 +194,6 @@ export default function OnboardingPage() {
     oauthInFlightRef.current = true
     setOauthLoading('anonymous')
 
-    sessionStorage.setItem('confia_anonymous_entry_active', 'true')
-
     localStorage.setItem(
       'confia_termos_aceite',
       JSON.stringify({
