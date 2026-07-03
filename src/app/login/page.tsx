@@ -333,6 +333,17 @@ export default function LoginPage() {
     setOauthLoading('anonymous')
     setError(null)
 
+    sessionStorage.setItem('confia_anonymous_entry_active', 'true')
+    localStorage.setItem(
+      'confia_termos_aceite',
+      JSON.stringify({
+        termosAceitos: true,
+        privacidadeAceita: true,
+        acceptedAt: new Date().toISOString(),
+        source: 'anonymous_onboarding',
+      })
+    )
+
     const supabase = createSupabaseClient()
 
     try {

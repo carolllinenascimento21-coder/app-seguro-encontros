@@ -32,12 +32,22 @@ export default function SignupPage() {
         data: { session },
       } = supabase ? await supabase.auth.getSession() : { data: { session: null } }
 
-      if (isAnonymousUser(session?.user)) {
-        router.replace('/home')
-        return
+      const stored = localStorage.getItem('confia_termos_aceite')
+      const anonymousEntryActive = sessionStorage.getItem('confia_anonymous_entry_active') === 'true'
+
+      try {
+        const aceite = stored ? JSON.parse(stored) : null
+        if (isAnonymousUser(session?.user) || anonymousEntryActive || aceite?.source === 'anonymous_onboarding') {
+          router.replace('/home')
+          return
+        }
+      } catch {
+        if (isAnonymousUser(session?.user) || anonymousEntryActive) {
+          router.replace('/home')
+          return
+        }
       }
 
-      const stored = localStorage.getItem('confia_termos_aceite')
 
       if (!stored) {
         router.replace('/onboarding/aceitar-termos?next=/signup')
