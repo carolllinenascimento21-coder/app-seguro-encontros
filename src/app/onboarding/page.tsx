@@ -37,6 +37,21 @@ export default function OnboardingPage() {
       return
     }
 
+    const redirectAuthenticatedUser = async () => {
+      const supabase = createSupabaseClient()
+      if (!supabase) return
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (session) {
+        router.replace('/home')
+      }
+    }
+
+    redirectAuthenticatedUser()
+
     const resetOAuthState = () => {
       oauthInFlightRef.current = false
       setOauthLoading(null)
@@ -49,7 +64,7 @@ export default function OnboardingPage() {
       window.removeEventListener('pageshow', resetOAuthState)
       window.removeEventListener('focus', resetOAuthState)
     }
-  }, [])
+  }, [router])
 
   const validatePreconditions = () => {
     if (!agreed) {
