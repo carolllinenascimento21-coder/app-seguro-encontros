@@ -16,6 +16,42 @@ export default function OnboardingPage() {
   const oauthInFlightRef = useRef(false)
 
   useEffect(() => {
+    const currentUrl = new URL(window.location.href)
+    const hasOAuthCallback =
+      currentUrl.searchParams.has('code') ||
+      currentUrl.searchParams.has('error') ||
+      currentUrl.searchParams.has('access_token') ||
+      currentUrl.searchParams.has('refresh_token')
+
+    if (hasOAuthCallback && currentUrl.pathname === '/') {
+      const callbackUrl = new URL('/auth/callback', window.location.origin)
+      currentUrl.searchParams.forEach((value, key) => {
+        callbackUrl.searchParams.set(key, value)
+      })
+
+      if (!callbackUrl.searchParams.has('next')) {
+        callbackUrl.searchParams.set('next', '/home')
+      }
+
+      window.location.replace(callbackUrl.toString())
+      return
+    }
+
+    const redirectAuthenticatedUser = async () => {
+      const supabase = createSupabaseClient()
+      if (!supabase) return
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (session) {
+        router.replace('/home')
+      }
+    }
+
+    redirectAuthenticatedUser()
+
     const resetOAuthState = () => {
       oauthInFlightRef.current = false
       setOauthLoading(null)
@@ -28,7 +64,7 @@ export default function OnboardingPage() {
       window.removeEventListener('pageshow', resetOAuthState)
       window.removeEventListener('focus', resetOAuthState)
     }
-  }, [])
+  }, [router])
 
   const validatePreconditions = () => {
     if (!agreed) {
@@ -94,7 +130,7 @@ export default function OnboardingPage() {
 
       if (returnMode === 'app') {
         const oauthEntryUrl = new URL(`/api/auth/${provider}`, window.location.origin)
-        oauthEntryUrl.searchParams.set('next', '/login')
+        oauthEntryUrl.searchParams.set('next', '/home')
         oauthEntryUrl.searchParams.set('return_mode', 'app')
         oauthEntryUrl.searchParams.set('return_to', returnTo ?? 'confiamais://auth/callback')
         oauthEntryUrl.searchParams.set('redirect_to', returnTo ?? 'confiamais://auth/callback')
@@ -120,7 +156,7 @@ export default function OnboardingPage() {
 
       if (provider === 'google') {
         const googleEntryUrl = new URL('/api/auth/google', window.location.origin)
-        googleEntryUrl.searchParams.set('next', '/login')
+        googleEntryUrl.searchParams.set('next', '/home')
         console.log('[ConfiaOAuth][v4] onboarding_oauth_start_url', {
           provider,
           returnMode: 'web',
@@ -141,7 +177,7 @@ export default function OnboardingPage() {
         return
       }
 
-      const redirectTo = getRedirectUrl('/login')
+      const redirectTo = getRedirectUrl('/home')
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -202,6 +238,10 @@ export default function OnboardingPage() {
 
   const handleLogin = () => {
     router.push('/login')
+  }
+
+  const handleGuestAccess = () => {
+    router.push('/entrada-sem-cadastro')
   }
 
   return (
@@ -279,6 +319,14 @@ export default function OnboardingPage() {
         </button>
 
         <div className="divider text-center text-sm text-gray-400">ou</div>
+
+        <Button
+          onClick={handleGuestAccess}
+          variant="outline"
+          className="w-full border-white/25 text-[#EFD9A7] py-6 rounded-2xl hover:border-[#D4AF37] hover:text-[#D4AF37]"
+        >
+          Entrar sem cadastro
+        </Button>
 
         {/* Email */}
         <Button
