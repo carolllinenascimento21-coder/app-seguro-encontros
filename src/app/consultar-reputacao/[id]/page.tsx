@@ -8,6 +8,24 @@ import { getDetailedReputation } from '@/lib/reputation/detail'
 
 export const dynamic = 'force-dynamic'
 
+const EMPTY_REPUTATION_MESSAGE = 'Perfil não encontrado ou sem avaliações públicas.'
+
+function PageMessage({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen bg-black text-white pb-20">
+      <div className="max-w-md mx-auto px-4 pt-6">
+        <Link href="/consultar-reputacao" className="text-gray-400 text-sm">
+          ← Voltar
+        </Link>
+        <div className="mt-4 bg-[#111] p-5 rounded-2xl border border-yellow-600/30">
+          <h1 className="text-xl font-semibold text-yellow-400">Consulta de reputação</h1>
+          <p className="text-sm text-gray-300 mt-3">{message}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const categorias = [
   { key: 'comportamento', label: 'Comportamento' },
   { key: 'seguranca_emocional', label: 'Segurança Emocional' },
@@ -15,6 +33,27 @@ const categorias = [
   { key: 'carater', label: 'Caráter' },
   { key: 'confianca', label: 'Confiança' },
 ] as const
+
+
+type AlertView = {
+  flag?: unknown
+  count?: unknown
+}
+
+type ReviewView = {
+  id?: unknown
+  rating?: unknown
+  review_text?: unknown
+  created_at?: unknown
+  flags_positive?: unknown
+  flags_negative?: unknown
+  is_anonymous?: unknown
+  comportamento?: unknown
+  seguranca_emocional?: unknown
+  respeito?: unknown
+  carater?: unknown
+  confianca?: unknown
+}
 
 const TRUST_LABELS = [
   'Usuária verificada',
@@ -60,6 +99,19 @@ function statusLabel(classification: 'perigo' | 'atencao' | 'confiavel' | 'excel
   return { text: 'Perigo', color: 'bg-red-600' }
 }
 
+function safeNumber(value: unknown) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function safeArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : []
+}
+
+function safeText(value: unknown, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value : fallback
+}
+
 export default async function Page({
   params,
 }: {
@@ -69,7 +121,7 @@ export default async function Page({
   const supabaseAdmin = getSupabaseAdminClient()
 
   if (!supabaseAdmin) {
-    return <div className="text-white p-10">Serviço indisponível</div>
+    return <PageMessage message="Serviço indisponível no momento." />
   }
 
   const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
@@ -79,7 +131,7 @@ export default async function Page({
     .maybeSingle()
 
   if (maleProfileError || !maleProfile) {
-    return <div className="text-white p-10">Perfil não encontrado</div>
+    return <PageMessage message={EMPTY_REPUTATION_MESSAGE} />
   }
 
   let jaAvaliei = false
@@ -119,18 +171,25 @@ export default async function Page({
     }
   }
 
-  const result = await getDetailedReputation(supabaseAdmin, id)
+  let result: Awaited<ReturnType<typeof getDetailedReputation>> | null = null
+
+  try {
+    result = await getDetailedReputation(supabaseAdmin, id)
+  } catch (error) {
+    console.error('Erro inesperado ao carregar reputação pública', error)
+    return <PageMessage message={EMPTY_REPUTATION_MESSAGE} />
+  }
 
   if (!result || result.status !== 200 || !result.data) {
-    return <div className="text-white p-10">Erro ao carregar reputação</div>
+    return <PageMessage message={EMPTY_REPUTATION_MESSAGE} />
   }
 
   const data = result.data ?? {}
-  const perfil = data.profile ?? {}
+  const perfil = data.profile ?? maleProfile ?? {}
   const reputation = data.reputation ?? {}
 
-  const mediaGeral = Number(reputation?.average_rating ?? 0)
-  const totalAvaliacoes = Number(reputation?.total_reviews ?? 0)
+  const mediaGeral = safeNumber(reputation?.average_rating)
+  const totalAvaliacoes = safeNumber(reputation?.total_reviews)
   const somaEstrelas = mediaGeral * totalAvaliacoes
 
   const status = statusLabel(
@@ -142,18 +201,20 @@ export default async function Page({
       : 'confiavel'
   )
 
-  const mediasCategorias = data.category_averages ?? {}
-  const alertasOrdenados = Array.isArray(data?.alertas)
-    ? data.alertas
-    : Array.isArray(data?.alerts)
-      ? data.alerts
-      : []
+  const mediasCategorias: Record<string, unknown> = data.category_averages && typeof data.category_averages === 'object'
+    ? data.category_averages
+    : {}
+  const alertas = safeArray<AlertView>(data?.alertas)
+  const fallbackAlerts = safeArray<AlertView>(data?.alerts)
+  const alertasOrdenados = alertas.length > 0 ? alertas : fallbackAlerts
 
-  const relatos = Array.isArray(data?.reviews)
-    ? data.reviews
-    : Array.isArray(data?.relatos)
-      ? data.relatos
-      : []
+  const reviews = safeArray<ReviewView>(data?.reviews)
+  const fallbackRelatos = safeArray<ReviewView>(data?.relatos)
+  const relatos = reviews.length > 0 ? reviews : fallbackRelatos
+
+  if (!perfil?.id || totalAvaliacoes === 0 || relatos.length === 0) {
+    return <PageMessage message={EMPTY_REPUTATION_MESSAGE} />
+  }
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
@@ -168,8 +229,8 @@ export default async function Page({
             {status.text}
           </div>
 
-          <h1 className="text-xl font-semibold">{perfil.display_name ?? 'Perfil sem nome'}</h1>
-          <p className="text-gray-400 text-sm">{perfil.city ?? 'Cidade não informada'}</p>
+          <h1 className="text-xl font-semibold">{safeText(perfil.display_name, 'Perfil sem nome')}</h1>
+          <p className="text-gray-400 text-sm">{safeText(perfil.city, 'Cidade não informada')}</p>
         </div>
 
         {/* MÉDIA */}
@@ -204,7 +265,7 @@ export default async function Page({
 
           <div className="mt-5 space-y-3">
             {categorias.map((categoria) => {
-              const average = Number(mediasCategorias?.[categoria.key] ?? 0)
+              const average = safeNumber(mediasCategorias[categoria.key])
 
               return (
                 <div key={categoria.key} className="bg-black/40 border border-gray-800 rounded-xl p-3">
@@ -233,7 +294,7 @@ export default async function Page({
               {alertasOrdenados.map((item, index) => (
                 <div key={index} className="flex justify-between bg-black/40 p-3 rounded-lg border border-gray-800">
                   <span className="text-red-300 capitalize">
-                    {String(item?.flag ?? '').replaceAll('_', ' ')}
+                    {humanizeFlag(safeText(item?.flag, 'Alerta'))}
                   </span>
                   <span className="text-xs text-gray-400">
                     citado {Number(item?.count ?? 0)}x
@@ -259,17 +320,17 @@ export default async function Page({
                 <div className="flex justify-between text-yellow-400 text-sm font-semibold">
                   <div className="flex items-center gap-1">
                     <Star size={14} fill="currentColor" />
-                    {Number(a?.rating ?? 0).toFixed(1)}
+                    {safeNumber(a?.rating).toFixed(1)}
                   </div>
 
                   <span className="text-xs text-gray-400">
-                    {a?.created_at ? new Date(a.created_at).toLocaleDateString('pt-BR') : ''}
+                    {safeText(a?.created_at) ? new Date(safeText(a?.created_at)).toLocaleDateString('pt-BR') : ''}
                   </span>
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-2">
                   {categorias.map((categoria) => {
-                    const value = Number(a?.[categoria.key] ?? 0)
+                    const value = safeNumber(a?.[categoria.key])
 
                     return (
                       <div key={categoria.key} className="flex items-center justify-between gap-3 text-xs bg-black/30 border border-gray-800 rounded-lg px-3 py-2">
@@ -283,26 +344,26 @@ export default async function Page({
                   })}
                 </div>
 
-                {Array.isArray(a?.flags_positive) && a.flags_positive.length > 0 && (
+                {safeArray(a?.flags_positive).length > 0 && (
                   <div className="mt-4">
                     <div className="text-xs font-semibold text-green-400">Green Flags selecionadas</div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {a.flags_positive.map((flag: string) => (
-                        <span key={flag} className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-[11px] text-green-200">
-                          {humanizeFlag(flag)}
+                      {safeArray(a?.flags_positive).map((flag) => (
+                        <span key={String(flag)} className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-[11px] text-green-200">
+                          {humanizeFlag(String(flag))}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {Array.isArray(a?.flags_negative) && a.flags_negative.length > 0 && (
+                {safeArray(a?.flags_negative).length > 0 && (
                   <div className="mt-4">
                     <div className="text-xs font-semibold text-red-400">Red Flags selecionadas</div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {a.flags_negative.map((flag: string) => (
-                        <span key={flag} className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] text-red-200">
-                          {humanizeFlag(flag)}
+                      {safeArray(a?.flags_negative).map((flag) => (
+                        <span key={String(flag)} className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] text-red-200">
+                          {humanizeFlag(String(flag))}
                         </span>
                       ))}
                     </div>
@@ -311,8 +372,8 @@ export default async function Page({
 
                 <div className="mt-4">
                   <div className="text-xs font-semibold text-yellow-400">Relato da usuária</div>
-                  {a?.review_text ? (
-                    <p className="text-sm text-gray-300 mt-2">{a.review_text}</p>
+                  {safeText(a?.review_text) ? (
+                    <p className="text-sm text-gray-300 mt-2">{safeText(a?.review_text)}</p>
                   ) : (
                     <p className="text-sm text-gray-500 mt-2">Nenhum relato textual informado.</p>
                   )}
