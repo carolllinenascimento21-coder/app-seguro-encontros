@@ -130,8 +130,8 @@ export default async function Page({
     .eq('id', id)
     .maybeSingle()
 
-  if (maleProfileError || !maleProfile) {
-    return <PageMessage message={EMPTY_REPUTATION_MESSAGE} />
+  if (maleProfileError) {
+    console.warn('Perfil masculino não encontrado na tabela male_profiles; tentando avaliações públicas', maleProfileError.message)
   }
 
   let jaAvaliei = false

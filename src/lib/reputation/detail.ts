@@ -30,6 +30,15 @@ type SummaryRow = {
   classification: 'perigo' | 'atencao' | 'confiavel' | 'excelente' | null
 }
 
+type ProfileLikeRow = {
+  id?: string | null
+  display_name?: string | null
+  name?: string | null
+  nome?: string | null
+  city?: string | null
+  cidade?: string | null
+}
+
 const toReviewText = (review: ReviewRow) => review.relato ?? review.notas ?? null
 
 const safeNumber = (value: unknown) => {
@@ -60,10 +69,22 @@ export async function getDetailedReputation(
     .from('male_profiles')
     .select('id, display_name, city')
     .eq('id', maleProfileId)
-    .single()
+    .maybeSingle()
 
-  if (maleProfileError || !maleProfile) {
-    return { error: 'Perfil não encontrado', status: 404 as const }
+  if (maleProfileError) {
+    console.warn('Erro ao buscar male_profile no detalhe público', maleProfileError.message)
+  }
+
+  const { data: legacyProfile, error: legacyProfileError } = maleProfile
+    ? { data: null, error: null }
+    : await supabaseAdmin
+        .from('avaliados')
+        .select('*')
+        .eq('id', maleProfileId)
+        .maybeSingle()
+
+  if (legacyProfileError) {
+    console.warn('Erro ao buscar avaliado legado no detalhe público', legacyProfileError.message)
   }
 
   const { data: summary, error: summaryError } = await supabaseAdmin
@@ -104,6 +125,11 @@ export async function getDetailedReputation(
 
   const summaryRow = (summary ?? null) as SummaryRow | null
   const reviewRows = (reviews ?? []) as ReviewRow[]
+  const profileRow = (maleProfile ?? legacyProfile ?? { id: maleProfileId }) as ProfileLikeRow
+
+  if (!profileRow?.id && reviewRows.length === 0) {
+    return { error: 'Perfil não encontrado', status: 404 as const }
+  }
 
   const categoryTotals: Record<CategoryKey, { sum: number; count: number }> = {
     comportamento: { sum: 0, count: 0 },
@@ -177,9 +203,9 @@ export async function getDetailedReputation(
     status: 200 as const,
     data: {
       profile: {
-        id: maleProfile.id,
-        display_name: maleProfile.display_name,
-        city: maleProfile.city,
+        id: profileRow.id ?? maleProfileId,
+        display_name: profileRow.display_name ?? profileRow.name ?? profileRow.nome ?? 'Perfil consultado',
+        city: profileRow.city ?? profileRow.cidade ?? null,
       },
       reputation,
       category_averages: categoryAverages,
