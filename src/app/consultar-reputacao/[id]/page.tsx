@@ -50,6 +50,25 @@ function getTrustLabel(id: string, isAnonymous?: boolean) {
   return TRUST_LABELS[Math.abs(hash) % TRUST_LABELS.length]
 }
 
+
+function humanizeFlag(flag: string) {
+  return flag
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function renderRatingStars(value: number) {
+  const rounded = Math.round(value)
+  return Array.from({ length: 5 }, (_, index) => (
+    <Star
+      key={index}
+      size={14}
+      fill={index < rounded ? 'currentColor' : 'none'}
+      className={index < rounded ? 'text-yellow-400' : 'text-gray-700'}
+    />
+  ))
+}
+
 function statusLabel(classification: 'perigo' | 'atencao' | 'confiavel' | 'excelente') {
   if (classification === 'excelente') return { text: 'Excelente', color: 'bg-green-600' }
   if (classification === 'confiavel') return { text: 'Confiável', color: 'bg-yellow-600' }
@@ -191,10 +210,10 @@ export default async function Page({
       ? data.alerts
       : []
 
-  const relatos = Array.isArray(data?.relatos)
-    ? data.relatos
-    : Array.isArray(data?.reviews)
-      ? data.reviews
+  const relatos = Array.isArray(data?.reviews)
+    ? data.reviews
+    : Array.isArray(data?.relatos)
+      ? data.relatos
       : []
 
   return (
@@ -227,6 +246,38 @@ export default async function Page({
           <p className="text-xs text-gray-500 mt-1">
             Soma total das estrelas: {somaEstrelas.toFixed(1)}
           </p>
+        </div>
+
+        {/* RESUMO DAS AVALIAÇÕES */}
+        <div className="mt-6 bg-[#111] border border-yellow-600/30 rounded-2xl p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-yellow-400 font-semibold">Resumo das Avaliações</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Média por critério calculada sobre todas as avaliações públicas.
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-yellow-400">{mediaGeral.toFixed(1)}</div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">média geral</div>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {categorias.map((categoria) => {
+              const average = Number(mediasCategorias?.[categoria.key] ?? 0)
+
+              return (
+                <div key={categoria.key} className="bg-black/40 border border-gray-800 rounded-xl p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-gray-200">{categoria.label}</span>
+                    <span className="text-sm font-semibold text-yellow-400">{average.toFixed(1)}/5</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1">{renderRatingStars(average)}</div>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         {/* ALERTAS */}
@@ -277,9 +328,56 @@ export default async function Page({
                   </span>
                 </div>
 
-                {a?.review_text && (
-                  <p className="text-sm text-gray-300 mt-3">{a.review_text}</p>
+                <div className="mt-4 grid grid-cols-1 gap-2">
+                  {categorias.map((categoria) => {
+                    const value = Number(a?.[categoria.key] ?? 0)
+
+                    return (
+                      <div key={categoria.key} className="flex items-center justify-between gap-3 text-xs bg-black/30 border border-gray-800 rounded-lg px-3 py-2">
+                        <span className="text-gray-400">{categoria.label}</span>
+                        <span className="flex items-center gap-2 text-yellow-400 font-semibold">
+                          <span className="flex gap-0.5">{renderRatingStars(value)}</span>
+                          {value.toFixed(1)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {Array.isArray(a?.flags_positive) && a.flags_positive.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-xs font-semibold text-green-400">Green Flags selecionadas</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {a.flags_positive.map((flag: string) => (
+                        <span key={flag} className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-[11px] text-green-200">
+                          {humanizeFlag(flag)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
+
+                {Array.isArray(a?.flags_negative) && a.flags_negative.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-xs font-semibold text-red-400">Red Flags selecionadas</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {a.flags_negative.map((flag: string) => (
+                        <span key={flag} className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] text-red-200">
+                          {humanizeFlag(flag)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4">
+                  <div className="text-xs font-semibold text-yellow-400">Relato da usuária</div>
+                  {a?.review_text ? (
+                    <p className="text-sm text-gray-300 mt-2">{a.review_text}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500 mt-2">Nenhum relato textual informado.</p>
+                  )}
+                </div>
 
                 <div className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
                   <span className="text-green-400 text-[10px]">✔</span>

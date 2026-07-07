@@ -14,6 +14,7 @@ type ReviewRow = {
   relato: string | null
   notas: string | null
   flags_negative: string[] | null
+  flags_positive: string[] | null
   is_anonymous: boolean | null
   comportamento: number | null
   seguranca_emocional: number | null
@@ -84,6 +85,7 @@ export async function getDetailedReputation(
         relato,
         notas,
         flags_negative,
+        flags_positive,
         is_anonymous,
         comportamento,
         seguranca_emocional,
@@ -92,7 +94,7 @@ export async function getDetailedReputation(
         confianca
       `
     )
-    .eq('male_profile_id', maleProfileId)
+    .or(`male_profile_id.eq.${maleProfileId},avaliado_id.eq.${maleProfileId}`)
     .eq('publica', true)
     .order('created_at', { ascending: false })
 
@@ -148,11 +150,27 @@ export async function getDetailedReputation(
     .map(([flag, count]) => ({ flag, count }))
     .sort((a, b) => b.count - a.count)
 
+  const totalReviews = reviewRows.length
+  const averageRating = totalReviews > 0
+    ? Number((reviewRows.reduce((sum, review) => sum + computeRating(review), 0) / totalReviews).toFixed(1))
+    : Number(safeNumber(summaryRow?.average_rating).toFixed(1))
+  const alertCount = reviewRows.reduce(
+    (sum, review) => sum + (Array.isArray(review.flags_negative) ? review.flags_negative.length : 0),
+    0
+  )
+  const classification = averageRating < 2
+    ? 'perigo'
+    : averageRating < 3
+      ? 'atencao'
+      : averageRating < 4
+        ? 'confiavel'
+        : 'excelente'
+
   const reputation = {
-    average_rating: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
-    total_reviews: safeNumber(summaryRow?.total_reviews),
-    alert_count: safeNumber(summaryRow?.alert_count),
-    classification: summaryRow?.classification ?? 'confiavel',
+    average_rating: averageRating,
+    total_reviews: totalReviews || safeNumber(summaryRow?.total_reviews),
+    alert_count: totalReviews ? alertCount : safeNumber(summaryRow?.alert_count),
+    classification,
   }
 
   return {
@@ -174,6 +192,12 @@ export async function getDetailedReputation(
           review_text: toReviewText(review),
           created_at: review.created_at,
           flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
+          flags_positive: Array.isArray(review.flags_positive) ? review.flags_positive : [],
+          comportamento: review.comportamento,
+          seguranca_emocional: review.seguranca_emocional,
+          respeito: review.respeito,
+          carater: review.carater,
+          confianca: review.confianca,
           is_anonymous: Boolean(review.is_anonymous),
         })),
       reviews: reviewRows.map((review) => ({
@@ -182,16 +206,22 @@ export async function getDetailedReputation(
         review_text: toReviewText(review),
         created_at: review.created_at,
         flags_negative: Array.isArray(review.flags_negative) ? review.flags_negative : [],
+        flags_positive: Array.isArray(review.flags_positive) ? review.flags_positive : [],
+        comportamento: review.comportamento,
+        seguranca_emocional: review.seguranca_emocional,
+        respeito: review.respeito,
+        carater: review.carater,
+        confianca: review.confianca,
         is_anonymous: Boolean(review.is_anonymous),
       })),
-      average_rating: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
-      media: Number(safeNumber(summaryRow?.average_rating).toFixed(1)),
-      total_reviews: safeNumber(summaryRow?.total_reviews),
-      total: safeNumber(summaryRow?.total_reviews),
-      alerts: safeNumber(summaryRow?.alert_count),
-      alert_count: safeNumber(summaryRow?.alert_count),
-      classificacao: summaryRow?.classification ?? 'confiavel',
-      classification: summaryRow?.classification ?? 'confiavel',
+      average_rating: reputation.average_rating,
+      media: reputation.average_rating,
+      total_reviews: reputation.total_reviews,
+      total: reputation.total_reviews,
+      alerts: reputation.alert_count,
+      alert_count: reputation.alert_count,
+      classificacao: reputation.classification,
+      classification: reputation.classification,
     },
   }
 }
