@@ -5,7 +5,6 @@ const PROTECTED_PATHS = [
   '/home',
   '/perfil',
   '/avaliar',
-  '/consultar-reputacao',
   '/alertas',
   '/minhas-avaliacoes',
   '/configuracoes',
