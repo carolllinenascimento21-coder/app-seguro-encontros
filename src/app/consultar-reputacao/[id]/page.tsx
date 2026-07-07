@@ -1,28 +1,12 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { Star, ShieldAlert } from 'lucide-react'
 import { ReportReviewButton } from '@/components/ReportReviewButton'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
-import { PremiumDetailLock } from '@/components/paywall/PremiumDetailLock'
-import {
-  canUseFreeReputationQuery,
-  getFreeReputationQueriesUsed,
-  hasPaidReputationAccess,
-} from '@/lib/reputation/access-control'
 
 export const dynamic = 'force-dynamic'
-
-type ProfileAccessRow = {
-  has_active_plan: boolean | null
-  current_plan_id: string | null
-  subscription_status: string | null
-  free_queries_used: number | null
-}
-
-const PROFILE_ACCESS_FIELDS =
-  'has_active_plan, current_plan_id, subscription_status, free_queries_used'
 
 const categorias = [
   { key: 'comportamento', label: 'Comportamento' },
@@ -82,42 +66,11 @@ export default async function Page({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const supabase = await createServerClient()
   const supabaseAdmin = getSupabaseAdminClient()
 
   if (!supabaseAdmin) {
     return <div className="text-white p-10">Serviço indisponível</div>
   }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
-
-  // 🔥 NOVO — verifica se já avaliou
-  const { data: minhaAvaliacao } = await supabase
-    .from('avaliacoes')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('male_profile_id', id)
-    .maybeSingle()
-
-  const jaAvaliei = Boolean(minhaAvaliacao?.id)
-
-  const { data: me, error: profileError } = await supabase
-    .from('profiles')
-    .select(PROFILE_ACCESS_FIELDS)
-    .eq('id', user.id)
-    .maybeSingle<ProfileAccessRow>()
-
-  if (profileError) {
-    console.error('Erro ao validar acesso no detalhe de reputação', profileError)
-    return <div className="text-white p-10">Erro ao validar acesso</div>
-  }
-
-  const isPremiumUser = hasPaidReputationAccess(me)
-  let canViewFullReputation = isPremiumUser
 
   const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
     .from('male_profiles')
@@ -129,55 +82,41 @@ export default async function Page({
     return <div className="text-white p-10">Perfil não encontrado</div>
   }
 
-  if (!isPremiumUser && canUseFreeReputationQuery(me)) {
-    const nextFreeQueriesUsed = getFreeReputationQueriesUsed(me) + 1
-    const { error: consumeError } = await supabaseAdmin
-      .from('profiles')
-      .update({ free_queries_used: nextFreeQueriesUsed })
-      .eq('id', user.id)
+  let jaAvaliei = false
+  const cookieStore = await cookies()
+  const hasAuthCookie = cookieStore
+    .getAll()
+    .some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token'))
 
-    if (consumeError) {
-      console.error('Erro ao consumir consulta gratuita de reputação', consumeError)
-      return <div className="text-white p-10">Erro ao validar acesso</div>
+  if (hasAuthCookie) {
+    try {
+      const supabase = await createServerClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        console.warn('Sessão inválida ignorada ao consultar reputação pública', userError.message)
+      }
+
+      if (user?.id) {
+        const { data: minhaAvaliacao, error: minhaAvaliacaoError } = await supabaseAdmin
+          .from('avaliacoes')
+          .select('id')
+          .eq('user_id', user.id)
+          .or(`male_profile_id.eq.${id},avaliado_id.eq.${id}`)
+          .maybeSingle()
+
+        if (minhaAvaliacaoError) {
+          console.warn('Erro opcional ao verificar avaliação da usuária', minhaAvaliacaoError.message)
+        }
+
+        jaAvaliei = Boolean(minhaAvaliacao?.id)
+      }
+    } catch (error) {
+      console.warn('Sessão inválida ignorada na consulta pública de reputação', error)
     }
-
-    const { error: consultaError } = await supabaseAdmin
-      .from('consultas')
-      .insert({ user_id: user.id })
-
-    if (consultaError) {
-      console.error('Erro ao registrar consulta gratuita de reputação', consultaError)
-    }
-
-    canViewFullReputation = true
-  }
-
-  if (!canViewFullReputation) {
-    const { data: summary } = await supabaseAdmin
-      .from('male_profile_reputation_summary')
-      .select('total_reviews, alert_count')
-      .eq('male_profile_id', id)
-      .maybeSingle()
-
-    const hasData =
-      Number(summary?.total_reviews ?? 0) > 0 || Number(summary?.alert_count ?? 0) > 0
-
-    return (
-      <div className="min-h-screen bg-black text-white pb-20">
-        <div className="max-w-md mx-auto px-4 pt-6">
-          <Link href="/consultar-reputacao" className="text-gray-400 text-sm">
-            ← Voltar
-          </Link>
-
-          <div className="mt-4 bg-[#111] p-5 rounded-2xl border border-gray-800">
-            <h1 className="text-xl font-semibold">{maleProfile.display_name}</h1>
-            <p className="text-gray-400 text-sm">{maleProfile.city ?? 'Cidade não informada'}</p>
-          </div>
-
-          <PremiumDetailLock hasData={hasData} />
-        </div>
-      </div>
-    )
   }
 
   const result = await getDetailedReputation(supabaseAdmin, id)
