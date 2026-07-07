@@ -1,7 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Star, ShieldAlert } from 'lucide-react'
+import { Star, ShieldAlert, ShieldCheck, Heart } from 'lucide-react'
 import { ReportReviewButton } from '@/components/ReportReviewButton'
 import { getSupabaseAdminClient } from '@/lib/supabaseAdmin'
 import { getDetailedReputation } from '@/lib/reputation/detail'
@@ -74,31 +73,36 @@ export default async function Page({
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login')
+  let jaAvaliei = false
+  let me: ProfileAccessRow | null = null
 
-  // 🔥 NOVO — verifica se já avaliou
-  const { data: minhaAvaliacao } = await supabase
-    .from('avaliacoes')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('male_profile_id', id)
-    .maybeSingle()
+  if (user) {
+    // 🔥 NOVO — verifica se já avaliou
+    const { data: minhaAvaliacao } = await supabase
+      .from('avaliacoes')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('male_profile_id', id)
+      .maybeSingle()
 
-  const jaAvaliei = Boolean(minhaAvaliacao?.id)
+    jaAvaliei = Boolean(minhaAvaliacao?.id)
 
-  const { data: me, error: profileError } = await supabase
-    .from('profiles')
-    .select(PROFILE_ACCESS_FIELDS)
-    .eq('id', user.id)
-    .maybeSingle<ProfileAccessRow>()
+    const { data: profileAccess, error: profileError } = await supabase
+      .from('profiles')
+      .select(PROFILE_ACCESS_FIELDS)
+      .eq('id', user.id)
+      .maybeSingle<ProfileAccessRow>()
 
-  if (profileError) {
-    console.error('Erro ao validar acesso no detalhe de reputação', profileError)
-    return <div className="text-white p-10">Erro ao validar acesso</div>
+    if (profileError) {
+      console.error('Erro ao validar acesso no detalhe de reputação', profileError)
+      return <div className="text-white p-10">Erro ao validar acesso</div>
+    }
+
+    me = profileAccess
   }
 
   const isPremiumUser = hasPaidReputationAccess(me)
-  let canViewFullReputation = isPremiumUser
+  let canViewFullReputation = !user || isPremiumUser
 
   const { data: maleProfile, error: maleProfileError } = await supabaseAdmin
     .from('male_profiles')
@@ -110,7 +114,7 @@ export default async function Page({
     return <div className="text-white p-10">Perfil não encontrado</div>
   }
 
-  if (!isPremiumUser && canUseFreeReputationQuery(me)) {
+  if (user && !isPremiumUser && canUseFreeReputationQuery(me)) {
     const nextFreeQueriesUsed = getFreeReputationQueriesUsed(me) + 1
     const { error: consumeError } = await supabaseAdmin
       .from('profiles')
@@ -161,10 +165,13 @@ export default async function Page({
     )
   }
 
-  const result = await getDetailedReputation(supabaseAdmin, id)
+  const result = await getDetailedReputation(supabaseAdmin, id).catch((error) => {
+    console.error('Erro inesperado ao carregar reputação pública', error)
+    return null
+  })
 
   if (!result || result.status !== 200 || !result.data) {
-    return <div className="text-white p-10">Erro ao carregar reputação</div>
+    return <div className="min-h-screen bg-black text-white p-10">Erro ao carregar reputação</div>
   }
 
   const data = result.data ?? {}
@@ -190,6 +197,37 @@ export default async function Page({
     : Array.isArray(data?.alerts)
       ? data.alerts
       : []
+
+  const { data: flagRows, error: flagRowsError } = await supabaseAdmin
+    .from('avaliacoes')
+    .select('flags_positive, flags_negative')
+    .eq('male_profile_id', id)
+    .eq('publica', true)
+
+  if (flagRowsError) {
+    console.error('Erro ao carregar flags públicas do perfil', flagRowsError)
+  }
+
+  const countFlags = (field: 'flags_positive' | 'flags_negative') => {
+    const counts = new Map<string, number>()
+
+    for (const row of flagRows ?? []) {
+      const flags = Array.isArray(row?.[field]) ? row[field] : []
+      for (const rawFlag of flags) {
+        const normalized = String(rawFlag ?? '').trim()
+        if (!normalized) continue
+        counts.set(normalized, (counts.get(normalized) ?? 0) + 1)
+      }
+    }
+
+    return [...counts.entries()]
+      .map(([flag, count]) => ({ flag, count }))
+      .sort((a, b) => b.count - a.count || a.flag.localeCompare(b.flag))
+  }
+
+  const greenFlags = countFlags('flags_positive')
+  const redFlags = countFlags('flags_negative')
+  const redFlagsDisplay = redFlags.length > 0 ? redFlags : alertasOrdenados
 
   const relatos = Array.isArray(data?.relatos)
     ? data.relatos
@@ -229,18 +267,66 @@ export default async function Page({
           </p>
         </div>
 
-        {/* ALERTAS */}
+
+        {/* MÉDIAS POR CRITÉRIO */}
+        <div className="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-5">
+          <h2 className="text-yellow-400 font-semibold mb-4">Médias por critério</h2>
+
+          <div className="space-y-3">
+            {categorias.map((categoria) => {
+              const value = Number(mediasCategorias?.[categoria.key] ?? 0)
+              const percentage = Math.max(0, Math.min(100, (value / 5) * 100))
+
+              return (
+                <div key={categoria.key}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-300">{categoria.label}</span>
+                    <span className="text-yellow-400 font-semibold">{value.toFixed(1)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-black/60 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-yellow-500"
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* GREEN FLAGS */}
+        <div className="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-5">
+          <div className="flex items-center gap-2 text-green-400 font-semibold">
+            <ShieldCheck size={16} />
+            Green flags
+          </div>
+
+          {greenFlags.length === 0 ? (
+            <p className="text-gray-500 text-sm mt-3">Nenhuma green flag registrada.</p>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {greenFlags.map((item) => (
+                <span key={item.flag} className="rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 text-xs text-green-200">
+                  {item.flag.replaceAll('_', ' ')} · {item.count}x
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* RED FLAGS */}
         <div className="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-5">
           <div className="flex items-center gap-2 text-red-400 font-semibold">
             <ShieldAlert size={16} />
-            Alertas de Segurança
+            Red flags e alertas de segurança
           </div>
 
-          {alertasOrdenados.length === 0 ? (
-            <p className="text-gray-500 text-sm mt-3">Nenhum alerta registrado.</p>
+          {redFlagsDisplay.length === 0 ? (
+            <p className="text-gray-500 text-sm mt-3">Nenhuma red flag registrada.</p>
           ) : (
             <div className="mt-4 space-y-3">
-              {alertasOrdenados.map((item, index) => (
+              {redFlagsDisplay.map((item, index) => (
                 <div key={index} className="flex justify-between bg-black/40 p-3 rounded-lg border border-gray-800">
                   <span className="text-red-300 capitalize">
                     {String(item?.flag ?? '').replaceAll('_', ' ')}
@@ -256,7 +342,16 @@ export default async function Page({
 
         {/* RELATOS */}
         <div className="mt-6">
-          <h2 className="text-yellow-400 font-semibold mb-4">Relatos das Usuárias</h2>
+          <div className="flex items-center gap-2 text-yellow-400 font-semibold mb-4">
+            <Heart size={16} />
+            Relatos das Usuárias
+          </div>
+
+          {relatos.length === 0 && (
+            <div className="bg-[#111] border border-gray-800 p-5 rounded-2xl mb-4 text-sm text-gray-400">
+              Nenhum relato público registrado para este perfil.
+            </div>
+          )}
 
           {relatos.map((a, index) => {
             const label = getTrustLabel(
