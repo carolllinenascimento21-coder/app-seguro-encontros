@@ -419,6 +419,15 @@ export default function LoginPage() {
           {loading ? 'Entrando...' : 'Entrar'}
         </button>
 
+        <button
+          type="button"
+          onClick={() => router.push('/consultar-reputacao')}
+          disabled={isFormDisabled}
+          className="w-full rounded-xl border border-[#D4AF37]/70 py-3 font-semibold text-[#D4AF37] transition hover:bg-[#D4AF37]/10 disabled:opacity-50"
+        >
+          Entrar sem cadastro
+        </button>
+
         <p className="text-center text-sm text-gray-400">
           Ainda não tem conta?{' '}
           <button

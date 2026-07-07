@@ -39,11 +39,8 @@ export async function GET(req: Request) {
       error: authError,
     } = await supabase.auth.getUser()
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, message: 'Não autorizada' },
-        { status: 401 }
-      )
+    if (authError) {
+      console.warn('Busca pública de reputação sem sessão válida', authError.message)
     }
 
     const supabaseAdmin = getSupabaseAdminClient()
@@ -55,24 +52,23 @@ export async function GET(req: Request) {
       )
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select(PROFILE_ACCESS_FIELDS)
-      .eq('id', user.id)
-      .maybeSingle<ProfileAccessRow>()
+    let profile: ProfileAccessRow | null = null
+    let isPremiumUser = true
 
-    if (profileError) {
-      throw new Error(profileError.message)
+    if (user?.id) {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select(PROFILE_ACCESS_FIELDS)
+        .eq('id', user.id)
+        .maybeSingle<ProfileAccessRow>()
+
+      if (profileError) {
+        throw new Error(profileError.message)
+      }
+
+      profile = profileData ?? null
+      isPremiumUser = hasPaidReputationAccess(profile)
     }
-
-    if (!profile) {
-      return NextResponse.json(
-        { success: false, message: 'Perfil não encontrado' },
-        { status: 404 }
-      )
-    }
-
-    const isPremiumUser = hasPaidReputationAccess(profile)
 
     const { searchParams } = new URL(req.url)
 
@@ -99,13 +95,13 @@ export async function GET(req: Request) {
       )
     }
 
-    if (!isPremiumUser && !canUseFreeReputationQuery(profile)) {
+    if (user?.id && profile && !isPremiumUser && !canUseFreeReputationQuery(profile)) {
       return NextResponse.json(
         {
           success: false,
           message: 'Limite de 3 consultas gratuitas atingido',
           reason: 'PAYWALL',
-          free_queries_used: profile.free_queries_used ?? 0,
+          free_queries_used: profile?.free_queries_used ?? 0,
         },
         { status: 403 }
       )
@@ -207,7 +203,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       is_premium_user: isPremiumUser,
-      free_queries_used: profile.free_queries_used ?? 0,
+      free_queries_used: profile?.free_queries_used ?? 0,
       results,
     })
   } catch (err: any) {
