@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -24,12 +25,14 @@ export function AvaliarScreen() {
   const [comment, setComment] = useState('')
   const [voiceStatus, setVoiceStatus] = useState<'idle' | 'recording' | 'processing'>('idle')
   const [voiceMessage, setVoiceMessage] = useState('')
-  const mountedRef = useRef(true)
+  const screenFocusedRef = useRef(true)
+  const operationInProgressRef = useRef(false)
   const receivedResultRef = useRef(false)
   const stoppedByUserRef = useRef(false)
   const hadErrorRef = useRef(false)
 
   useSpeechRecognitionEvent('result', (event) => {
+    if (!screenFocusedRef.current || receivedResultRef.current) return
     const transcript = event.results[0]?.transcript?.trim()
     if (!transcript) return
     receivedResultRef.current = true
@@ -37,7 +40,8 @@ export function AvaliarScreen() {
   })
 
   useSpeechRecognitionEvent('error', (event) => {
-    if (!mountedRef.current || event.error === 'aborted') return
+    operationInProgressRef.current = false
+    if (!screenFocusedRef.current || event.error === 'aborted') return
     hadErrorRef.current = true
     setVoiceStatus('idle')
     if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
@@ -50,19 +54,26 @@ export function AvaliarScreen() {
   })
 
   useSpeechRecognitionEvent('end', () => {
-    if (!mountedRef.current) return
+    operationInProgressRef.current = false
+    if (!screenFocusedRef.current) return
     setVoiceStatus('idle')
     if (!receivedResultRef.current && !stoppedByUserRef.current && !hadErrorRef.current) {
       setVoiceMessage('Não foi possível reconhecer a fala. Tente novamente.')
     }
   })
 
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-      ExpoSpeechRecognitionModule.abort()
-    }
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      screenFocusedRef.current = true
+      setVoiceStatus('idle')
+
+      return () => {
+        screenFocusedRef.current = false
+        operationInProgressRef.current = false
+        ExpoSpeechRecognitionModule.abort()
+      }
+    }, [])
+  )
 
   async function toggleVoiceRecognition() {
     if (voiceStatus === 'recording') {
@@ -72,13 +83,24 @@ export function AvaliarScreen() {
       return
     }
 
-    if (voiceStatus !== 'idle') return
+    if (voiceStatus !== 'idle' || operationInProgressRef.current) return
 
+    operationInProgressRef.current = true
     setVoiceStatus('processing')
 
     try {
+      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+        operationInProgressRef.current = false
+        setVoiceStatus('idle')
+        setVoiceMessage('Este dispositivo não possui serviço de reconhecimento de voz.')
+        return
+      }
+
       const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync()
+      if (!screenFocusedRef.current || !operationInProgressRef.current) return
+
       if (!permission.granted) {
+        operationInProgressRef.current = false
         setVoiceStatus('idle')
         setVoiceMessage('Permissão de microfone negada.')
         return
@@ -95,6 +117,7 @@ export function AvaliarScreen() {
         continuous: false,
       })
     } catch {
+      operationInProgressRef.current = false
       setVoiceStatus('idle')
       setVoiceMessage('Não foi possível acessar o microfone.')
     }
