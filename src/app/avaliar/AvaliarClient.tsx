@@ -6,6 +6,8 @@ import { createSupabaseClient } from '@/lib/supabase'
 import Navbar from '@/components/custom/navbar'
 import { ArrowLeft } from 'lucide-react'
 import { GREEN_FLAGS, RED_FLAGS } from '@/lib/flags'
+import { VoiceTranscriptButton } from '@/components/VoiceTranscriptButton'
+import { appendTranscript } from '@/lib/voice-transcription'
 
 type Notas = {
   comportamento: number
@@ -372,6 +374,9 @@ export default function AvaliarClient() {
             value={relato}
             onChange={(e) => setRelato(e.target.value)}
             className={`${inputClassName} min-h-36 resize-y`}
+          />
+          <VoiceTranscriptButton
+            onTranscript={(transcript) => setRelato((current) => appendTranscript(current, transcript))}
           />
         </section>
 
