@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Star, Check } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
+import { VoiceTranscriptButton } from '@/components/VoiceTranscriptButton'
+import { appendTranscript } from '@/lib/voice-transcription'
 
 // Se você já tem essas listas em /lib/flags, pode importar.
 // Se não tiver, pode manter aqui mesmo.
@@ -373,6 +375,9 @@ export default function AvaliarPerfilPage() {
             onChange={(e) => setRelato(e.target.value)}
             placeholder="Conte o relato com contexto e fatos importantes"
             className="mt-3 w-full bg-[#101010] border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-white/20 min-h-[120px]"
+          />
+          <VoiceTranscriptButton
+            onTranscript={(transcript) => setRelato((current) => appendTranscript(current, transcript))}
           />
         </div>
 
