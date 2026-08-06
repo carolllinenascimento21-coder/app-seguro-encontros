@@ -240,10 +240,6 @@ export default function OnboardingPage() {
     router.push('/login')
   }
 
-  const handleGuestAccess = () => {
-    router.push('/entrada-sem-cadastro')
-  }
-
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-4 relative">
       {/* Botão Ver Planos */}
@@ -319,14 +315,6 @@ export default function OnboardingPage() {
         </button>
 
         <div className="divider text-center text-sm text-gray-400">ou</div>
-
-        <Button
-          onClick={handleGuestAccess}
-          variant="outline"
-          className="w-full border-white/25 text-[#EFD9A7] py-6 rounded-2xl hover:border-[#D4AF37] hover:text-[#D4AF37]"
-        >
-          Entrar sem cadastro
-        </Button>
 
         {/* Email */}
         <Button
