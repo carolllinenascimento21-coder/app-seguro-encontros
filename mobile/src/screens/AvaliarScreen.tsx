@@ -1,12 +1,151 @@
-import { useState } from 'react'
-import { Alert, ScrollView, StyleSheet, Text, TextInput } from 'react-native'
+import { useCallback, useRef, useState } from 'react'
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition'
 
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 
+function appendTranscript(currentText: string, transcript: string) {
+  const current = currentText.trimEnd()
+  const spokenText = transcript.trim()
+
+  if (!spokenText) return currentText
+  if (!current) return spokenText
+
+  const separator = /[.!?…,:;]$/.test(current) ? ' ' : '. '
+  return `${current}${separator}${spokenText}`
+}
+
+function voiceDebug(message: string, details?: Record<string, boolean | number | string>) {
+  if (__DEV__) {
+    console.info(`[voice-recognition] ${message}`, details ?? '')
+  }
+}
+
 export function AvaliarScreen() {
   const [profileId, setProfileId] = useState('')
   const [comment, setComment] = useState('')
+  const [voiceStatus, setVoiceStatus] = useState<'idle' | 'recording' | 'processing'>('idle')
+  const [voiceMessage, setVoiceMessage] = useState('')
+  const screenFocusedRef = useRef(true)
+  const operationInProgressRef = useRef(false)
+  const receivedResultRef = useRef(false)
+  const stoppedByUserRef = useRef(false)
+  const hadErrorRef = useRef(false)
+
+  useSpeechRecognitionEvent('result', (event) => {
+    if (!screenFocusedRef.current || receivedResultRef.current) return
+    const transcript = event.results[0]?.transcript?.trim()
+    if (!transcript) return
+    voiceDebug('resultado reconhecido', {
+      hasTranscript: true,
+      characterCount: transcript.length,
+    })
+    receivedResultRef.current = true
+    setComment((current) => appendTranscript(current, transcript))
+  })
+
+  useSpeechRecognitionEvent('error', (event) => {
+    voiceDebug('erro nativo', { errorCode: event.error })
+    operationInProgressRef.current = false
+    if (!screenFocusedRef.current || event.error === 'aborted') return
+    hadErrorRef.current = true
+    setVoiceStatus('idle')
+    if (event.error === 'not-allowed') {
+      setVoiceMessage('Permissão de microfone negada.')
+    } else if (event.error === 'audio-capture') {
+      setVoiceMessage('Não foi possível acessar o microfone.')
+    } else if (event.error === 'service-not-allowed' || event.error === 'network') {
+      setVoiceMessage('O serviço de reconhecimento de voz está indisponível. Tente novamente.')
+    } else {
+      setVoiceMessage('Não foi possível reconhecer a fala. Tente novamente.')
+    }
+  })
+
+  useSpeechRecognitionEvent('end', () => {
+    voiceDebug('escuta encerrada', { receivedResult: receivedResultRef.current })
+    operationInProgressRef.current = false
+    if (!screenFocusedRef.current) return
+    setVoiceStatus('idle')
+    if (!receivedResultRef.current && !stoppedByUserRef.current && !hadErrorRef.current) {
+      setVoiceMessage('Não foi possível reconhecer a fala. Tente novamente.')
+    }
+  })
+
+  useFocusEffect(
+    useCallback(() => {
+      screenFocusedRef.current = true
+      setVoiceStatus('idle')
+
+      return () => {
+        screenFocusedRef.current = false
+        operationInProgressRef.current = false
+        voiceDebug('escuta interrompida ao sair da tela')
+        ExpoSpeechRecognitionModule.abort()
+      }
+    }, [])
+  )
+
+  async function toggleVoiceRecognition() {
+    if (voiceStatus === 'recording') {
+      stoppedByUserRef.current = true
+      setVoiceStatus('processing')
+      ExpoSpeechRecognitionModule.stop()
+      return
+    }
+
+    if (voiceStatus !== 'idle' || operationInProgressRef.current) {
+      setVoiceMessage('O reconhecimento de voz já está em andamento.')
+      return
+    }
+
+    operationInProgressRef.current = true
+    setVoiceStatus('processing')
+
+    try {
+      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+        operationInProgressRef.current = false
+        setVoiceStatus('idle')
+        setVoiceMessage('Este dispositivo não possui serviço de reconhecimento de voz.')
+        return
+      }
+
+      voiceDebug('início da solicitação de permissão')
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync()
+      voiceDebug('resultado da permissão', { granted: permission.granted })
+      if (!screenFocusedRef.current || !operationInProgressRef.current) return
+
+      if (!permission.granted) {
+        operationInProgressRef.current = false
+        setVoiceStatus('idle')
+        setVoiceMessage('Permissão de microfone negada.')
+        return
+      }
+
+      receivedResultRef.current = false
+      stoppedByUserRef.current = false
+      hadErrorRef.current = false
+      setVoiceMessage('')
+      setVoiceStatus('recording')
+      voiceDebug('início do reconhecimento', { locale: 'pt-BR' })
+      ExpoSpeechRecognitionModule.start({
+        lang: 'pt-BR',
+        interimResults: false,
+        continuous: false,
+      })
+    } catch (error) {
+      voiceDebug('falha ao iniciar reconhecimento', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      })
+      operationInProgressRef.current = false
+      setVoiceStatus('idle')
+      setVoiceMessage('Não foi possível acessar o microfone.')
+    }
+  }
 
   function handleSubmit() {
     Alert.alert(
@@ -32,10 +171,37 @@ export function AvaliarScreen() {
           multiline
           numberOfLines={4}
           onChangeText={setComment}
-          placeholder="Comentário"
+          placeholder="Relato"
           style={[styles.input, styles.multiline]}
           value={comment}
         />
+
+        <View style={styles.voiceRow}>
+          <Pressable
+            accessibilityLabel={
+              voiceStatus === 'recording' ? 'Parar gravação' : 'Transcrever relato por voz'
+            }
+            accessibilityRole="button"
+            accessibilityState={{ disabled: voiceStatus === 'processing' }}
+            disabled={voiceStatus === 'processing'}
+            onPress={toggleVoiceRecognition}
+            style={({ pressed }) => [
+              styles.voiceButton,
+              voiceStatus === 'recording' && styles.voiceButtonRecording,
+              pressed && styles.voiceButtonPressed,
+            ]}
+          >
+            <Text style={styles.voiceIcon}>{voiceStatus === 'recording' ? '■' : '🎙️'}</Text>
+            <Text style={styles.voiceButtonText}>
+              {voiceStatus === 'recording'
+                ? 'Gravando...'
+                : voiceStatus === 'processing'
+                  ? 'Transcrevendo...'
+                  : 'Falar relato'}
+            </Text>
+          </Pressable>
+          {voiceMessage ? <Text style={styles.voiceMessage}>{voiceMessage}</Text> : null}
+        </View>
 
         <Button title="Enviar avaliação" onPress={handleSubmit} disabled={!profileId || !comment} />
       </Card>
@@ -70,5 +236,39 @@ const styles = StyleSheet.create({
   multiline: {
     minHeight: 100,
     textAlignVertical: 'top',
+  },
+  voiceRow: {
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  voiceButton: {
+    alignItems: 'center',
+    backgroundColor: '#101010',
+    borderColor: '#D4AF37',
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  voiceButtonRecording: {
+    backgroundColor: '#332B12',
+  },
+  voiceButtonPressed: {
+    opacity: 0.75,
+  },
+  voiceButtonText: {
+    color: '#D4AF37',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  voiceIcon: {
+    color: '#D4AF37',
+    fontSize: 16,
+  },
+  voiceMessage: {
+    color: '#8A5D00',
+    fontSize: 12,
   },
 })
