@@ -8,6 +8,15 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Permita que o Confia+ use o microfone para transcrever seu relato.",
+          "speechRecognitionPermission": "Permita que o Confia+ reconheça sua fala para transcrever seu relato."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.confiamais.mobile"
