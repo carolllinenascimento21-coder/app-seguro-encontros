@@ -5,6 +5,7 @@ import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { useAuthContext } from '../navigation'
 import { api } from '../services/api'
+import { isAnonymousUser, PERMANENT_ACCOUNT_REQUIRED_MESSAGE } from '../utils/authState'
 
 export function PerfilScreen() {
   const { user, signOut } = useAuthContext()
@@ -12,6 +13,11 @@ export function PerfilScreen() {
   const [refreshing, setRefreshing] = useState(false)
 
   const loadCredits = useCallback(async () => {
+    if (isAnonymousUser(user)) {
+      Alert.alert('Crie uma conta', PERMANENT_ACCOUNT_REQUIRED_MESSAGE)
+      return
+    }
+
     try {
       setRefreshing(true)
       const response = await api.getMyCredits()
@@ -42,7 +48,7 @@ export function PerfilScreen() {
         <Text style={styles.title}>Perfil</Text>
         <View style={styles.itemRow}>
           <Text style={styles.label}>E-mail:</Text>
-          <Text style={styles.value}>{user?.email ?? 'Não informado'}</Text>
+          <Text style={styles.value}>{isAnonymousUser(user) ? 'Entrada sem cadastro' : user?.email ?? 'Não informado'}</Text>
         </View>
         <View style={styles.itemRow}>
           <Text style={styles.label}>ID:</Text>

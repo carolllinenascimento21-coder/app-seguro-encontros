@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { ensureProfileForUser, type ProfileErrorType } from '@/lib/profile-utils'
 import { isAuthSessionMissingError } from '@/lib/auth-session'
+import { isAnonymousUser } from '@/lib/auth-state'
 
 type GuardStatus = 'checking' | 'ready' | 'error'
 
@@ -137,6 +138,11 @@ export default function OnboardingGuard({
     }
 
     if (!user) {
+      setState({ status: 'ready' })
+      return
+    }
+
+    if (isAnonymousUser(user)) {
       setState({ status: 'ready' })
       return
     }

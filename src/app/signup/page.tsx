@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 import { getSiteUrl } from '@/lib/billing'
+import { isAnonymousUser } from '@/lib/auth-state'
 
 const supabase = createSupabaseClient()
 
@@ -26,22 +27,35 @@ export default function SignupPage() {
 
   // 🔒 Garante aceite dos termos
   useEffect(() => {
-    const stored = localStorage.getItem('confia_termos_aceite')
+    const validateAccess = async () => {
+      const {
+        data: { session },
+      } = supabase ? await supabase.auth.getSession() : { data: { session: null } }
 
-    if (!stored) {
-      router.replace('/onboarding/aceitar-termos?next=/signup')
-      return
-    }
-
-    try {
-      const aceite = JSON.parse(stored)
-      if (aceite?.termosAceitos && aceite?.privacidadeAceita) {
-        setTermsOk(true)
+      if (isAnonymousUser(session?.user)) {
+        router.replace('/home')
         return
       }
-    } catch {}
 
-    router.replace('/onboarding/aceitar-termos?next=/signup')
+      const stored = localStorage.getItem('confia_termos_aceite')
+
+      if (!stored) {
+        router.replace('/onboarding/aceitar-termos?next=/signup')
+        return
+      }
+
+      try {
+        const aceite = JSON.parse(stored)
+        if (aceite?.termosAceitos && aceite?.privacidadeAceita) {
+          setTermsOk(true)
+          return
+        }
+      } catch {}
+
+      router.replace('/onboarding/aceitar-termos?next=/signup')
+    }
+
+    void validateAccess()
   }, [router])
 
   const handleSignup = async (e: React.FormEvent) => {

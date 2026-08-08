@@ -5,6 +5,7 @@ import { Star, Edit, Trash2, AlertCircle, Loader2 } from 'lucide-react'
 import Navbar from '@/components/custom/navbar'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
+import { isAnonymousUser, PERMANENT_ACCOUNT_REQUIRED_MESSAGE } from '@/lib/auth-state'
 
 const supabase = createSupabaseClient()
 
@@ -53,6 +54,12 @@ export default function MinhasAvaliacoes() {
 
       if (!session) {
         router.push('/login')
+        return
+      }
+
+      if (isAnonymousUser(session.user)) {
+        alert(PERMANENT_ACCOUNT_REQUIRED_MESSAGE)
+        router.push('/signup')
         return
       }
 

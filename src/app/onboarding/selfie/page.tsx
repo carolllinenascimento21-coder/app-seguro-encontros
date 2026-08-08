@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase/browser'
 import { Button } from '@/components/ui/button'
 import { ensureProfileForUser, getProfileErrorInfo } from '@/lib/profile-utils'
+import { isAnonymousUser, PERMANENT_ACCOUNT_REQUIRED_MESSAGE } from '@/lib/auth-state'
 
 export default function SelfieOnboardingPage() {
   const router = useRouter()
@@ -16,15 +17,26 @@ export default function SelfieOnboardingPage() {
 
   // 🎥 ABRE A CÂMERA (FORMA SEGURA)
   useEffect(() => {
-    let mediaStream: MediaStream
+    let mediaStream: MediaStream | null = null
+    let active = true
 
     const startCamera = async () => {
+      const supabase = createSupabaseClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (isAnonymousUser(session?.user)) {
+        setError(PERMANENT_ACCOUNT_REQUIRED_MESSAGE)
+        return
+      }
+
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user' },
         })
 
-        if (videoRef.current) {
+        if (active && videoRef.current) {
           videoRef.current.srcObject = mediaStream
           await videoRef.current.play()
         }
@@ -36,6 +48,7 @@ export default function SelfieOnboardingPage() {
     startCamera()
 
     return () => {
+      active = false
       mediaStream?.getTracks().forEach(track => track.stop())
     }
   }, [])
@@ -91,6 +104,12 @@ export default function SelfieOnboardingPage() {
     if (sessionError || !user) {
       console.error(sessionError)
       setError('Usuária não autenticada.')
+      setUploading(false)
+      return
+    }
+
+    if (isAnonymousUser(user)) {
+      setError(PERMANENT_ACCOUNT_REQUIRED_MESSAGE)
       setUploading(false)
       return
     }

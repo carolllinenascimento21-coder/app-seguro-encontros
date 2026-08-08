@@ -12,7 +12,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const [agreed, setAgreed] = useState(false)
   const [gender, setGender] = useState('')
-  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | 'anonymous' | null>(null)
   const oauthInFlightRef = useRef(false)
 
   useEffect(() => {
@@ -222,6 +222,83 @@ export default function OnboardingPage() {
 
   const signInWithApple = async () => startOAuth('apple')
 
+
+  const handleAnonymousLogin = async () => {
+    if (!validatePreconditions()) return
+    if (oauthInFlightRef.current) return
+
+    oauthInFlightRef.current = true
+    setOauthLoading('anonymous')
+
+    localStorage.setItem(
+      'confia_termos_aceite',
+      JSON.stringify({
+        termosAceitos: true,
+        privacidadeAceita: true,
+        acceptedAt: new Date().toISOString(),
+        source: 'anonymous_onboarding',
+      })
+    )
+
+    localStorage.setItem(
+      'pre_onboarding',
+      JSON.stringify({
+        agreed: true,
+        gender: 'female',
+      })
+    )
+
+    const supabase = createSupabaseClient()
+
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously()
+
+      if (error) {
+        console.error('anonymous login error', error)
+        alert('Não foi possível entrar sem cadastro. Tente novamente.')
+        return
+      }
+
+      if (!data.session?.access_token || !data.session.refresh_token) {
+        alert('Não foi possível iniciar sua sessão. Tente novamente.')
+        return
+      }
+
+      const syncResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }),
+      })
+
+      if (!syncResponse.ok) {
+        const syncResult = await syncResponse.json().catch(() => ({ error: 'unknown_error' }))
+        console.error('Falha ao sincronizar sessão anônima no onboarding:', syncResult)
+        await supabase.auth.signOut()
+        alert('Falha ao persistir sessão. Tente novamente.')
+        return
+      }
+
+      router.refresh()
+      router.replace('/home')
+    } catch (error) {
+      console.error('anonymous login unexpected error', error)
+      try {
+        await supabase.auth.signOut()
+      } catch {}
+      alert('Erro inesperado ao entrar sem cadastro.')
+    } finally {
+      oauthInFlightRef.current = false
+      setOauthLoading(null)
+    }
+  }
+
+
   const handleSignup = () => {
     if (!validatePreconditions()) return
 
@@ -295,6 +372,16 @@ export default function OnboardingPage() {
             </option>
           </select>
         </div>
+
+        {/* Entrada sem cadastro */}
+
+        <button
+          onClick={handleAnonymousLogin}
+          disabled={oauthLoading !== null}
+          className="w-full rounded-2xl border-2 border-[#D4AF37] bg-[#D4AF37] py-6 font-bold text-black shadow-xl transition hover:bg-[#EFD9A7] disabled:opacity-50"
+        >
+          {oauthLoading === 'anonymous' ? 'Entrando sem cadastro...' : 'Entrar sem cadastro'}
+        </button>
 
         {/* Google */}
         <button
